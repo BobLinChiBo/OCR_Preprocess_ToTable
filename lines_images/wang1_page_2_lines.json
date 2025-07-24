@@ -1,0 +1,68 @@
+{
+    "image_width": 601,
+    "image_height": 1241,
+    "vertical_lines": [
+        {
+            "avg_coord": 58,
+            "min_span": 207,
+            "max_span": 1058
+        },
+        {
+            "avg_coord": 108,
+            "min_span": 445,
+            "max_span": 1106
+        },
+        {
+            "avg_coord": 206,
+            "min_span": 305,
+            "max_span": 1106
+        },
+        {
+            "avg_coord": 256,
+            "min_span": 310,
+            "max_span": 1053
+        },
+        {
+            "avg_coord": 355,
+            "min_span": 337,
+            "max_span": 1108
+        },
+        {
+            "avg_coord": 403,
+            "min_span": 302,
+            "max_span": 1109
+        },
+        {
+            "avg_coord": 553,
+            "min_span": 313,
+            "max_span": 1105
+        },
+        {
+            "avg_coord": 594,
+            "min_span": 356,
+            "max_span": 1110
+        }
+    ],
+    "horizontal_lines": [
+        {
+            "avg_coord": 180,
+            "min_span": 37,
+            "max_span": 595
+        },
+        {
+            "avg_coord": 281,
+            "min_span": 63,
+            "max_span": 489
+        },
+        {
+            "avg_coord": 410,
+            "min_span": 50,
+            "max_span": 529
+        },
+        {
+            "avg_coord": 1106,
+            "min_span": 32,
+            "max_span": 530
+        }
+    ]
+}
