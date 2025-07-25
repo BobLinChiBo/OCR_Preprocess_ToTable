@@ -116,5 +116,7 @@ def batch_reconstruct_tables(config):
     print(f"\n--- Step 4 Complete ---")
 
 if __name__ == '__main__':
-    config = load_config_or_use_class()
+    import sys
+    config_path = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
+    config = load_config_or_use_class(config_path)
     batch_reconstruct_tables(config)

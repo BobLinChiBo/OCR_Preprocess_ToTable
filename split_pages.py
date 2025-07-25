@@ -86,5 +86,7 @@ def split_image_batch_intelligent(config):
     print(f"--- Step 1 Complete ---")
 
 if __name__ == '__main__':
-    config = load_config_or_use_class()
+    import sys
+    config_path = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
+    config = load_config_or_use_class(config_path)
     split_image_batch_intelligent(config)
