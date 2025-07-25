@@ -75,5 +75,7 @@ def deskew_image_batch(config):
     print(f"--- Step 2 Complete ---")
 
 if __name__ == '__main__':
-    config = load_config_or_use_class()
+    import sys
+    config_path = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
+    config = load_config_or_use_class(config_path)
     deskew_image_batch(config)

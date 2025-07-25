@@ -22,8 +22,8 @@
   },
   "line_detection": {
     "SAVE_DEBUG_IMAGES": true,
-    "ROI_MARGINS_PAGE_1": { "top": 60, "bottom": 60, "left": 0, "right": 60 },
-    "ROI_MARGINS_PAGE_2": { "top": 60, "bottom": 60, "left": 30, "right": 5 },
+    "ROI_MARGINS_PAGE_1": { "top": 120, "bottom": 120, "left": 0, "right": 100 },
+    "ROI_MARGINS_PAGE_2": { "top": 120, "bottom": 120, "left": 60, "right": 5 },
     "ROI_MARGINS_DEFAULT": { "top": 60, "bottom": 60, "left": 5, "right": 5 },
     "V_PARAMS": {
       "morph_open_kernel_ratio": 0.0166,
@@ -69,5 +69,12 @@
     "FIGURE_SIZE": [10, 12],
     "LINE_COLOR": "blue",
     "LINE_WIDTH": 2
+  },
+  "table_cropping": {
+    "OUTPUT_DIR": "cropped_table_images",
+    "INPUT_DETAILS_SUFFIX": "_details.json",
+    "OUTPUT_IMAGE_SUFFIX": "_cropped.jpg",
+    "OUTPUT_LINES_SUFFIX": "_cropped_lines.json",
+    "PADDING": 10
   }
 }
