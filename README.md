@@ -1,307 +1,215 @@
 # OCR Table Extraction Pipeline
 
-A professional two-stage pipeline for extracting table structures from scanned document images. This system handles both straight and curved table lines using advanced morphological processing, contour detection, and polynomial fitting algorithms.
+A **Windows-native** OCR preprocessing pipeline for extracting table structures from scanned documents. This project has been completely rewritten to provide first-class Windows support while maintaining cross-platform compatibility.
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Windows)
 
-```bash
-# Install dependencies
-pip install -e ".[dev]"
+### Setup
+```cmd
+# Clone the repository
+git clone https://github.com/your-username/OCR_Preprocess_ToTable.git
+cd OCR_Preprocess_ToTable
 
-# Stage 1: Initial Processing (raw scanned images → cropped tables)
-python run_stage1_initial_processing.py
-
-# Stage 2: Refinement (cropped tables → publication-ready results)
-python run_stage2_refinement.py
-
-# Or use Make shortcuts
-make pipeline  # Run both stages
+# Run Windows setup (creates virtual environment and installs dependencies)
+scripts\setup.bat
 ```
+
+### Basic Usage
+```cmd
+# Format and lint your code
+scripts\dev.bat quick
+
+# Run tests
+scripts\test.bat fast
+
+# Execute the OCR pipeline
+scripts\run-pipeline.bat stage1
+scripts\run-pipeline.bat stage2
+
+# Or run the complete pipeline
+scripts\run-pipeline.bat pipeline
+```
+
+## 📋 System Requirements
+
+- **Windows 10/11** (primary platform)
+- **Python 3.8+** installed and in PATH
+- **Virtual environment support** (venv)
+- **Optional**: Poetry for advanced dependency management
+
+## 🛠️ Windows Development Tools
+
+This project provides **three levels of Windows integration**:
+
+### 1. Native Windows Scripts (Recommended)
+- `scripts\setup.bat` - Complete environment setup
+- `scripts\dev.bat` - Development commands (format, lint, type-check)
+- `scripts\test.bat` - Testing with multiple modes
+- `scripts\run-pipeline.bat` - Pipeline execution and monitoring
+
+### 2. Advanced PowerShell Tools
+- `scripts\setup.ps1` - Advanced setup with validation
+- `scripts\invoke-dev.ps1` - Enhanced development workflows
+- `scripts\manage-pipeline.ps1` - Pipeline monitoring and reporting
+
+### 3. Cross-Platform Python Tools
+- `python make.py` - Works on Windows, macOS, and Linux
+- Automatic environment detection and package manager selection
 
 ## 📁 Project Structure
 
 ```
 OCR_Preprocess_ToTable/
-├── run_stage1_initial_processing.py    # Legacy Stage 1 workflow
-├── run_stage2_refinement.py            # Legacy Stage 2 workflow
-├── src/ocr_pipeline/                   # Modern modular architecture
-│   ├── config/                         # Configuration system
-│   │   ├── loader.py                   # Multi-format config loader
-│   │   ├── models.py                   # Pydantic config models
-│   │   ├── default_stage1.yaml         # Default Stage 1 config
-│   │   └── default_stage2.yaml         # Default Stage 2 config
-│   ├── processors/                     # Processing modules
-│   │   └── base.py                     # Base processor class
-│   ├── utils/                          # Utility functions
-│   │   ├── file_utils.py               # File operations
-│   │   ├── image_utils.py              # Image processing
-│   │   └── logging_utils.py            # Logging utilities
-│   └── exceptions.py                   # Custom exceptions
-├── configs/                            # Legacy JSON configurations
-│   ├── stage1_config.json              # Stage 1 parameters
-│   ├── stage2_config.json              # Stage 2 parameters
-│   ├── CONFIG_GUIDE.md                 # Configuration guide
-│   └── PARAMETER_REFERENCE.md          # Parameter reference
-├── input/                              # Input directory
-│   └── raw_images/                     # Place raw scanned images here
-├── output/                             # Output directory (auto-created)
-│   ├── stage1_initial_processing/      # Stage 1 results
-│   └── stage2_refinement/              # Stage 2 results
-├── debug/                              # Debug output (auto-created)
-│   ├── stage1_debug/                   # Stage 1 debug images
-│   └── stage2_debug/                   # Stage 2 debug images
-└── tests/                              # Test suite
-    ├── unit/                           # Unit tests
-    ├── integration/                    # Integration tests
-    └── fixtures/                       # Test fixtures
+├── scripts/                    # Windows-native development scripts
+│   ├── setup.bat              # Environment setup
+│   ├── dev.bat                # Development commands
+│   ├── test.bat               # Testing commands
+│   └── run-pipeline.bat       # Pipeline execution
+├── src/ocr_pipeline/          # Main Python package
+│   ├── config/                # Configuration management
+│   ├── processors/            # Image processing modules
+│   └── utils/                 # Utilities (including Windows-specific)
+├── tests/                     # Test suite with Windows compatibility
+├── input/raw_images/          # Input scanned documents
+├── output/                    # Processing results
+├── debug/                     # Debug output and visualizations
+├── make.py                    # Cross-platform make replacement
+└── OCR-Pipeline.code-workspace # VSCode workspace configuration
 ```
 
-## 🔄 Two-Stage Processing Workflow
+## 🔧 Development Commands
 
-### Stage 1: Initial Processing
-Transforms raw scanned images into cropped table regions:
-
-1. **Page Splitting** - Separates double-page scans using gutter detection
-2. **Deskewing** - Corrects rotation using variance-based angle optimization
-3. **Edge Detection** - Detects content boundaries using Gabor filters (optional)
-4. **Curved Line Detection** - Advanced table line detection with:
-   - OpenCV morphological operations for line isolation
-   - Hough transform for straight line detection
-   - Contour-based polynomial fitting for curved lines
-   - ROI-aware processing with different margins for verso/recto pages
-5. **Table Reconstruction** - Builds complete table grid structures
-6. **Table Cropping** - Extracts table regions for Stage 2 processing
-
-### Stage 2: Refinement
-Polishes cropped table images to publication quality:
-
-1. **Re-deskewing** - Fine-tunes rotation on cropped table images
-2. **Refined Line Detection** - Zero-margin processing with optimized parameters
-3. **Final Table Reconstruction** - Precise grid generation
-4. **Table Fitting** - Cell structure optimization for publication-ready output
-
-## 🛠️ Installation & Setup
-
-### Prerequisites
-- Python 3.8+ (supports 3.8-3.12)
-- Git for version control
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/BobLinChiBo/OCR_Preprocess_ToTable.git
-cd OCR_Preprocess_ToTable
-
-# Install in development mode with all dependencies
-make install-dev
-
-# Or manually with pip
-pip install -e ".[dev,test,docs]"
-
-# Set up pre-commit hooks (optional but recommended)
-make setup-dev
+### Setup and Installation
+```cmd
+scripts\setup.bat              # Quick setup
+scripts\setup.ps1              # Advanced PowerShell setup
+python make.py setup-dev       # Cross-platform setup
 ```
 
-### Dependencies
-Core dependencies include:
-- **OpenCV** (>=4.8.0) - Computer vision operations
-- **NumPy** (>=1.21.0) - Numerical computing
-- **SciPy** (>=1.7.0) - Scientific computing
-- **Matplotlib** (>=3.5.0) - Plotting and visualization
-- **Pydantic** (>=2.0.0) - Data validation
-- **PyYAML** (>=6.0.0) - YAML configuration support
-
-## 📊 Input/Output
-
-### Input Requirements
-- **Formats**: JPG, PNG, TIFF scanned images
-- **Content**: Academic papers, technical documents, books with tabular data
-- **Layout**: Single-page or double-page spreads
-- **Quality**: Sufficient contrast for line detection (parameters adjustable)
-
-### Output Structure
-- **Stage 1**: Cropped table regions with processing metadata
-- **Stage 2**: Publication-ready table images with cell structure data
-- **Formats**: 
-  - Images: High-quality JPG files
-  - Metadata: JSON files with line coordinates, cell boundaries, processing statistics
-
-## 🎯 Key Features
-
-- **Intelligent Page Splitting** - Automatic detection of double-page layouts with gutter detection
-- **Curved Line Support** - Handles slightly curved table lines using polynomial fitting algorithms
-- **ROI-Aware Processing** - Different processing parameters for recto/verso pages
-- **Multi-Format Configuration** - Supports JSON, YAML, and TOML configuration files
-- **Comprehensive Logging** - Detailed progress tracking with configurable log levels
-- **Debug Visualization** - Optional debug image generation for parameter tuning
-- **Modular Architecture** - Clean separation between legacy scripts and modern modules
-- **Type Safety** - Full type hints with mypy checking
-- **Professional Testing** - Comprehensive test suite with pytest
-
-## ⚙️ Configuration
-
-The pipeline supports multiple configuration formats with validation:
-
-### Configuration Files
-- **Modern**: YAML files in `src/ocr_pipeline/config/` (recommended)
-- **Legacy**: JSON files in `configs/` (maintained for compatibility)
-
-### Configuration Loading
-The system automatically detects configuration format:
-```bash
-# YAML (recommended)
-python run_stage1_initial_processing.py my_config.yaml
-
-# JSON (legacy)
-python run_stage1_initial_processing.py my_config.json
-
-# TOML (supported)
-python run_stage1_initial_processing.py my_config.toml
-```
-
-### Parameter Categories
-- **Morphological Operations**: Kernel sizes as ratios of image dimensions
-- **Hough Transform**: Threshold, minimum line length, maximum gap ratios
-- **Line Clustering**: Distance-based grouping with progressive filtering
-- **Curved Line Detection**: Contour length ratios and aspect ratio thresholds
-
-For detailed configuration guidance:
-- [`configs/CONFIG_GUIDE.md`](configs/CONFIG_GUIDE.md) - Comprehensive guide
-- [`configs/PARAMETER_REFERENCE.md`](configs/PARAMETER_REFERENCE.md) - Parameter reference
-
-## 🔧 Development
-
-### Development Commands
-```bash
-# Code quality
-make format          # Format with black and isort
-make lint           # Run ruff, flake8, bandit
-make type-check     # Run mypy type checking
-
-# Testing
-make test           # Run full test suite
-make test-fast      # Skip slow integration tests
-make test-cov       # Generate coverage report
-
-# Pipeline execution
-make stage1         # Run Stage 1 only
-make stage2         # Run Stage 2 only
-make pipeline       # Run complete pipeline
-
-# Quick development check
-make quick          # format + lint + test-fast
+### Code Quality
+```cmd
+scripts\dev.bat format         # Format with black + isort
+scripts\dev.bat lint           # Run all linters
+scripts\dev.bat type-check     # MyPy type checking
+scripts\dev.bat quick          # Format + lint + test-fast
 ```
 
 ### Testing
-The project includes comprehensive testing:
-```bash
-# Run all tests
-pytest
-
-# Run specific test categories
-pytest -m unit              # Unit tests only
-pytest -m integration       # Integration tests only
-pytest -m "not slow"        # Skip slow tests
-
-# With coverage
-pytest --cov=ocr_pipeline
+```cmd
+scripts\test.bat               # All tests
+scripts\test.bat fast          # Fast tests (skip slow integration)
+scripts\test.bat coverage      # Tests with coverage report
+scripts\test.bat unit          # Unit tests only
 ```
 
-## 📝 Usage Examples
-
-### Basic Usage
-```bash
-# Process with default configurations
-python run_stage1_initial_processing.py
-python run_stage2_refinement.py
+### Pipeline Execution
+```cmd
+scripts\run-pipeline.bat stage1     # OCR Stage 1 (raw → cropped tables)
+scripts\run-pipeline.bat stage2     # OCR Stage 2 (tables → structured data)
+scripts\run-pipeline.bat pipeline   # Complete pipeline
+scripts\run-pipeline.bat status     # Show pipeline status
 ```
 
-### Custom Configuration
-```bash
-# Use custom configuration files
-python run_stage1_initial_processing.py custom_stage1.yaml
-python run_stage2_refinement.py custom_stage2.json
+## 🧪 Architecture Overview
+
+This is a **two-stage OCR preprocessing pipeline**:
+
+### Stage 1: Initial Processing
+Raw scanned images → Cropped table regions
+1. **Page splitting** - Detect two-page spreads and split
+2. **Deskewing** - Correct rotation
+3. **Edge detection** - Gabor filters + windowing  
+4. **Line detection** - Hough transforms + morphological operations
+5. **Table reconstruction** - Combine detected lines
+6. **Table fitting** - Optimize line placement
+7. **Table cropping** - Extract final table regions
+
+### Stage 2: Advanced Processing  
+Cropped tables → Structured data *(implementation pending)*
+
+## 🖥️ Windows-Specific Features
+
+- **Path handling** - Automatic Windows path normalization and validation
+- **Reserved names** - Handles Windows reserved filenames (CON, PRN, etc.)
+- **Path length limits** - Validates against Windows MAX_PATH constraints
+- **Package manager detection** - Automatically finds Poetry, pip, or conda
+- **Terminal integration** - Enhanced Command Prompt and PowerShell support
+- **VSCode integration** - Complete Windows development environment
+
+## 💻 IDE Setup (VSCode)
+
+Open the workspace file for the best Windows development experience:
+```cmd
+code OCR-Pipeline.code-workspace
 ```
 
-### Debug Mode
-Enable debug image generation in configuration:
-```yaml
-line_detection:
-  save_debug_images: true
-  debug_output_dir: "debug/custom_debug"
+This provides:
+- **Windows terminal profiles** with automatic venv activation
+- **Task definitions** for all development commands
+- **Debug configurations** for pipeline components
+- **Extension recommendations** for Python development
+- **Settings optimized** for Windows development
+
+## 🔍 Configuration
+
+The pipeline uses **Pydantic-based configuration** with comprehensive validation:
+
+- **Default config**: `src\ocr_pipeline\config\default_stage1.yaml`
+- **Windows-safe paths** with automatic normalization
+- **Type-safe validation** with helpful error messages
+- **Legacy format support** for backward compatibility
+
+## 🧪 Testing
+
+The test suite includes **Windows-specific compatibility**:
+
+```cmd
+# Run Windows compatibility tests
+pytest -m windows
+
+# Skip Windows-only tests on other platforms  
+pytest -m "not windows_only"
+
+# Test with specific markers
+pytest -m "unit and not slow"
 ```
 
-### Development Workflow
-```bash
-# Set up development environment
-make setup-dev
+## 📊 Project Status
 
-# Make changes, then run quality checks
-make quick
-
-# Run full test suite before committing
-make test
-
-# Check security
-make security
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **No images found**: Verify images are in `input/raw_images/` directory
-2. **Stage 2 fails**: Ensure Stage 1 completed successfully and check `output/stage1_initial_processing/05_cropped_tables/`
-3. **Poor line detection**: Enable debug images and adjust morphological parameters
-4. **Memory issues**: Process smaller batches or reduce image resolution in config
-
-### Debug Information
-
-Enable debug output in configuration:
-```yaml
-logging:
-  level: DEBUG
-  
-line_detection:
-  save_debug_images: true
-```
-
-Debug images are saved to `debug/stage1_debug/line_detection/` or `debug/stage2_debug/line_detection/` showing:
-- Binary masked images
-- Morphological operations
-- Line detection stages
-- Final clustered results
-
-## 📚 Documentation
-
-- **Configuration**: [`configs/CONFIG_GUIDE.md`](configs/CONFIG_GUIDE.md)
-- **Parameters**: [`configs/PARAMETER_REFERENCE.md`](configs/PARAMETER_REFERENCE.md)
-- **Development**: [`CLAUDE.md`](CLAUDE.md) - Claude Code guidance
-- **API Documentation**: Comprehensive docstrings in source code
+- ✅ **Windows compatibility** - Complete rewrite for Windows-first development
+- ✅ **Cross-platform support** - Works on Windows, macOS, and Linux
+- ✅ **Modern Python** - Type hints, Pydantic validation, comprehensive testing
+- ✅ **Stage 1 pipeline** - Raw images to cropped table regions
+- 🚧 **Stage 2 pipeline** - Structured data extraction (in development)
 
 ## 🤝 Contributing
 
-The codebase is organized for easy contribution:
+This project is designed for **Windows developers**. To contribute:
 
-1. **Modern Architecture** - Modular components in `src/ocr_pipeline/`
-2. **Configuration** - Multi-format support with validation
-3. **Testing** - Comprehensive test suite with fixtures
-4. **Quality Tools** - Pre-commit hooks, linters, type checking
+1. **Setup**: Run `scripts\setup.bat` for quick setup
+2. **Development**: Use `scripts\dev.bat quick` for code quality checks  
+3. **Testing**: Run `scripts\test.bat coverage` before committing
+4. **Pipeline**: Test with `scripts\run-pipeline.bat validate`
 
-### Development Setup
-```bash
-git clone <repository-url>
-cd OCR_Preprocess_ToTable
-make setup-dev  # Installs dependencies and pre-commit hooks
-```
+## 📝 License
 
-## 🙏 Acknowledgments
+MIT License - see LICENSE file for details.
 
-Built for robust OCR table extraction from academic papers and technical documents. Features advanced morphological processing, polynomial fitting for curved lines, and comprehensive parameter tuning capabilities.
+## 🏗️ Technical Details
 
-**Key Technologies:**
-- OpenCV for computer vision operations
-- SciPy for scientific computing and optimization
-- Pydantic for configuration validation
-- Modern Python packaging with pyproject.toml
+### Key Technologies
+- **OpenCV** - Computer vision operations
+- **NumPy/SciPy** - Numerical processing
+- **Pydantic** - Configuration management with validation
+- **Click** - Command-line interfaces
+- **Rich** - Enhanced console output
+- **Pytest** - Testing framework with Windows compatibility
+
+### Python Version Support
+- Python 3.8+ (tested on Windows 10/11)
+- Full type hint support with mypy
+- Modern async/await patterns where applicable
+
+---
+
+**Note**: This project has been completely rewritten for Windows compatibility. All functionality is available through native Windows scripts without requiring WSL, Git Bash, or Unix tools.

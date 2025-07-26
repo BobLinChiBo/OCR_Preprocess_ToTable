@@ -7,6 +7,8 @@ Provides common test fixtures, mock data, and configuration for all test modules
 import pytest
 import tempfile
 import shutil
+import os
+import platform
 from pathlib import Path
 from typing import Dict, Any, Generator
 import numpy as np
@@ -15,15 +17,51 @@ import cv2
 from ocr_pipeline.config import Config, get_default_config
 from ocr_pipeline.utils.logging_utils import setup_logging
 
+# Windows-specific imports
+try:
+    from ocr_pipeline.utils.windows_utils import (
+        is_windows, 
+        normalize_path_for_windows,
+        WindowsPathHandler
+    )
+    HAS_WINDOWS_UTILS = True
+except ImportError:
+    HAS_WINDOWS_UTILS = False
+    
+    def is_windows():
+        return platform.system().lower() == 'windows'
+
 
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
-    """Create a temporary directory for test files."""
+    """Create a temporary directory for test files with Windows compatibility."""
     temp_path = Path(tempfile.mkdtemp())
+    
+    # Ensure Windows-compatible path
+    if HAS_WINDOWS_UTILS and is_windows():
+        temp_path = Path(normalize_path_for_windows(str(temp_path)))
+    
     try:
         yield temp_path
     finally:
         shutil.rmtree(temp_path, ignore_errors=True)
+
+
+@pytest.fixture
+def windows_temp_dir() -> Generator[Path, None, None]:
+    """Create a temporary directory with Windows-specific path handling."""
+    if HAS_WINDOWS_UTILS:
+        handler = WindowsPathHandler()
+        temp_path = Path(tempfile.mkdtemp())
+        safe_path = handler.normalize(temp_path)
+        final_path = Path(safe_path)
+    else:
+        final_path = Path(tempfile.mkdtemp())
+    
+    try:
+        yield final_path
+    finally:
+        shutil.rmtree(final_path, ignore_errors=True)
 
 
 @pytest.fixture
@@ -242,10 +280,22 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "gpu: marks tests that require GPU"
     )
+    config.addinivalue_line(
+        "markers", "windows: marks tests specific to Windows platform"
+    )
+    config.addinivalue_line(
+        "markers", "windows_only: marks tests that only run on Windows"
+    )
+    config.addinivalue_line(
+        "markers", "unix_only: marks tests that only run on Unix-like systems"
+    )
+    config.addinivalue_line(
+        "markers", "requires_windows_utils: marks tests that require Windows utilities"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    """Modify test collection to add markers based on test location."""
+    """Modify test collection to add markers based on test location and Windows compatibility."""
     for item in items:
         # Add unit marker to tests in unit directory
         if "unit" in str(item.fspath):
@@ -258,6 +308,16 @@ def pytest_collection_modifyitems(config, items):
         # Add slow marker to tests with "slow" in the name
         if "slow" in item.name.lower():
             item.add_marker(pytest.mark.slow)
+        
+        # Add Windows-specific markers
+        if "windows" in item.name.lower() or "win" in item.name.lower():
+            item.add_marker(pytest.mark.windows)
+        
+        # Skip Windows-only tests on non-Windows platforms
+        if hasattr(item, 'get_closest_marker'):
+            windows_marker = item.get_closest_marker('windows_only')
+            if windows_marker and not is_windows():
+                item.add_marker(pytest.mark.skip(reason="Windows-only test"))
 
 
 # Helper functions for tests
@@ -293,3 +353,68 @@ def create_test_image_with_lines(
         cv2.line(image, (x, 50), (x, height - 50), (0, 0, 0), 2)
     
     return image
+
+
+# Windows-specific test utilities
+def normalize_test_path(path: str) -> str:
+    """Normalize a path for the current platform in tests."""
+    if HAS_WINDOWS_UTILS:
+        return normalize_path_for_windows(path)
+    else:
+        return path.replace('\\', os.sep).replace('/', os.sep)
+
+
+def create_windows_safe_test_file(temp_dir: Path, filename: str, content: str = "") -> Path:
+    """Create a test file with Windows-safe filename."""
+    if HAS_WINDOWS_UTILS:
+        from ocr_pipeline.utils.windows_utils import make_windows_safe_filename
+        safe_filename = make_windows_safe_filename(filename)
+    else:
+        # Basic Windows filename safety
+        safe_filename = filename
+        for char in '<>:"|?*':
+            safe_filename = safe_filename.replace(char, '_')
+    
+    file_path = temp_dir / safe_filename
+    file_path.write_text(content, encoding='utf-8')
+    return file_path
+
+
+def skip_on_windows(reason: str = "Not supported on Windows"):
+    """Decorator to skip tests on Windows."""
+    return pytest.mark.skipif(is_windows(), reason=reason)
+
+
+def skip_on_non_windows(reason: str = "Windows-only test"):
+    """Decorator to skip tests on non-Windows platforms."""
+    return pytest.mark.skipif(not is_windows(), reason=reason)
+
+
+def requires_windows_utils(test_func):
+    """Decorator to skip tests that require Windows utilities."""
+    return pytest.mark.skipif(
+        not HAS_WINDOWS_UTILS, 
+        reason="Windows utilities not available"
+    )(test_func)
+
+
+# Additional Windows-specific fixtures
+@pytest.fixture
+def windows_path_handler():
+    """Provide a Windows path handler for tests."""
+    if HAS_WINDOWS_UTILS:
+        return WindowsPathHandler()
+    else:
+        pytest.skip("Windows utilities not available")
+
+
+@pytest.fixture
+def platform_info():
+    """Provide platform information for tests."""
+    return {
+        'is_windows': is_windows(),
+        'platform': platform.system(),
+        'has_windows_utils': HAS_WINDOWS_UTILS,
+        'path_separator': os.sep,
+        'line_separator': os.linesep
+    }

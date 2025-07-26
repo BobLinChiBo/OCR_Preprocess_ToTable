@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple, Any
 from pydantic import BaseModel, Field, validator, root_validator
 import logging
+import os
 
 
 class LogLevel(str, Enum):
@@ -61,10 +62,27 @@ class DirectoryConfig(BaseModel):
     
     @validator('*')
     def validate_directory_path(cls, v):
-        """Validate directory path format."""
+        """Validate directory path format with Windows compatibility."""
         if not v or not isinstance(v, str):
             raise ValueError("Directory path must be a non-empty string")
-        return v.replace('\\', '/')  # Normalize path separators
+        
+        # Import here to avoid circular imports
+        try:
+            from ..utils.windows_utils import normalize_path_for_windows, validate_windows_path
+            
+            # Normalize path for current platform
+            normalized_path = normalize_path_for_windows(v)
+            
+            # Validate Windows compatibility
+            is_valid, error_msg = validate_windows_path(normalized_path)
+            if not is_valid:
+                logging.warning(f"Path may not be Windows compatible: {error_msg}")
+            
+            return normalized_path
+            
+        except ImportError:
+            # Fallback to simple normalization if utils not available
+            return v.replace('\\', os.sep).replace('/', os.sep)
 
 
 class PageSplittingConfig(BaseModel):
@@ -566,12 +584,51 @@ class Config(BaseModel):
         return getattr(self.directories, key, "")
     
     def create_output_directories(self) -> None:
-        """Create all output directories."""
-        from pathlib import Path
+        """Create all output directories with Windows compatibility."""
+        try:
+            from ..utils.windows_utils import ensure_directory_exists
+            
+            for field_name, field_value in self.directories.dict().items():
+                if field_name != 'raw_images':  # Don't create input directory
+                    success = ensure_directory_exists(field_value, create_parents=True)
+                    if not success:
+                        logging.warning(f"Failed to create directory: {field_value}")
+        except ImportError:
+            # Fallback to standard Path creation
+            from pathlib import Path
+            
+            for field_name, field_value in self.directories.dict().items():
+                if field_name != 'raw_images':  # Don't create input directory
+                    Path(field_value).mkdir(parents=True, exist_ok=True)
+    
+    def get_windows_safe_directory(self, key: str) -> str:
+        """Get Windows-safe directory path by key."""
+        path = self.get_directory(key)
+        try:
+            from ..utils.windows_utils import normalize_path_for_windows
+            return normalize_path_for_windows(path)
+        except ImportError:
+            return path.replace('/', os.sep)
+    
+    def validate_paths_for_windows(self) -> List[str]:
+        """Validate all paths for Windows compatibility."""
+        issues = []
         
-        for field_name, field_value in self.directories.dict().items():
-            if field_name != 'raw_images':  # Don't create input directory
-                Path(field_value).mkdir(parents=True, exist_ok=True)
+        try:
+            from ..utils.windows_utils import validate_windows_path
+            
+            for field_name, field_value in self.directories.dict().items():
+                is_valid, error_msg = validate_windows_path(field_value)
+                if not is_valid:
+                    issues.append(f"{field_name}: {error_msg}")
+                    
+        except ImportError:
+            # Basic validation without Windows utils
+            for field_name, field_value in self.directories.dict().items():
+                if len(field_value) > 260:  # Windows MAX_PATH
+                    issues.append(f"{field_name}: Path too long ({len(field_value)} > 260)")
+        
+        return issues
     
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Convert to legacy dictionary format for backward compatibility."""
