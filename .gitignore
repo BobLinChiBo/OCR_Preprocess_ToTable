@@ -1,0 +1,29 @@
+# Input and output directories
+input/
+output/
+debug/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Claude Code specific files
+.claude/
+CLAUDE.md

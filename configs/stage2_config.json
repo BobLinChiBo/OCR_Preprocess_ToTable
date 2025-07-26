@@ -1,19 +1,11 @@
 {
   "directories": {
-    "raw_images": "raw_images",
-    "splited_images": "splited_images",
-    "deskewed_images": "deskewed_images",
-    "lines_images": "lines_images",
-    "table_images": "table_images",
-    "table_fit_images": "table_fit_images",
-    "debug_output_dir": "lines_debug"
-  },
-  "page_splitting": {
-    "GUTTER_SEARCH_START_PERCENT": 0.4,
-    "GUTTER_SEARCH_END_PERCENT": 0.6,
-    "SPLIT_THRESHOLD": 0.8,
-    "LEFT_PAGE_SUFFIX": "_page_2.jpg",
-    "RIGHT_PAGE_SUFFIX": "_page_1.jpg"
+    "splited_images": "output/stage1_initial_processing/05_cropped_tables",
+    "deskewed_images": "output/stage2_refinement/01_deskewed",
+    "lines_images": "output/stage2_refinement/02_line_detection",
+    "table_images": "output/stage2_refinement/03_table_reconstruction",
+    "table_fit_images": "output/stage2_refinement/04_fitted_tables",
+    "debug_output_dir": "debug/stage2_debug/line_detection"
   },
   "deskewing": {
     "ANGLE_RANGE": 10.0,
@@ -22,9 +14,9 @@
   },
   "line_detection": {
     "SAVE_DEBUG_IMAGES": true,
-    "ROI_MARGINS_PAGE_1": { "top": 120, "bottom": 120, "left": 0, "right": 100 },
-    "ROI_MARGINS_PAGE_2": { "top": 120, "bottom": 120, "left": 60, "right": 5 },
-    "ROI_MARGINS_DEFAULT": { "top": 60, "bottom": 60, "left": 5, "right": 5 },
+    "ROI_MARGINS_PAGE_1": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+    "ROI_MARGINS_PAGE_2": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
+    "ROI_MARGINS_DEFAULT": { "top": 0, "bottom": 0, "left": 0, "right": 0 },
     "V_PARAMS": {
       "morph_open_kernel_ratio": 0.0166,
       "morph_close_kernel_ratio": 0.0166,
@@ -34,18 +26,22 @@
       "cluster_distance_threshold": 15,
       "qualify_length_ratio": 0.5,
       "final_selection_ratio": 0.5,
-      "solid_check_std_threshold": 30.0
+      "solid_check_std_threshold": 30.0,
+      "contour_min_length_ratio": 0.5,
+      "contour_aspect_ratio_threshold": 5.0
     },
     "H_PARAMS": {
-      "morph_open_kernel_ratio": 0.033,
-      "morph_close_kernel_ratio": 0.02,
+      "morph_open_kernel_ratio": 0.01,
+      "morph_close_kernel_ratio": 0.0166,
       "hough_threshold": 10,
       "hough_min_line_length": 30,
       "hough_max_line_gap_ratio": 0.01,
       "cluster_distance_threshold": 5,
       "qualify_length_ratio": 0.5,
-      "final_selection_ratio": 0.7,
-      "solid_check_std_threshold": 50.0
+      "final_selection_ratio": 0.8,
+      "solid_check_std_threshold": 50.0,
+      "contour_min_length_ratio": 0.8,
+      "contour_aspect_ratio_threshold": 5.0
     },
     "OUTPUT_VIZ_LINE_THICKNESS": 2,
     "OUTPUT_VIZ_V_COLOR_BGR": [0, 0, 255],
@@ -71,7 +67,7 @@
     "LINE_WIDTH": 2
   },
   "table_cropping": {
-    "OUTPUT_DIR": "cropped_table_images",
+    "OUTPUT_DIR": "output/stage1_initial_processing/05_cropped_tables",
     "INPUT_DETAILS_SUFFIX": "_details.json",
     "OUTPUT_IMAGE_SUFFIX": "_cropped.jpg",
     "OUTPUT_LINES_SUFFIX": "_cropped_lines.json",
