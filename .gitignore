@@ -1,7 +1,7 @@
-# Input and output directories - these contain large image files
-input/
-output/
-debug/
+# Data directories - these contain large image files and processing output
+data/input/
+data/output/
+data/debug/
 
 # Python bytecode and cache
 __pycache__/
@@ -111,6 +111,10 @@ examples/input/*.png
 examples/input/*.tiff
 examples/input/*.pdf
 
+# Node.js artifacts (should not be in Python project)
+node_modules/
+package*.json
+*.lock
+
 # Claude Code specific files
 .claude/
-CLAUDE.md

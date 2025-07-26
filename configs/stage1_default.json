@@ -1,0 +1,45 @@
+{
+  "input_dir": "data/input",
+  "output_dir": "data/output/stage1_initial_processing",
+  "debug_dir": "data/debug/stage1_debug",
+  "verbose": true,
+  "save_debug_images": false,
+  
+  "page_splitting": {
+    "gutter_search_start": 0.4,
+    "gutter_search_end": 0.6,
+    "min_gutter_width": 50
+  },
+  
+  "deskewing": {
+    "angle_range": 10,
+    "angle_step": 0.2,
+    "min_angle_correction": 0.2
+  },
+  
+  "line_detection": {
+    "min_line_length": 40,
+    "max_line_gap": 15
+  },
+  
+  "roi_detection": {
+    "enable_roi_detection": true,
+    "gabor_kernel_size": 31,
+    "gabor_sigma": 4.0,
+    "gabor_lambda": 8.0,
+    "gabor_gamma": 0.2,
+    "gabor_binary_threshold": 127,
+    "roi_vertical_mode": "single_best",
+    "roi_horizontal_mode": "both_sides",
+    "roi_window_size_divisor": 20,
+    "roi_min_window_size": 10,
+    "roi_min_cut_strength": 20.0,
+    "roi_min_confidence_threshold": 5.0
+  },
+  
+  "roi_margins": {
+    "page_1": {"top": 120, "bottom": 120, "left": 0, "right": 100},
+    "page_2": {"top": 120, "bottom": 120, "left": 60, "right": 5},
+    "default": {"top": 60, "bottom": 60, "left": 5, "right": 5}
+  }
+}

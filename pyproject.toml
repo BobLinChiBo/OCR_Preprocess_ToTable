@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocr-table-extraction"
+version = "2.0.0"
+description = "Professional two-stage OCR table extraction pipeline"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "OCR Pipeline Team"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "opencv-python>=4.5.0",
+    "numpy>=1.20.0",
+    "Pillow>=8.0.0",
+    "pathlib>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.10.0",
+    "black>=21.0.0",
+    "flake8>=3.8.0",
+    "mypy>=0.800",
+]
+
+[project.scripts]
+ocr-pipeline = "ocr_pipeline.pipeline:main"
+ocr-stage1 = "scripts.run_stage1:main"
+ocr-stage2 = "scripts.run_stage2:main"
+ocr-complete = "scripts.run_complete:main"
+
+[project.urls]
+Homepage = "https://github.com/BobLinChiBo/OCR_Preprocess_ToTable"
+Repository = "https://github.com/BobLinChiBo/OCR_Preprocess_ToTable"
+Documentation = "https://github.com/BobLinChiBo/OCR_Preprocess_ToTable/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["configs/*.json", "configs/*.md"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
