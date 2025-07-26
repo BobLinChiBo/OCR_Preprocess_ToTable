@@ -7,7 +7,8 @@ from typing import List
 from .config import Config, get_default_config
 from .utils import (
     get_image_files, load_image, save_image, split_two_page_image,
-    deskew_image, detect_table_lines, crop_table_region
+    deskew_image, detect_table_lines, crop_table_region,
+    detect_roi_for_image, crop_to_roi
 )
 
 
@@ -45,18 +46,29 @@ class OCRPipeline:
                 self.config.angle_step
             )
             
+            # ROI detection (optional preprocessing step)
+            processing_image = deskewed
+            roi_coords = None
+            if self.config.enable_roi_detection:
+                roi_coords = detect_roi_for_image(deskewed, self.config)
+                processing_image = crop_to_roi(deskewed, roi_coords)
+                
+                if self.config.verbose:
+                    print(f"    ROI detected: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
+                          f"({roi_coords['roi_right']}, {roi_coords['roi_bottom']})")
+            
             # Detect table lines
             h_lines, v_lines = detect_table_lines(
-                deskewed,
+                processing_image,
                 self.config.min_line_length,
                 self.config.max_line_gap
             )
             
             # Crop to table region
             if h_lines and v_lines:
-                cropped = crop_table_region(deskewed, h_lines, v_lines)
+                cropped = crop_table_region(processing_image, h_lines, v_lines)
             else:
-                cropped = deskewed
+                cropped = processing_image
             
             # Save result
             output_name = f"{image_path.stem}_page_{i}.jpg"
