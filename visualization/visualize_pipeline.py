@@ -32,6 +32,7 @@ from visualize_deskew import analyze_skew_detailed, draw_line_detection_overlay
 from visualize_table_lines import detect_table_lines_detailed, draw_table_lines_overlay
 from visualize_table_crop import analyze_table_crop_detailed, draw_crop_overlay
 from visualize_roi import draw_roi_overlay
+from visualization.output_manager import get_test_images, convert_numpy_types
 
 
 def process_complete_pipeline(image_path: Path, config: Config, 
@@ -148,11 +149,12 @@ def process_complete_pipeline(image_path: Path, config: Config,
         cv2.imwrite(str(comparison_file), comparison)
         
         # Save pipeline summary
+        output_dir.mkdir(parents=True, exist_ok=True)
         summary_file = output_dir / f"{base_name}_pipeline_summary.json"
         summary_data = create_pipeline_summary(results, config)
         
         with open(summary_file, 'w') as f:
-            json.dump(summary_data, f, indent=2)
+            json.dump(convert_numpy_types(summary_data), f, indent=2)
         
         print(f"  SUCCESS: Pipeline complete for {image_path.name}")
         
@@ -345,6 +347,8 @@ def main():
     parser.add_argument("images", nargs="*", 
                        default=["input/raw_images/Wang2017_Page_001.jpg"],
                        help="Images to process through pipeline")
+    parser.add_argument("--test-images", action="store_true",
+                       help="Process all images in input/test_images directory")
     parser.add_argument("--output-dir", default="pipeline_visualization",
                        help="Output directory for visualizations")
     parser.add_argument("--save-intermediates", action="store_true",
@@ -368,18 +372,26 @@ def main():
     
     args = parser.parse_args()
     
-    # Resolve image paths
-    image_paths = []
-    for img_path in args.images:
-        path = Path(img_path)
-        if path.exists():
-            image_paths.append(path)
-        else:
-            print(f"Warning: {img_path} not found, skipping")
-    
-    if not image_paths:
-        print("No valid images found!")
-        return
+    # Determine which images to process
+    if args.test_images:
+        print("Using batch mode: processing all images in input/test_images/")
+        image_paths = get_test_images()
+        if not image_paths:
+            print("No images found in test_images directory!")
+            return
+    else:
+        # Resolve image paths from command line arguments
+        image_paths = []
+        for img_path in args.images:
+            path = Path(img_path)
+            if path.exists():
+                image_paths.append(path)
+            else:
+                print(f"Warning: {img_path} not found, skipping")
+        
+        if not image_paths:
+            print("No valid images found!")
+            return
     
     # Create configuration
     config_params = {}
@@ -406,15 +418,20 @@ def main():
     output_dir = Path(args.output_dir)
     
     print(f"Processing complete pipeline on {len(image_paths)} images")
+    if args.test_images:
+        print(f"Batch mode: Processing all images from test_images directory")
     print(f"Configuration:")
     print(f"  - ROI detection: {config.enable_roi_detection}")
     print(f"  - Gutter search: {config.gutter_search_start:.2f} - {config.gutter_search_end:.2f}")
     print(f"  - Min line length: {config.min_line_length}px")
     print(f"  - Save intermediates: {args.save_intermediates}")
+    print(f"Output directory: {output_dir}")
+    print()
     
     # Process all images
     results = []
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths, 1):
+        print(f"[{i}/{len(image_paths)}] Processing pipeline for: {image_path.name}")
         result = process_complete_pipeline(image_path, config, output_dir, args.save_intermediates)
         results.append(result)
     
@@ -454,6 +471,7 @@ def main():
         print(f"All intermediate steps saved with numbered prefixes (00_original through 10_final_result)")
     
     # Save master summary
+    output_dir.mkdir(parents=True, exist_ok=True)
     master_summary_file = output_dir / "master_pipeline_summary.json"
     master_summary = {
         'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -467,7 +485,7 @@ def main():
     }
     
     with open(master_summary_file, 'w') as f:
-        json.dump(master_summary, f, indent=2)
+        json.dump(convert_numpy_types(master_summary), f, indent=2)
     
     print(f"Master summary saved to: {master_summary_file}")
 

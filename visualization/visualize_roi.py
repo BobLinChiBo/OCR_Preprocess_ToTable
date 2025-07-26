@@ -21,6 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
 from ocr.utils import detect_roi_for_image, load_image, detect_roi_gabor
+from visualization.output_manager import get_test_images, convert_numpy_types
 
 
 def draw_roi_overlay(image: np.ndarray, roi_coords: Dict[str, Any], 
@@ -264,7 +265,7 @@ def process_image_visualization(image_path: Path, config: Config,
         # Save ROI coordinates
         roi_file = output_dir / f"{base_name}_roi_coords.json"
         with open(roi_file, 'w') as f:
-            json.dump(roi_coords, f, indent=2)
+            json.dump(convert_numpy_types(roi_coords), f, indent=2)
         
         # Calculate metrics
         original_area = roi_coords['image_width'] * roi_coords['image_height']
@@ -312,6 +313,8 @@ def main():
     parser.add_argument("images", nargs="*", 
                        default=["input/raw_images/Wang2017_Page_001.jpg"],
                        help="Images to visualize")
+    parser.add_argument("--test-images", action="store_true",
+                       help="Process all images in input/test_images directory")
     parser.add_argument("--output-dir", default="roi_visualization",
                        help="Output directory for visualizations")
     parser.add_argument("--show-gabor", action="store_true",
@@ -331,18 +334,26 @@ def main():
     
     args = parser.parse_args()
     
-    # Resolve image paths
-    image_paths = []
-    for img_path in args.images:
-        path = Path(img_path)
-        if path.exists():
-            image_paths.append(path)
-        else:
-            print(f"Warning: {img_path} not found, skipping")
-    
-    if not image_paths:
-        print("No valid images found!")
-        return
+    # Determine which images to process
+    if args.test_images:
+        print("Using batch mode: processing all images in input/test_images/")
+        image_paths = get_test_images()
+        if not image_paths:
+            print("No images found in test_images directory!")
+            return
+    else:
+        # Resolve image paths from command line arguments
+        image_paths = []
+        for img_path in args.images:
+            path = Path(img_path)
+            if path.exists():
+                image_paths.append(path)
+            else:
+                print(f"Warning: {img_path} not found, skipping")
+        
+        if not image_paths:
+            print("No valid images found!")
+            return
     
     # Create configuration
     config_params = {}
@@ -365,16 +376,21 @@ def main():
     output_dir = Path(args.output_dir)
     
     print(f"Visualizing ROI detection on {len(image_paths)} images")
+    if args.test_images:
+        print(f"Batch mode: Processing all images from test_images directory")
     print(f"Parameters:")
     print(f"  - Gabor threshold: {config.gabor_binary_threshold}")
     print(f"  - Cut strength: {config.roi_min_cut_strength}")
     print(f"  - Confidence threshold: {config.roi_min_confidence_threshold}")
     print(f"  - Show Gabor filter: {args.show_gabor}")
     print(f"  - Save debug images: {args.save_debug}")
+    print(f"Output directory: {output_dir}")
+    print()
     
     # Process all images
     results = []
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths, 1):
+        print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
         result = process_image_visualization(
             image_path, config, output_dir, args.show_gabor, args.save_debug
         )
@@ -406,7 +422,7 @@ def main():
     }
     
     with open(summary_file, 'w') as f:
-        json.dump(summary_data, f, indent=2)
+        json.dump(convert_numpy_types(summary_data), f, indent=2)
     
     print(f"Summary saved to: {summary_file}")
 

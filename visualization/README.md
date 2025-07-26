@@ -1,17 +1,106 @@
-# OCR Pipeline Parameter Visualization Tools
+# OCR Visualization Scripts
 
-This directory contains visualization tools to help you test and optimize parameters for each step of your OCR pipeline.
+This directory contains visualization scripts for analyzing and debugging the OCR pipeline. The scripts now support both organized timestamp-based output structure and traditional flat output.
 
 ## 🚀 Quick Start
 
-### Complete Pipeline Visualization
-For a comprehensive view of your entire pipeline:
-
+### View Latest Results
 ```bash
-python visualization/visualize_pipeline.py input/raw_images/Wang2017_Page_001.jpg --save-intermediates
+# View latest deskew results in HTML
+python visualization/check_results.py latest deskew --view
+
+# List all recent runs
+python visualization/check_results.py list
 ```
 
-### Individual Step Tuning
+### Run Single Visualization
+```bash
+# Run with organized output (default)
+python visualization/visualize_deskew.py image.jpg
+
+# Run with flat output (old style)
+python visualization/visualize_deskew.py image.jpg --flat-output --output-dir my_results/
+```
+
+### Run Multiple Visualizations
+```bash
+# Run multiple scripts at once
+python visualization/run_visualizations.py deskew page-split roi image.jpg
+
+# Run all visualization scripts
+python visualization/run_visualizations.py all image.jpg
+```
+
+## 📁 Output Organization
+
+### New Organized Structure (Default)
+```
+visualization_outputs/
+├── deskew_20240726_143022/
+│   ├── images/           # All image outputs
+│   ├── analysis/         # JSON analysis files
+│   ├── comparisons/      # Overlay and comparison images
+│   ├── run_metadata.json
+│   └── deskew_results.html
+├── page_split_20240726_143105/
+└── ...
+```
+
+### Traditional Flat Structure (with --flat-output)
+```
+deskew_visualization/
+├── image1_original.jpg
+├── image1_deskewed.jpg
+├── image1_comparison.jpg
+└── deskew_visualization_summary.json
+```
+
+## 📊 Available Scripts
+
+| Script | Description | Default Output Folder |
+|--------|-------------|----------------------|
+| `visualize_deskew.py` | Deskewing analysis | `deskew_visualization` |
+| `visualize_page_split.py` | Page splitting | `page_split_visualization` |
+| `visualize_roi.py` | ROI detection | `roi_visualization` |
+| `visualize_table_lines.py` | Table line detection | `table_lines_visualization` |
+| `visualize_table_crop.py` | Table cropping | `table_crop_visualization` |
+| `visualize_pipeline.py` | Complete pipeline | `pipeline_visualization` |
+
+## 🛠 Management Commands
+
+### Results Checker
+```bash
+# List recent runs
+python visualization/check_results.py list
+
+# Show details of a specific run
+python visualization/check_results.py show 0
+
+# Open HTML viewer for a run
+python visualization/check_results.py view 0
+
+# Compare runs of the same script
+python visualization/check_results.py compare deskew
+
+# Clean up old runs (keep latest 5 per script)
+python visualization/check_results.py cleanup --keep 5
+```
+
+### Visualization Runner
+```bash
+# List available scripts
+python visualization/run_visualizations.py --list
+
+# Run multiple scripts with custom args
+python visualization/run_visualizations.py deskew page-split image.jpg \
+  --deskew-args --angle-range 30 \
+  --page-split-args --gutter-start 0.3
+
+# Save execution report
+python visualization/run_visualizations.py all image.jpg --save-report
+```
+
+## 🎯 Individual Step Tuning
 To focus on specific processing steps:
 
 ```bash

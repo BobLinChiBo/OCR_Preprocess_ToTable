@@ -21,6 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
 from ocr.utils import load_image, detect_table_lines, crop_table_region
+from visualization.output_manager import get_test_images, convert_numpy_types
 
 
 def analyze_table_crop_detailed(image: np.ndarray, min_line_length: int = 100, 
@@ -392,7 +393,7 @@ def process_image_table_crop_visualization(image_path: Path, config: Config,
         }
         
         with open(analysis_file, 'w') as f:
-            json.dump(analysis_data, f, indent=2)
+            json.dump(convert_numpy_types(analysis_data), f, indent=2)
         
         output_files['analysis'] = str(analysis_file)
         
@@ -424,6 +425,8 @@ def main():
     parser.add_argument("images", nargs="*", 
                        default=["input/raw_images/Wang2017_Page_001.jpg"],
                        help="Images to visualize")
+    parser.add_argument("--test-images", action="store_true",
+                       help="Process all images in input/test_images directory")
     parser.add_argument("--output-dir", default="table_crop_visualization",
                        help="Output directory for visualizations")
     
@@ -437,18 +440,26 @@ def main():
     
     args = parser.parse_args()
     
-    # Resolve image paths
-    image_paths = []
-    for img_path in args.images:
-        path = Path(img_path)
-        if path.exists():
-            image_paths.append(path)
-        else:
-            print(f"Warning: {img_path} not found, skipping")
-    
-    if not image_paths:
-        print("No valid images found!")
-        return
+    # Determine which images to process
+    if args.test_images:
+        print("Using batch mode: processing all images in input/test_images/")
+        image_paths = get_test_images()
+        if not image_paths:
+            print("No images found in test_images directory!")
+            return
+    else:
+        # Resolve image paths from command line arguments
+        image_paths = []
+        for img_path in args.images:
+            path = Path(img_path)
+            if path.exists():
+                image_paths.append(path)
+            else:
+                print(f"Warning: {img_path} not found, skipping")
+        
+        if not image_paths:
+            print("No valid images found!")
+            return
     
     # Create configuration
     config = Config(
@@ -459,14 +470,19 @@ def main():
     output_dir = Path(args.output_dir)
     
     print(f"Visualizing table cropping on {len(image_paths)} images")
+    if args.test_images:
+        print(f"Batch mode: Processing all images from test_images directory")
     print(f"Parameters:")
     print(f"  - Min line length: {config.min_line_length}px")
     print(f"  - Max line gap: {config.max_line_gap}px")
     print(f"  - Crop padding: {args.crop_padding}px")
+    print(f"Output directory: {output_dir}")
+    print()
     
     # Process all images
     results = []
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths, 1):
+        print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
         result = process_image_table_crop_visualization(
             image_path, config, output_dir, args.crop_padding
         )
@@ -506,7 +522,7 @@ def main():
     }
     
     with open(summary_file, 'w') as f:
-        json.dump(summary_data, f, indent=2)
+        json.dump(convert_numpy_types(summary_data), f, indent=2)
     
     print(f"Summary saved to: {summary_file}")
 

@@ -21,6 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
 from ocr.utils import load_image, deskew_image
+from visualization.output_manager import get_default_output_manager, organize_visualization_output, get_test_images, convert_numpy_types
 
 
 def analyze_skew_detailed(image: np.ndarray, angle_range: int = 45, 
@@ -281,7 +282,7 @@ def create_deskew_comparison(original: np.ndarray, deskewed: np.ndarray,
 
 
 def process_image_deskew_visualization(image_path: Path, config: Config, 
-                                     output_dir: Path) -> Dict[str, Any]:
+                                     output_dir: Path, use_organized_output: bool = True) -> Dict[str, Any]:
     """Process a single image and create deskew visualization."""
     print(f"Processing: {image_path.name}")
     
@@ -305,42 +306,89 @@ def process_image_deskew_visualization(image_path: Path, config: Config,
         
         # Save outputs
         base_name = image_path.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
         
-        output_files = {
-            'original': str(output_dir / f"{base_name}_original.jpg"),
-            'deskewed': str(output_dir / f"{base_name}_deskewed.jpg"),
-            'overlay': str(output_dir / f"{base_name}_line_detection.jpg"),
-            'edges': str(output_dir / f"{base_name}_edges.jpg"),
-            'angle_plot': str(output_dir / f"{base_name}_angle_analysis.jpg"),
-            'comparison': str(output_dir / f"{base_name}_deskew_comparison.jpg")
-        }
-        
-        cv2.imwrite(output_files['original'], image)
-        cv2.imwrite(output_files['deskewed'], deskewed)
-        cv2.imwrite(output_files['overlay'], overlay)
-        cv2.imwrite(output_files['edges'], edges_vis)
-        cv2.imwrite(output_files['angle_plot'], angle_plot)
-        cv2.imwrite(output_files['comparison'], comparison)
-        
-        # Save analysis data
-        analysis_file = output_dir / f"{base_name}_deskew_analysis.json"
-        analysis_data = {
-            'skew_info': {k: float(v) if isinstance(v, np.floating) else 
-                         int(v) if isinstance(v, np.integer) else
-                         v.tolist() if isinstance(v, np.ndarray) and k != 'edges' else
-                         v for k, v in skew_info.items() if k != 'edges'},
-            'config_used': {
-                'angle_range': config.angle_range,
-                'angle_step': config.angle_step,
-                'min_angle_correction': config.min_angle_correction
+        if use_organized_output:
+            # Create temporary files first
+            temp_dir = Path(output_dir) / "temp"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            temp_files = {
+                'original': str(temp_dir / f"{base_name}_original.jpg"),
+                'deskewed': str(temp_dir / f"{base_name}_deskewed.jpg"),
+                'overlay': str(temp_dir / f"{base_name}_line_detection.jpg"),
+                'edges': str(temp_dir / f"{base_name}_edges.jpg"),
+                'angle_plot': str(temp_dir / f"{base_name}_angle_analysis.jpg"),
+                'comparison': str(temp_dir / f"{base_name}_deskew_comparison.jpg")
             }
-        }
-        
-        with open(analysis_file, 'w') as f:
-            json.dump(analysis_data, f, indent=2)
-        
-        output_files['analysis'] = str(analysis_file)
+            
+            cv2.imwrite(temp_files['original'], image)
+            cv2.imwrite(temp_files['deskewed'], deskewed)
+            cv2.imwrite(temp_files['overlay'], overlay)
+            cv2.imwrite(temp_files['edges'], edges_vis)
+            cv2.imwrite(temp_files['angle_plot'], angle_plot)
+            cv2.imwrite(temp_files['comparison'], comparison)
+            
+            # Prepare analysis data
+            analysis_data = {
+                'image_name': image_path.name,
+                'skew_info': {k: float(v) if isinstance(v, np.floating) else 
+                             int(v) if isinstance(v, np.integer) else
+                             v.tolist() if isinstance(v, np.ndarray) and k != 'edges' else
+                             v for k, v in skew_info.items() if k != 'edges'},
+                'config_used': {
+                    'angle_range': config.angle_range,
+                    'angle_step': config.angle_step,
+                    'min_angle_correction': config.min_angle_correction
+                }
+            }
+            
+            # Organize into structured output
+            output_files = organize_visualization_output(
+                'deskew', temp_files, analysis_data, output_dir
+            )
+            
+            # Clean up temp directory
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+        else:
+            # Use old flat structure
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            output_files = {
+                'original': str(output_dir / f"{base_name}_original.jpg"),
+                'deskewed': str(output_dir / f"{base_name}_deskewed.jpg"),
+                'overlay': str(output_dir / f"{base_name}_line_detection.jpg"),
+                'edges': str(output_dir / f"{base_name}_edges.jpg"),
+                'angle_plot': str(output_dir / f"{base_name}_angle_analysis.jpg"),
+                'comparison': str(output_dir / f"{base_name}_deskew_comparison.jpg")
+            }
+            
+            cv2.imwrite(output_files['original'], image)
+            cv2.imwrite(output_files['deskewed'], deskewed)
+            cv2.imwrite(output_files['overlay'], overlay)
+            cv2.imwrite(output_files['edges'], edges_vis)
+            cv2.imwrite(output_files['angle_plot'], angle_plot)
+            cv2.imwrite(output_files['comparison'], comparison)
+            
+            # Save analysis data
+            analysis_file = output_dir / f"{base_name}_deskew_analysis.json"
+            analysis_data = {
+                'skew_info': {k: float(v) if isinstance(v, np.floating) else 
+                             int(v) if isinstance(v, np.integer) else
+                             v.tolist() if isinstance(v, np.ndarray) and k != 'edges' else
+                             v for k, v in skew_info.items() if k != 'edges'},
+                'config_used': {
+                    'angle_range': config.angle_range,
+                    'angle_step': config.angle_step,
+                    'min_angle_correction': config.min_angle_correction
+                }
+            }
+            
+            with open(analysis_file, 'w') as f:
+                json.dump(convert_numpy_types(analysis_data), f, indent=2)
+            
+            output_files['analysis'] = str(analysis_file)
         
         result = {
             'image_name': image_path.name,
@@ -369,8 +417,12 @@ def main():
     parser.add_argument("images", nargs="*", 
                        default=["input/raw_images/Wang2017_Page_001.jpg"],
                        help="Images to visualize")
-    parser.add_argument("--output-dir", default="deskew_visualization",
-                       help="Output directory for visualizations")
+    parser.add_argument("--test-images", action="store_true",
+                       help="Process all images in input/test_images directory")
+    parser.add_argument("--output-dir", default=None,
+                       help="Output directory for visualizations (default: organized structure)")
+    parser.add_argument("--flat-output", action="store_true",
+                       help="Use flat output structure instead of organized folders")
     
     # Parameter options
     parser.add_argument("--angle-range", type=int, default=45,
@@ -382,18 +434,26 @@ def main():
     
     args = parser.parse_args()
     
-    # Resolve image paths
-    image_paths = []
-    for img_path in args.images:
-        path = Path(img_path)
-        if path.exists():
-            image_paths.append(path)
-        else:
-            print(f"Warning: {img_path} not found, skipping")
-    
-    if not image_paths:
-        print("No valid images found!")
-        return
+    # Determine which images to process
+    if args.test_images:
+        print("Using batch mode: processing all images in input/test_images/")
+        image_paths = get_test_images()
+        if not image_paths:
+            print("No images found in test_images directory!")
+            return
+    else:
+        # Resolve image paths from command line arguments
+        image_paths = []
+        for img_path in args.images:
+            path = Path(img_path)
+            if path.exists():
+                image_paths.append(path)
+            else:
+                print(f"Warning: {img_path} not found, skipping")
+        
+        if not image_paths:
+            print("No valid images found!")
+            return
     
     # Create configuration
     config = Config(
@@ -402,18 +462,33 @@ def main():
         min_angle_correction=args.min_angle_correction,
         verbose=False
     )
-    output_dir = Path(args.output_dir)
+    
+    # Handle output directory
+    if args.flat_output or args.output_dir:
+        # Use specified directory or flat structure
+        output_dir = Path(args.output_dir) if args.output_dir else Path("deskew_visualization")
+        use_organized = False
+    else:
+        # Use organized structure
+        manager = get_default_output_manager()
+        output_dir = manager.create_run_directory("deskew")
+        use_organized = True
     
     print(f"Visualizing deskewing on {len(image_paths)} images")
+    if args.test_images:
+        print(f"Batch mode: Processing all images from test_images directory")
     print(f"Parameters:")
     print(f"  - Angle range: ±{config.angle_range}°")
     print(f"  - Angle step: {config.angle_step}°")
     print(f"  - Min correction: {config.min_angle_correction}°")
+    print(f"Output directory: {output_dir}")
+    print()
     
     # Process all images
     results = []
-    for image_path in image_paths:
-        result = process_image_deskew_visualization(image_path, config, output_dir)
+    for i, image_path in enumerate(image_paths, 1):
+        print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
+        result = process_image_deskew_visualization(image_path, config, output_dir, use_organized)
         results.append(result)
     
     # Summary
@@ -435,24 +510,30 @@ def main():
         print(f"Average detection confidence: {avg_confidence:.3f}")
     
     print(f"\nOutput files saved to: {output_dir}")
-    print(f"Review the '_deskew_comparison.jpg' files to assess deskewing quality")
     
-    # Save summary
-    summary_file = output_dir / "deskew_visualization_summary.json"
-    summary_data = {
-        'timestamp': __import__('time').strftime('%Y-%m-%d %H:%M:%S'),
-        'config_parameters': {
-            'angle_range': config.angle_range,
-            'angle_step': config.angle_step,
-            'min_angle_correction': config.min_angle_correction
-        },
-        'results': results
-    }
+    if use_organized:
+        print(f"Use 'python visualization/check_results.py latest deskew --view' to view results")
+        print(f"Use 'python visualization/check_results.py list' to see all runs")
+    else:
+        print(f"Review the '_deskew_comparison.jpg' files to assess deskewing quality")
     
-    with open(summary_file, 'w') as f:
-        json.dump(summary_data, f, indent=2)
-    
-    print(f"Summary saved to: {summary_file}")
+    # Save summary (only for flat structure, organized structure handles this automatically)
+    if not use_organized:
+        summary_file = output_dir / "deskew_visualization_summary.json"
+        summary_data = {
+            'timestamp': __import__('time').strftime('%Y-%m-%d %H:%M:%S'),
+            'config_parameters': {
+                'angle_range': config.angle_range,
+                'angle_step': config.angle_step,
+                'min_angle_correction': config.min_angle_correction
+            },
+            'results': results
+        }
+        
+        with open(summary_file, 'w') as f:
+            json.dump(convert_numpy_types(summary_data), f, indent=2)
+        
+        print(f"Summary saved to: {summary_file}")
 
 
 if __name__ == "__main__":
