@@ -1,0 +1,127 @@
+# OCR Pipeline Stage 2 Configuration
+# This configuration is optimized for refining cropped table images
+
+version: "0.2.0"
+description: "Stage 2: Refinement - Polish cropped tables to publication quality"
+
+directories:
+  raw_images: "input/raw_images"  # Not used in stage 2
+  splited_images: "output/stage1_initial_processing/05_cropped_tables"  # Input from stage 1
+  deskewed_images: "output/stage2_refinement/01_deskewed"
+  lines_images: "output/stage2_refinement/02_line_detection"
+  table_images: "output/stage2_refinement/03_table_reconstruction"
+  table_fit_images: "output/stage2_refinement/04_fitted_tables"
+  debug_output_dir: "debug/stage2_debug/line_detection"
+
+page_splitting:
+  # Not used in stage 2, but keeping for compatibility
+  gutter_search_start_percent: 0.4
+  gutter_search_end_percent: 0.6
+  split_threshold: 0.8
+  left_page_suffix: "_page_2.jpg"
+  right_page_suffix: "_page_1.jpg"
+
+deskewing:
+  angle_range: 10.0
+  angle_step: 0.2
+  min_angle_for_correction: 0.2
+
+edge_detection:
+  # Not typically used in stage 2
+  output_dir: "output/stage2_refinement/02.5_edge_detection"
+  gabor_params:
+    kernel_size: 31
+    sigma: 4.0
+    lambda: 10.0
+    gamma: 0.5
+    binary_threshold: 127
+  cut_detection:
+    vertical_mode: "single_best"
+    horizontal_mode: "single_best"
+  window_sizing:
+    window_size_divisor: 20
+    min_window_size: 50
+    min_cut_strength: 10.0
+    min_confidence_threshold: 5.0
+
+line_detection:
+  save_debug_images: true
+  # Zero margins for stage 2 since we work with pre-cropped table images
+  roi_margins_page_1:
+    top: 0
+    bottom: 0
+    left: 0
+    right: 0
+  roi_margins_page_2:
+    top: 0
+    bottom: 0
+    left: 0
+    right: 0
+  roi_margins_default:
+    top: 0
+    bottom: 0
+    left: 0
+    right: 0
+  v_params:
+    morph_open_kernel_ratio: 0.0166
+    morph_close_kernel_ratio: 0.0166
+    hough_threshold: 5
+    hough_min_line_length: 40
+    hough_max_line_gap_ratio: 0.001
+    cluster_distance_threshold: 15
+    qualify_length_ratio: 0.5
+    final_selection_ratio: 0.5
+    solid_check_std_threshold: 30.0
+    contour_min_length_ratio: 0.5
+    contour_aspect_ratio_threshold: 5.0
+  h_params:
+    # More selective parameters for stage 2
+    morph_open_kernel_ratio: 0.01
+    morph_close_kernel_ratio: 0.0166
+    hough_threshold: 10
+    hough_min_line_length: 30
+    hough_max_line_gap_ratio: 0.01
+    cluster_distance_threshold: 5
+    qualify_length_ratio: 0.5
+    final_selection_ratio: 0.8  # More selective
+    solid_check_std_threshold: 50.0
+    contour_min_length_ratio: 0.8
+    contour_aspect_ratio_threshold: 5.0
+  output_viz_line_thickness: 2
+  output_viz_v_color_bgr: [0, 0, 255]
+  output_viz_h_color_bgr: [0, 255, 0]
+  output_json_suffix: "_lines.json"
+  output_viz_suffix: "_visualization.jpg"
+
+table_reconstruction:
+  output_image_suffix: "_reconstructed.jpg"
+  output_details_suffix: "_details.json"
+  vertical_line_color: [0, 0, 255]
+  horizontal_line_color: [0, 255, 0]
+  line_thickness: 2
+
+table_fitting:
+  input_json_suffix: "_details.json"
+  output_image_suffix: "_fitted.jpg"
+  output_cells_suffix: "_fitted_cells.json"
+  tolerance: 15
+  coverage_threshold: 0.4
+  figure_size: [10, 12]
+  line_color: "blue"
+  line_width: 2
+
+table_cropping:
+  # Not typically used in stage 2, but keeping for compatibility
+  output_dir: "output/stage2_refinement/05_cropped_tables"
+  input_details_suffix: "_details.json"
+  output_image_suffix: "_cropped.jpg"
+  output_lines_suffix: "_cropped_lines.json"
+  padding: 10
+
+logging:
+  level: "INFO"
+  log_file: null
+  use_rich: true
+  include_performance: true
+  format_style: "detailed"
+  debug_dir: null
