@@ -1,215 +1,183 @@
 # OCR Table Extraction Pipeline
 
-A **Windows-native** OCR preprocessing pipeline for extracting table structures from scanned documents. This project has been completely rewritten to provide first-class Windows support while maintaining cross-platform compatibility.
+A **simple and clean** OCR preprocessing pipeline for extracting table structures from scanned documents.
 
-## 🚀 Quick Start (Windows)
+## 🚀 Quick Start
 
 ### Setup
-```cmd
+
+```bash
 # Clone the repository
 git clone https://github.com/your-username/OCR_Preprocess_ToTable.git
 cd OCR_Preprocess_ToTable
 
-# Run Windows setup (creates virtual environment and installs dependencies)
-scripts\setup.bat
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the package
+pip install -e .
 ```
 
 ### Basic Usage
-```cmd
-# Format and lint your code
-scripts\dev.bat quick
 
-# Run tests
-scripts\test.bat fast
+```bash
+# Process all images in input directory
+python -m ocr.pipeline
 
-# Execute the OCR pipeline
-scripts\run-pipeline.bat stage1
-scripts\run-pipeline.bat stage2
+# Process specific directory
+python -m ocr.pipeline /path/to/images -o /path/to/output
 
-# Or run the complete pipeline
-scripts\run-pipeline.bat pipeline
+# Process single file
+python -m ocr.pipeline image.jpg -o output/
+
+# With verbose output
+python -m ocr.pipeline --verbose
+
+# Using the installed command
+ocr-pipeline input/ -o output/ --verbose
 ```
-
-## 📋 System Requirements
-
-- **Windows 10/11** (primary platform)
-- **Python 3.8+** installed and in PATH
-- **Virtual environment support** (venv)
-- **Optional**: Poetry for advanced dependency management
-
-## 🛠️ Windows Development Tools
-
-This project provides **three levels of Windows integration**:
-
-### 1. Native Windows Scripts (Recommended)
-- `scripts\setup.bat` - Complete environment setup
-- `scripts\dev.bat` - Development commands (format, lint, type-check)
-- `scripts\test.bat` - Testing with multiple modes
-- `scripts\run-pipeline.bat` - Pipeline execution and monitoring
-
-### 2. Advanced PowerShell Tools
-- `scripts\setup.ps1` - Advanced setup with validation
-- `scripts\invoke-dev.ps1` - Enhanced development workflows
-- `scripts\manage-pipeline.ps1` - Pipeline monitoring and reporting
-
-### 3. Cross-Platform Python Tools
-- `python make.py` - Works on Windows, macOS, and Linux
-- Automatic environment detection and package manager selection
 
 ## 📁 Project Structure
 
 ```
 OCR_Preprocess_ToTable/
-├── scripts/                    # Windows-native development scripts
-│   ├── setup.bat              # Environment setup
-│   ├── dev.bat                # Development commands
-│   ├── test.bat               # Testing commands
-│   └── run-pipeline.bat       # Pipeline execution
-├── src/ocr_pipeline/          # Main Python package
-│   ├── config/                # Configuration management
-│   ├── processors/            # Image processing modules
-│   └── utils/                 # Utilities (including Windows-specific)
-├── tests/                     # Test suite with Windows compatibility
-├── input/raw_images/          # Input scanned documents
-├── output/                    # Processing results
-├── debug/                     # Debug output and visualizations
-├── make.py                    # Cross-platform make replacement
-└── OCR-Pipeline.code-workspace # VSCode workspace configuration
+├── README.md
+├── requirements.txt        # Simple dependencies
+├── setup.py               # Minimal setup
+├── ocr/                   # Main package
+│   ├── __init__.py
+│   ├── config.py         # Simple configuration
+│   ├── pipeline.py       # Main pipeline logic
+│   ├── utils.py          # Core utilities
+│   └── processors/       # Processing modules
+│       └── __init__.py
+├── tests/                # Basic tests
+│   ├── __init__.py
+│   └── test_pipeline.py
+├── input/                # Input images (create this)
+├── output/               # Output results (auto-created)
+└── examples/             # Usage examples
 ```
 
-## 🔧 Development Commands
+## 🛠️ How It Works
 
-### Setup and Installation
-```cmd
-scripts\setup.bat              # Quick setup
-scripts\setup.ps1              # Advanced PowerShell setup
-python make.py setup-dev       # Cross-platform setup
+The pipeline performs these steps on each scanned image:
+
+1. **Page Splitting** - Detects two-page spreads and splits them
+2. **Deskewing** - Corrects rotation using line detection
+3. **Table Detection** - Finds horizontal and vertical lines
+4. **Table Extraction** - Crops to the table region
+
+## 📋 Configuration
+
+You can customize the pipeline behavior by modifying the configuration:
+
+```python
+from ocr.config import Config
+from ocr.pipeline import OCRPipeline
+
+# Create custom configuration
+config = Config(
+    input_dir="my_images",
+    output_dir="results", 
+    verbose=True,
+    min_line_length=50,
+    gutter_search_start=0.3,
+    gutter_search_end=0.7
+)
+
+# Run pipeline with custom config
+pipeline = OCRPipeline(config)
+pipeline.process_directory()
 ```
-
-### Code Quality
-```cmd
-scripts\dev.bat format         # Format with black + isort
-scripts\dev.bat lint           # Run all linters
-scripts\dev.bat type-check     # MyPy type checking
-scripts\dev.bat quick          # Format + lint + test-fast
-```
-
-### Testing
-```cmd
-scripts\test.bat               # All tests
-scripts\test.bat fast          # Fast tests (skip slow integration)
-scripts\test.bat coverage      # Tests with coverage report
-scripts\test.bat unit          # Unit tests only
-```
-
-### Pipeline Execution
-```cmd
-scripts\run-pipeline.bat stage1     # OCR Stage 1 (raw → cropped tables)
-scripts\run-pipeline.bat stage2     # OCR Stage 2 (tables → structured data)
-scripts\run-pipeline.bat pipeline   # Complete pipeline
-scripts\run-pipeline.bat status     # Show pipeline status
-```
-
-## 🧪 Architecture Overview
-
-This is a **two-stage OCR preprocessing pipeline**:
-
-### Stage 1: Initial Processing
-Raw scanned images → Cropped table regions
-1. **Page splitting** - Detect two-page spreads and split
-2. **Deskewing** - Correct rotation
-3. **Edge detection** - Gabor filters + windowing  
-4. **Line detection** - Hough transforms + morphological operations
-5. **Table reconstruction** - Combine detected lines
-6. **Table fitting** - Optimize line placement
-7. **Table cropping** - Extract final table regions
-
-### Stage 2: Advanced Processing  
-Cropped tables → Structured data *(implementation pending)*
-
-## 🖥️ Windows-Specific Features
-
-- **Path handling** - Automatic Windows path normalization and validation
-- **Reserved names** - Handles Windows reserved filenames (CON, PRN, etc.)
-- **Path length limits** - Validates against Windows MAX_PATH constraints
-- **Package manager detection** - Automatically finds Poetry, pip, or conda
-- **Terminal integration** - Enhanced Command Prompt and PowerShell support
-- **VSCode integration** - Complete Windows development environment
-
-## 💻 IDE Setup (VSCode)
-
-Open the workspace file for the best Windows development experience:
-```cmd
-code OCR-Pipeline.code-workspace
-```
-
-This provides:
-- **Windows terminal profiles** with automatic venv activation
-- **Task definitions** for all development commands
-- **Debug configurations** for pipeline components
-- **Extension recommendations** for Python development
-- **Settings optimized** for Windows development
-
-## 🔍 Configuration
-
-The pipeline uses **Pydantic-based configuration** with comprehensive validation:
-
-- **Default config**: `src\ocr_pipeline\config\default_stage1.yaml`
-- **Windows-safe paths** with automatic normalization
-- **Type-safe validation** with helpful error messages
-- **Legacy format support** for backward compatibility
 
 ## 🧪 Testing
 
-The test suite includes **Windows-specific compatibility**:
+```bash
+# Run tests
+python -m pytest tests/
 
-```cmd
-# Run Windows compatibility tests
-pytest -m windows
+# Run specific test
+python -m pytest tests/test_pipeline.py -v
 
-# Skip Windows-only tests on other platforms  
-pytest -m "not windows_only"
-
-# Test with specific markers
-pytest -m "unit and not slow"
+# Run tests with coverage (optional)
+pip install pytest-cov
+python -m pytest tests/ --cov=ocr
 ```
 
-## 📊 Project Status
+## 📦 Dependencies
 
-- ✅ **Windows compatibility** - Complete rewrite for Windows-first development
-- ✅ **Cross-platform support** - Works on Windows, macOS, and Linux
-- ✅ **Modern Python** - Type hints, Pydantic validation, comprehensive testing
-- ✅ **Stage 1 pipeline** - Raw images to cropped table regions
-- 🚧 **Stage 2 pipeline** - Structured data extraction (in development)
+- **OpenCV** - Image processing
+- **NumPy** - Numerical operations  
+- **Pillow** - Image I/O support
 
-## 🤝 Contributing
+## 🎯 Features
 
-This project is designed for **Windows developers**. To contribute:
+- ✅ **Simple setup** - Just `pip install -r requirements.txt`
+- ✅ **Clean code** - No complex configurations or tooling
+- ✅ **Cross-platform** - Works on Windows, macOS, and Linux
+- ✅ **Command line** - Easy to use from terminal
+- ✅ **Python API** - Integrate into other projects
+- ✅ **Lightweight** - Minimal dependencies
 
-1. **Setup**: Run `scripts\setup.bat` for quick setup
-2. **Development**: Use `scripts\dev.bat quick` for code quality checks  
-3. **Testing**: Run `scripts\test.bat coverage` before committing
-4. **Pipeline**: Test with `scripts\run-pipeline.bat validate`
+## 💻 Development
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Format code (optional)
+python -m black ocr/ tests/
+
+# Run tests
+python -m pytest
+```
+
+## 📖 Examples
+
+### Processing a Directory
+
+```python
+from ocr.pipeline import OCRPipeline
+
+pipeline = OCRPipeline()
+output_files = pipeline.process_directory("scanned_documents/")
+print(f"Created {len(output_files)} table extractions")
+```
+
+### Custom Processing
+
+```python
+from pathlib import Path
+from ocr.utils import load_image, split_two_page_image, detect_table_lines
+
+# Load and split a two-page scan
+image = load_image(Path("scan.jpg"))
+left_page, right_page = split_two_page_image(image)
+
+# Detect table structure
+h_lines, v_lines = detect_table_lines(left_page)
+print(f"Found {len(h_lines)} horizontal and {len(v_lines)} vertical lines")
+```
+
+## 🔧 Command Line Options
+
+```bash
+python -m ocr.pipeline [input] [-o OUTPUT] [-v] [--debug]
+
+Arguments:
+  input                 Input directory or file (default: input)
+
+Options:
+  -o, --output OUTPUT   Output directory (default: output)
+  -v, --verbose         Verbose output
+  --debug              Save debug images
+```
 
 ## 📝 License
 
 MIT License - see LICENSE file for details.
 
-## 🏗️ Technical Details
-
-### Key Technologies
-- **OpenCV** - Computer vision operations
-- **NumPy/SciPy** - Numerical processing
-- **Pydantic** - Configuration management with validation
-- **Click** - Command-line interfaces
-- **Rich** - Enhanced console output
-- **Pytest** - Testing framework with Windows compatibility
-
-### Python Version Support
-- Python 3.8+ (tested on Windows 10/11)
-- Full type hint support with mypy
-- Modern async/await patterns where applicable
-
 ---
 
-**Note**: This project has been completely rewritten for Windows compatibility. All functionality is available through native Windows scripts without requiring WSL, Git Bash, or Unix tools.
+**Note**: This is a simplified rewrite focused on core functionality. For advanced features, see the previous version history.

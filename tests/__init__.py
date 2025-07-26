@@ -1,1 +1,1 @@
-"""Test package for OCR Table Extraction Pipeline."""
+"""Tests for OCR pipeline."""
