@@ -47,6 +47,7 @@ See the [`docs/`](docs/) directory for detailed documentation:
 - [API Documentation](docs/API.md)
 - [Developer Guide](docs/CLAUDE.md)
 - [Configuration Guide](configs/README.md)
+- [Unicode Display Setup](docs/UNICODE_SETUP.md) - Fix display issues on Windows
 
 ## License
 

@@ -20,7 +20,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import load_image, deskew_image
+from src.ocr_pipeline.utils import load_image, deskew_image
 from visualization.output_manager import get_default_output_manager, organize_visualization_output, get_test_images, convert_numpy_types
 
 
@@ -294,7 +294,7 @@ def process_image_deskew_visualization(image_path: Path, config: Config,
         skew_info = analyze_skew_detailed(image, config.angle_range, config.angle_step)
         
         # Deskew the image
-        deskewed = deskew_image(image, config.angle_range, config.angle_step)
+        deskewed, detected_angle = deskew_image(image, config.angle_range, config.angle_step, config.min_angle_correction)
         
         # Create visualizations
         overlay = draw_line_detection_overlay(image, skew_info)

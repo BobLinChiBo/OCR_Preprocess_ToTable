@@ -4,28 +4,38 @@
   "debug_dir": "data/debug/stage2_debug",
   "verbose": true,
   "save_debug_images": false,
-  
   "deskewing": {
     "angle_range": 10,
     "angle_step": 0.2,
     "min_angle_correction": 0.2
   },
-  
+  "roi_detection": {
+    "enable_roi_detection": false
+  },
+  "roi_margins": {
+    "page_1": {
+      "top": 0,
+      "bottom": 0,
+      "left": 0,
+      "right": 0
+    },
+    "page_2": {
+      "top": 0,
+      "bottom": 0,
+      "left": 0,
+      "right": 0
+    },
+    "default": {
+      "top": 0,
+      "bottom": 0,
+      "left": 0,
+      "right": 0
+    }
+  },
   "line_detection": {
     "min_line_length": 30,
     "max_line_gap": 5
   },
-  
-  "roi_detection": {
-    "enable_roi_detection": false
-  },
-  
-  "roi_margins": {
-    "page_1": {"top": 0, "bottom": 0, "left": 0, "right": 0},
-    "page_2": {"top": 0, "bottom": 0, "left": 0, "right": 0},
-    "default": {"top": 0, "bottom": 0, "left": 0, "right": 0}
-  },
-  
   "table_fitting": {
     "tolerance": 15,
     "coverage_threshold": 0.4,

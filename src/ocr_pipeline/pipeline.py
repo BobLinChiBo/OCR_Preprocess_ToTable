@@ -40,10 +40,11 @@ class OCRPipeline:
         # Process each page
         for i, page in enumerate([left_page, right_page], 1):
             # Deskew
-            deskewed = deskew_image(
+            deskewed, _ = deskew_image(
                 page, 
                 self.config.angle_range, 
-                self.config.angle_step
+                self.config.angle_step,
+                self.config.min_angle_correction
             )
             
             # ROI detection (optional preprocessing step)
@@ -175,10 +176,11 @@ class TwoStageOCRPipeline:
                     page_name = f"{image_path.stem}_page_{i}"
                     
                     # Deskew
-                    deskewed = deskew_image(
+                    deskewed, _ = deskew_image(
                         page,
                         self.stage1_config.angle_range,
-                        self.stage1_config.angle_step
+                        self.stage1_config.angle_step,
+                        self.stage1_config.min_angle_correction
                     )
                     
                     # Save deskewed image
@@ -281,10 +283,11 @@ class TwoStageOCRPipeline:
                 base_name = image_path.stem.replace("_cropped", "")
                 
                 # Re-deskew for fine-tuning
-                refined_deskewed = deskew_image(
+                refined_deskewed, _ = deskew_image(
                     table_image,
                     self.stage2_config.angle_range,
-                    self.stage2_config.angle_step
+                    self.stage2_config.angle_step,
+                    self.stage2_config.min_angle_correction
                 )
                 
                 # Save refined deskewed

@@ -20,7 +20,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import load_image, detect_table_lines
+from src.ocr_pipeline.utils import load_image, detect_table_lines
 from visualization.output_manager import get_test_images, convert_numpy_types
 
 
@@ -28,76 +28,16 @@ def detect_table_lines_detailed(image: np.ndarray, min_line_length: int = 100,
                                max_line_gap: int = 10, kernel_h_size: int = 40,
                                kernel_v_size: int = 40, hough_threshold: int = 50) -> Dict[str, Any]:
     """Enhanced table line detection with detailed analysis."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    
-    # Apply morphological operations to enhance lines
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_h_size, 1))
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_v_size))
-    
-    # Detect horizontal lines
-    horizontal = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_h)
-    h_lines = cv2.HoughLinesP(horizontal, 1, np.pi/180, threshold=hough_threshold,
-                             minLineLength=min_line_length, maxLineGap=max_line_gap)
-    
-    # Detect vertical lines
-    vertical = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_v)
-    v_lines = cv2.HoughLinesP(vertical, 1, np.pi/180, threshold=hough_threshold,
-                             minLineLength=min_line_length, maxLineGap=max_line_gap)
-    
-    # Convert to list of tuples
-    h_lines_list = [tuple(line[0]) for line in h_lines] if h_lines is not None else []
-    v_lines_list = [tuple(line[0]) for line in v_lines] if v_lines is not None else []
-    
-    # Calculate line statistics
-    h_line_lengths = []
-    v_line_lengths = []
-    
-    for x1, y1, x2, y2 in h_lines_list:
-        length = np.sqrt((x2-x1)**2 + (y2-y1)**2)
-        h_line_lengths.append(length)
-    
-    for x1, y1, x2, y2 in v_lines_list:
-        length = np.sqrt((x2-x1)**2 + (y2-y1)**2)
-        v_line_lengths.append(length)
-    
-    # Find potential table boundaries
-    h_bounds = None
-    v_bounds = None
-    
-    if h_lines_list:
-        h_y_coords = []
-        for x1, y1, x2, y2 in h_lines_list:
-            h_y_coords.extend([y1, y2])
-        h_bounds = (min(h_y_coords), max(h_y_coords))
-    
-    if v_lines_list:
-        v_x_coords = []
-        for x1, y1, x2, y2 in v_lines_list:
-            v_x_coords.extend([x1, x2])
-        v_bounds = (min(v_x_coords), max(v_x_coords))
-    
-    return {
-        'horizontal_morph': horizontal,
-        'vertical_morph': vertical,
-        'h_lines': h_lines_list,
-        'v_lines': v_lines_list,
-        'h_line_count': len(h_lines_list),
-        'v_line_count': len(v_lines_list),
-        'h_line_lengths': h_line_lengths,
-        'v_line_lengths': v_line_lengths,
-        'h_avg_length': np.mean(h_line_lengths) if h_line_lengths else 0,
-        'v_avg_length': np.mean(v_line_lengths) if v_line_lengths else 0,
-        'h_bounds': h_bounds,
-        'v_bounds': v_bounds,
-        'has_table_structure': len(h_lines_list) > 0 and len(v_lines_list) > 0,
-        'config_used': {
-            'min_line_length': min_line_length,
-            'max_line_gap': max_line_gap,
-            'kernel_h_size': kernel_h_size,
-            'kernel_v_size': kernel_v_size,
-            'hough_threshold': hough_threshold
-        }
-    }
+    _, _, analysis = detect_table_lines(
+        image,
+        min_line_length=min_line_length,
+        max_line_gap=max_line_gap,
+        kernel_h_size=kernel_h_size,
+        kernel_v_size=kernel_v_size,
+        hough_threshold=hough_threshold,
+        return_analysis=True
+    )
+    return analysis
 
 
 def draw_table_lines_overlay(image: np.ndarray, line_info: Dict[str, Any]) -> np.ndarray:

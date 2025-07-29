@@ -20,57 +20,21 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import load_image, split_two_page_image
+from src.ocr_pipeline.utils import load_image, split_two_page_image
 from visualization.output_manager import get_test_images, convert_numpy_types
 
 
 def find_gutter_detailed(image: np.ndarray, gutter_start: float = 0.4, 
                         gutter_end: float = 0.6, min_gutter_width: int = 50) -> Dict[str, Any]:
     """Enhanced gutter detection with detailed analysis."""
-    height, width = image.shape[:2]
-    
-    # Search for gutter in the middle region
-    search_start = int(width * gutter_start)
-    search_end = int(width * gutter_end)
-    search_region = image[:, search_start:search_end]
-    
-    # Find the darkest vertical line (gutter)
-    gray = cv2.cvtColor(search_region, cv2.COLOR_BGR2GRAY) if len(search_region.shape) == 3 else search_region
-    vertical_sums = np.sum(gray, axis=0)
-    gutter_offset = np.argmin(vertical_sums)
-    gutter_x = search_start + gutter_offset
-    
-    # Calculate gutter strength (darkness compared to surroundings)
-    min_sum = vertical_sums[gutter_offset]
-    avg_sum = np.mean(vertical_sums)
-    gutter_strength = (avg_sum - min_sum) / avg_sum if avg_sum > 0 else 0
-    
-    # Find gutter width (continuous dark region)
-    threshold = min_sum * 1.2  # 20% tolerance
-    left_edge = gutter_offset
-    right_edge = gutter_offset
-    
-    # Expand left
-    while left_edge > 0 and vertical_sums[left_edge-1] <= threshold:
-        left_edge -= 1
-    
-    # Expand right
-    while right_edge < len(vertical_sums)-1 and vertical_sums[right_edge+1] <= threshold:
-        right_edge += 1
-    
-    gutter_width = right_edge - left_edge + 1
-    
-    return {
-        'gutter_x': gutter_x,
-        'gutter_strength': gutter_strength,
-        'gutter_width': gutter_width,
-        'search_start': search_start,
-        'search_end': search_end,
-        'vertical_sums': vertical_sums,
-        'min_sum': min_sum,
-        'avg_sum': avg_sum,
-        'meets_min_width': gutter_width >= min_gutter_width
-    }
+    _, _, analysis = split_two_page_image(
+        image, 
+        gutter_start=gutter_start, 
+        gutter_end=gutter_end, 
+        min_gutter_width=min_gutter_width,
+        return_analysis=True
+    )
+    return analysis
 
 
 def draw_split_overlay(image: np.ndarray, gutter_info: Dict[str, Any]) -> np.ndarray:

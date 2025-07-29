@@ -21,7 +21,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import (
+from src.ocr_pipeline.utils import (
     load_image, split_two_page_image, deskew_image, 
     detect_table_lines, crop_table_region, detect_roi_for_image, crop_to_roi
 )
@@ -82,7 +82,7 @@ def process_complete_pipeline(image_path: Path, config: Config,
             # Step 3: Deskewing
             print(f"    Step 3.{page_idx}: Deskewing...")
             skew_info = analyze_skew_detailed(page, config.angle_range, config.angle_step)
-            deskewed_page = deskew_image(page, config.angle_range, config.angle_step)
+            deskewed_page, _ = deskew_image(page, config.angle_range, config.angle_step, config.min_angle_correction)
             deskew_overlay = draw_line_detection_overlay(page, skew_info)
             
             # Step 4: ROI Detection (if enabled)

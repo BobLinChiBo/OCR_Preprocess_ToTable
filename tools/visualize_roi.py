@@ -20,7 +20,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import detect_roi_for_image, load_image, detect_roi_gabor
+from src.ocr_pipeline.utils import detect_roi_for_image, load_image, detect_roi_gabor
 from visualization.output_manager import get_test_images, convert_numpy_types
 
 

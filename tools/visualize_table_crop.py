@@ -20,74 +20,41 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from ocr.config import Config
-from ocr.utils import load_image, detect_table_lines, crop_table_region
+from src.ocr_pipeline.utils import load_image, detect_table_lines, crop_table_region
 from visualization.output_manager import get_test_images, convert_numpy_types
 
 
 def analyze_table_crop_detailed(image: np.ndarray, min_line_length: int = 100, 
                                max_line_gap: int = 10, crop_padding: int = 10) -> Dict[str, Any]:
     """Enhanced table cropping analysis with detailed boundary detection."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    # First detect lines using shared function
+    h_lines, v_lines = detect_table_lines(
+        image, 
+        min_line_length=min_line_length, 
+        max_line_gap=max_line_gap
+    )
+    
+    # Then crop using shared function
+    crop_region, crop_analysis = crop_table_region(
+        image, h_lines, v_lines, 
+        crop_padding=crop_padding,
+        return_analysis=True
+    )
+    
     height, width = image.shape[:2]
     
-    # Apply morphological operations to enhance lines
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-    
-    # Detect horizontal lines
-    horizontal = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_h)
-    h_lines = cv2.HoughLinesP(horizontal, 1, np.pi/180, threshold=50,
-                             minLineLength=min_line_length, maxLineGap=max_line_gap)
-    
-    # Detect vertical lines
-    vertical = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_v)
-    v_lines = cv2.HoughLinesP(vertical, 1, np.pi/180, threshold=50,
-                             minLineLength=min_line_length, maxLineGap=max_line_gap)
-    
-    # Convert to list of tuples
-    h_lines_list = [tuple(line[0]) for line in h_lines] if h_lines is not None else []
-    v_lines_list = [tuple(line[0]) for line in v_lines] if v_lines is not None else []
-    
-    # Calculate crop boundaries if lines exist
-    crop_bounds = None
-    crop_region = None
-    coverage_ratio = 0
-    
-    if h_lines_list and v_lines_list:
-        # Find boundaries
-        min_x = min([min(x1, x2) for x1, y1, x2, y2 in v_lines_list])
-        max_x = max([max(x1, x2) for x1, y1, x2, y2 in v_lines_list])
-        min_y = min([min(y1, y2) for x1, y1, x2, y2 in h_lines_list])
-        max_y = max([max(y1, y2) for x1, y1, x2, y2 in h_lines_list])
-        
-        # Add padding
-        min_x = max(0, min_x - crop_padding)
-        max_x = min(width, max_x + crop_padding)
-        min_y = max(0, min_y - crop_padding)
-        max_y = min(height, max_y + crop_padding)
-        
-        crop_bounds = (min_x, min_y, max_x, max_y)
-        
-        # Crop the image
-        crop_region = image[min_y:max_y, min_x:max_x]
-        
-        # Calculate coverage
-        crop_area = (max_x - min_x) * (max_y - min_y)
-        total_area = width * height
-        coverage_ratio = crop_area / total_area if total_area > 0 else 0
-    
-    # Line density analysis
-    h_line_density = len(h_lines_list) / height if height > 0 else 0
-    v_line_density = len(v_lines_list) / width if width > 0 else 0
+    # Additional analysis for visualization
+    h_line_density = len(h_lines) / height if height > 0 else 0
+    v_line_density = len(v_lines) / width if width > 0 else 0
     
     # Line distribution analysis
     h_y_positions = []
     v_x_positions = []
     
-    for x1, y1, x2, y2 in h_lines_list:
+    for x1, y1, x2, y2 in h_lines:
         h_y_positions.extend([y1, y2])
     
-    for x1, y1, x2, y2 in v_lines_list:
+    for x1, y1, x2, y2 in v_lines:
         v_x_positions.extend([x1, x2])
     
     # Calculate line spacing
@@ -102,15 +69,28 @@ def analyze_table_crop_detailed(image: np.ndarray, min_line_length: int = 100,
         sorted_v = sorted(set(v_x_positions))
         v_spacing = [sorted_v[i+1] - sorted_v[i] for i in range(len(sorted_v)-1)]
     
+    # Convert crop analysis to match expected format
+    if 'error' in crop_analysis:
+        crop_bounds = None
+        has_crop_region = False
+        coverage_ratio = 0
+        crop_size = (0, 0)
+    else:
+        bounds = crop_analysis['padded_boundaries']
+        crop_bounds = (bounds['min_x'], bounds['min_y'], bounds['max_x'], bounds['max_y'])
+        has_crop_region = True
+        coverage_ratio = crop_analysis['crop_efficiency']
+        crop_size = crop_analysis['cropped_dimensions']
+    
     return {
-        'h_lines': h_lines_list,
-        'v_lines': v_lines_list,
+        'h_lines': h_lines,
+        'v_lines': v_lines,
         'crop_bounds': crop_bounds,
         'crop_region': crop_region,
-        'has_crop_region': crop_region is not None,
+        'has_crop_region': has_crop_region,
         'coverage_ratio': coverage_ratio,
         'original_size': (width, height),
-        'crop_size': (crop_region.shape[1], crop_region.shape[0]) if crop_region is not None else (0, 0),
+        'crop_size': crop_size,
         'h_line_density': h_line_density,
         'v_line_density': v_line_density,
         'h_spacing': h_spacing,
