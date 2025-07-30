@@ -19,15 +19,37 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from ocr.config import Config
-from src.ocr_pipeline.utils import load_image, split_two_page_image
-from visualization.output_manager import get_test_images, convert_numpy_types
+from src.ocr_pipeline.config import Stage1Config, Stage2Config
+import src.ocr_pipeline.utils as ocr_utils
+from output_manager import get_test_images, convert_numpy_types
+
+
+def load_config_from_file(config_path: Path = None, stage: int = 1):
+    """Load configuration from JSON file or use defaults."""
+    if config_path is None:
+        # Use default config based on stage
+        if stage == 2:
+            config_path = Path("configs/stage2_default.json")
+        else:
+            config_path = Path("configs/stage1_default.json")
+    
+    if config_path.exists():
+        if stage == 2:
+            return Stage2Config.from_json(config_path)
+        else:
+            return Stage1Config.from_json(config_path)
+    else:
+        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        if stage == 2:
+            return Stage2Config()
+        else:
+            return Stage1Config()
 
 
 def find_gutter_detailed(image: np.ndarray, gutter_start: float = 0.4, 
                         gutter_end: float = 0.6, min_gutter_width: int = 50) -> Dict[str, Any]:
     """Enhanced gutter detection with detailed analysis."""
-    _, _, analysis = split_two_page_image(
+    _, _, analysis = ocr_utils.split_two_page_image(
         image, 
         gutter_start=gutter_start, 
         gutter_end=gutter_end, 
@@ -208,14 +230,14 @@ def create_split_comparison(original: np.ndarray, left_page: np.ndarray,
     return comparison
 
 
-def process_image_split_visualization(image_path: Path, config: Config, 
+def process_image_split_visualization(image_path: Path, config, 
                                     output_dir: Path) -> Dict[str, Any]:
     """Process a single image and create split visualization."""
     print(f"Processing: {image_path.name}")
     
     try:
         # Load image
-        image = load_image(image_path)
+        image = ocr_utils.load_image(image_path)
         
         # Get detailed gutter analysis
         gutter_info = find_gutter_detailed(
@@ -226,7 +248,7 @@ def process_image_split_visualization(image_path: Path, config: Config,
         )
         
         # Split the image
-        left_page, right_page = split_two_page_image(
+        left_page, right_page = ocr_utils.split_two_page_image(
             image, 
             config.gutter_search_start, 
             config.gutter_search_end
@@ -309,15 +331,21 @@ def main():
                        help="Images to visualize")
     parser.add_argument("--test-images", action="store_true",
                        help="Process all images in input/test_images directory")
-    parser.add_argument("--output-dir", default="page_split_visualization",
+    parser.add_argument("--output-dir", default="data/output/visualization/page_split",
                        help="Output directory for visualizations")
     
-    # Parameter options
-    parser.add_argument("--gutter-start", type=float, default=0.4,
+    # Config file options
+    parser.add_argument("--config-file", type=Path, default=None,
+                       help="JSON config file to use (default: configs/stage1_default.json)")
+    parser.add_argument("--stage", type=int, choices=[1, 2], default=1,
+                       help="Use stage1 or stage2 default config (default: 1)")
+    
+    # Parameter overrides (take precedence over config file)
+    parser.add_argument("--gutter-start", type=float, default=None,
                        help="Gutter search start position (0.0-1.0)")
-    parser.add_argument("--gutter-end", type=float, default=0.6,
+    parser.add_argument("--gutter-end", type=float, default=None,
                        help="Gutter search end position (0.0-1.0)")
-    parser.add_argument("--min-gutter-width", type=int, default=50,
+    parser.add_argument("--min-gutter-width", type=int, default=None,
                        help="Minimum gutter width in pixels")
     
     args = parser.parse_args()
@@ -343,13 +371,18 @@ def main():
             print("No valid images found!")
             return
     
-    # Create configuration
-    config = Config(
-        gutter_search_start=args.gutter_start,
-        gutter_search_end=args.gutter_end,
-        min_gutter_width=args.min_gutter_width,
-        verbose=False
-    )
+    # Load configuration from JSON file
+    config = load_config_from_file(args.config_file, args.stage)
+    
+    # Apply command line parameter overrides
+    if args.gutter_start is not None:
+        config.gutter_search_start = args.gutter_start
+    if args.gutter_end is not None:
+        config.gutter_search_end = args.gutter_end
+    if args.min_gutter_width is not None:
+        config.min_gutter_width = args.min_gutter_width
+    
+    config.verbose = False  # Keep visualization quiet
     output_dir = Path(args.output_dir)
     
     print(f"Visualizing page splitting on {len(image_paths)} images")

@@ -18,7 +18,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from visualization.output_manager import OutputManager, create_html_viewer
+from output_manager import OutputManager, create_html_viewer
 
 
 def print_run_summary(runs: List[Dict[str, Any]], limit: int = 10):

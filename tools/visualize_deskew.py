@@ -19,13 +19,35 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from ocr.config import Config
-from src.ocr_pipeline.utils import load_image, deskew_image
-from visualization.output_manager import get_default_output_manager, organize_visualization_output, get_test_images, convert_numpy_types
+from src.ocr_pipeline.config import Stage1Config, Stage2Config
+import src.ocr_pipeline.utils as ocr_utils
+from output_manager import get_default_output_manager, organize_visualization_output, get_test_images, convert_numpy_types
 
 
-def analyze_skew_detailed(image: np.ndarray, angle_range: int = 45, 
-                         angle_step: float = 0.5) -> Dict[str, Any]:
+def load_config_from_file(config_path: Path = None, stage: int = 1):
+    """Load configuration from JSON file or use defaults."""
+    if config_path is None:
+        # Use default config based on stage
+        if stage == 2:
+            config_path = Path("configs/stage2_default.json")
+        else:
+            config_path = Path("configs/stage1_default.json")
+    
+    if config_path.exists():
+        if stage == 2:
+            return Stage2Config.from_json(config_path)
+        else:
+            return Stage1Config.from_json(config_path)
+    else:
+        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        if stage == 2:
+            return Stage2Config()
+        else:
+            return Stage1Config()
+
+
+def analyze_skew_detailed(image: np.ndarray, angle_range: int = 10, 
+                         angle_step: float = 0.2) -> Dict[str, Any]:
     """Enhanced skew analysis with detailed line detection."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     
@@ -281,20 +303,20 @@ def create_deskew_comparison(original: np.ndarray, deskewed: np.ndarray,
     return comparison
 
 
-def process_image_deskew_visualization(image_path: Path, config: Config, 
+def process_image_deskew_visualization(image_path: Path, config, 
                                      output_dir: Path, use_organized_output: bool = True) -> Dict[str, Any]:
     """Process a single image and create deskew visualization."""
     print(f"Processing: {image_path.name}")
     
     try:
         # Load image
-        image = load_image(image_path)
+        image = ocr_utils.load_image(image_path)
         
         # Analyze skew
         skew_info = analyze_skew_detailed(image, config.angle_range, config.angle_step)
         
         # Deskew the image
-        deskewed, detected_angle = deskew_image(image, config.angle_range, config.angle_step, config.min_angle_correction)
+        deskewed, detected_angle = ocr_utils.deskew_image(image, config.angle_range, config.angle_step, config.min_angle_correction)
         
         # Create visualizations
         overlay = draw_line_detection_overlay(image, skew_info)
@@ -424,12 +446,18 @@ def main():
     parser.add_argument("--flat-output", action="store_true",
                        help="Use flat output structure instead of organized folders")
     
-    # Parameter options
-    parser.add_argument("--angle-range", type=int, default=45,
+    # Config file options
+    parser.add_argument("--config-file", type=Path, default=None,
+                       help="JSON config file to use (default: configs/stage1_default.json)")
+    parser.add_argument("--stage", type=int, choices=[1, 2], default=1,
+                       help="Use stage1 or stage2 default config (default: 1)")
+    
+    # Parameter overrides (take precedence over config file)
+    parser.add_argument("--angle-range", type=int, default=None,
                        help="Maximum angle range for detection (degrees)")
-    parser.add_argument("--angle-step", type=float, default=0.5,
+    parser.add_argument("--angle-step", type=float, default=None,
                        help="Angle step for detection (degrees)")
-    parser.add_argument("--min-angle-correction", type=float, default=0.5,
+    parser.add_argument("--min-angle-correction", type=float, default=None,
                        help="Minimum angle to trigger rotation (degrees)")
     
     args = parser.parse_args()
@@ -455,18 +483,23 @@ def main():
             print("No valid images found!")
             return
     
-    # Create configuration
-    config = Config(
-        angle_range=args.angle_range,
-        angle_step=args.angle_step,
-        min_angle_correction=args.min_angle_correction,
-        verbose=False
-    )
+    # Load configuration from JSON file
+    config = load_config_from_file(args.config_file, args.stage)
+    
+    # Apply command line parameter overrides
+    if args.angle_range is not None:
+        config.angle_range = args.angle_range
+    if args.angle_step is not None:
+        config.angle_step = args.angle_step
+    if args.min_angle_correction is not None:
+        config.min_angle_correction = args.min_angle_correction
+    
+    config.verbose = False  # Keep visualization quiet
     
     # Handle output directory
     if args.flat_output or args.output_dir:
         # Use specified directory or flat structure
-        output_dir = Path(args.output_dir) if args.output_dir else Path("deskew_visualization")
+        output_dir = Path(args.output_dir) if args.output_dir else Path("data/output/visualization/deskew")
         use_organized = False
     else:
         # Use organized structure

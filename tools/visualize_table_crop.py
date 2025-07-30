@@ -407,7 +407,7 @@ def main():
                        help="Images to visualize")
     parser.add_argument("--test-images", action="store_true",
                        help="Process all images in input/test_images directory")
-    parser.add_argument("--output-dir", default="table_crop_visualization",
+    parser.add_argument("--output-dir", default="data/output/visualization/table_crop",
                        help="Output directory for visualizations")
     
     # Parameter options

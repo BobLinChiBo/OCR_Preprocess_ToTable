@@ -32,7 +32,7 @@ from visualize_deskew import analyze_skew_detailed, draw_line_detection_overlay
 from visualize_table_lines import detect_table_lines_detailed, draw_table_lines_overlay
 from visualize_table_crop import analyze_table_crop_detailed, draw_crop_overlay
 from visualize_roi import draw_roi_overlay
-from visualization.output_manager import get_test_images, convert_numpy_types
+from output_manager import get_test_images, convert_numpy_types
 
 
 def process_complete_pipeline(image_path: Path, config: Config, 
@@ -349,7 +349,7 @@ def main():
                        help="Images to process through pipeline")
     parser.add_argument("--test-images", action="store_true",
                        help="Process all images in input/test_images directory")
-    parser.add_argument("--output-dir", default="pipeline_visualization",
+    parser.add_argument("--output-dir", default="data/output/visualization/pipeline",
                        help="Output directory for visualizations")
     parser.add_argument("--save-intermediates", action="store_true",
                        help="Save all intermediate processing steps")

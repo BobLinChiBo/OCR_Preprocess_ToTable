@@ -18,7 +18,7 @@ import numpy as np
 class OutputManager:
     """Manages organized output structure for visualization scripts."""
     
-    def __init__(self, base_output_dir: str = "visualization_outputs"):
+    def __init__(self, base_output_dir: str = "data/output/visualization"):
         self.base_dir = Path(base_output_dir)
         self.base_dir.mkdir(exist_ok=True)
         
@@ -277,7 +277,7 @@ def convert_numpy_types(obj: Any) -> Any:
         return obj
 
 
-def get_test_images(test_images_dir: str = "input/test_images") -> List[Path]:
+def get_test_images(test_images_dir: str = "data/input/test_images") -> List[Path]:
     """Discover all supported image files in the test images directory.
     
     Args:

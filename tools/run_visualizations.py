@@ -18,7 +18,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from visualization.output_manager import OutputManager
+from output_manager import OutputManager
 
 
 class VisualizationRunner:
@@ -360,7 +360,7 @@ Examples:
         
         print(f"\nExecution report saved to: {report_file}")
     
-    print(f"\nUse 'python visualization/check_results.py list' to view all results")
+    print(f"\nUse 'python tools/check_results.py list' to view all results")
 
 
 if __name__ == "__main__":

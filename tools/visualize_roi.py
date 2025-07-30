@@ -19,13 +19,35 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from ocr.config import Config
-from src.ocr_pipeline.utils import detect_roi_for_image, load_image, detect_roi_gabor
-from visualization.output_manager import get_test_images, convert_numpy_types
+from src.ocr_pipeline.config import Stage1Config, Stage2Config
+import src.ocr_pipeline.utils as ocr_utils
+from output_manager import get_test_images, convert_numpy_types
+
+
+def load_config_from_file(config_path: Path = None, stage: int = 1):
+    """Load configuration from JSON file or use defaults."""
+    if config_path is None:
+        # Use default config based on stage
+        if stage == 2:
+            config_path = Path("configs/stage2_default.json")
+        else:
+            config_path = Path("configs/stage1_default.json")
+    
+    if config_path.exists():
+        if stage == 2:
+            return Stage2Config.from_json(config_path)
+        else:
+            return Stage1Config.from_json(config_path)
+    else:
+        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        if stage == 2:
+            return Stage2Config()
+        else:
+            return Stage1Config()
 
 
 def draw_roi_overlay(image: np.ndarray, roi_coords: Dict[str, Any], 
-                    show_gabor: bool = False, config: Config = None) -> np.ndarray:
+                    show_gabor: bool = False, config = None) -> np.ndarray:
     """Draw ROI detection overlay on image."""
     overlay = image.copy()
     height, width = image.shape[:2]
@@ -168,7 +190,7 @@ def create_comparison_grid(original: np.ndarray, roi_overlay: np.ndarray,
     return comparison
 
 
-def save_debug_images(image: np.ndarray, config: Config, output_dir: Path, base_name: str):
+def save_debug_images(image: np.ndarray, config, output_dir: Path, base_name: str):
     """Save debug images for binarization and gabor steps."""
     # Convert to grayscale for processing
     gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
@@ -222,17 +244,17 @@ def save_debug_images(image: np.ndarray, config: Config, output_dir: Path, base_
     }
 
 
-def process_image_visualization(image_path: Path, config: Config, 
+def process_image_visualization(image_path: Path, config, 
                               output_dir: Path, show_gabor: bool = False, save_debug: bool = False) -> Dict[str, Any]:
     """Process a single image and create visualization."""
     print(f"Processing: {image_path.name}")
     
     try:
         # Load image
-        image = load_image(image_path)
+        image = ocr_utils.load_image(image_path)
         
         # Detect ROI
-        roi_coords = detect_roi_for_image(image, config)
+        roi_coords = ocr_utils.detect_roi_for_image(image, config)
         
         # Create ROI overlay
         roi_overlay = draw_roi_overlay(image, roi_coords, show_gabor, config)
@@ -315,7 +337,7 @@ def main():
                        help="Images to visualize")
     parser.add_argument("--test-images", action="store_true",
                        help="Process all images in input/test_images directory")
-    parser.add_argument("--output-dir", default="roi_visualization",
+    parser.add_argument("--output-dir", default="data/output/visualization/roi",
                        help="Output directory for visualizations")
     parser.add_argument("--show-gabor", action="store_true",
                        help="Show Gabor filter response overlay")
@@ -324,12 +346,18 @@ def main():
     parser.add_argument("--config-params", type=str,
                        help="JSON string of config parameters to test")
     
-    # Parameter options
-    parser.add_argument("--gabor-threshold", type=int, default=127,
+    # Config file options
+    parser.add_argument("--config-file", type=Path, default=None,
+                       help="JSON config file to use (default: configs/stage1_default.json)")
+    parser.add_argument("--stage", type=int, choices=[1, 2], default=1,
+                       help="Use stage1 or stage2 default config (default: 1)")
+    
+    # Parameter overrides (take precedence over config file)
+    parser.add_argument("--gabor-threshold", type=int, default=None,
                        help="Gabor binary threshold")
-    parser.add_argument("--cut-strength", type=float, default=10.0,
+    parser.add_argument("--cut-strength", type=float, default=None,
                        help="Minimum cut strength")
-    parser.add_argument("--confidence-threshold", type=float, default=5.0,
+    parser.add_argument("--confidence-threshold", type=float, default=None,
                        help="Minimum confidence threshold")
     
     args = parser.parse_args()
@@ -355,24 +383,30 @@ def main():
             print("No valid images found!")
             return
     
-    # Create configuration
+    # Load configuration from JSON file
+    config = load_config_from_file(args.config_file, args.stage)
+    
+    # Handle config-params JSON override if provided
     config_params = {}
     if args.config_params:
         try:
             config_params = json.loads(args.config_params)
+            for key, value in config_params.items():
+                if hasattr(config, key):
+                    setattr(config, key, value)
         except json.JSONDecodeError:
             print("Warning: Invalid JSON in config-params, using command line args")
     
-    # Override with command line arguments
-    config_params.update({
-        'gabor_binary_threshold': args.gabor_threshold,
-        'roi_min_cut_strength': args.cut_strength,
-        'roi_min_confidence_threshold': args.confidence_threshold,
-        'verbose': False,
-        'enable_roi_detection': True
-    })
+    # Apply command line parameter overrides
+    if args.gabor_threshold is not None:
+        config.gabor_binary_threshold = args.gabor_threshold
+    if args.cut_strength is not None:
+        config.roi_min_cut_strength = args.cut_strength
+    if args.confidence_threshold is not None:
+        config.roi_min_confidence_threshold = args.confidence_threshold
     
-    config = Config(**config_params)
+    config.verbose = False  # Keep visualization quiet
+    config.enable_roi_detection = True  # Ensure ROI detection is enabled
     output_dir = Path(args.output_dir)
     
     print(f"Visualizing ROI detection on {len(image_paths)} images")
