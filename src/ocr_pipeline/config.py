@@ -117,7 +117,7 @@ class Config:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def from_json(cls, json_path: Path) -> "Config":
+    def from_json(cls, json_path: Path):
         """Load configuration from JSON file."""
         if not json_path.exists():
             raise FileNotFoundError(f"Config file not found: {json_path}")
@@ -162,9 +162,9 @@ class Stage1Config(Config):
     max_line_gap: int = 15
 
     # Stage 1 ROI margins (more generous)
-    roi_margins_page_1: dict = None
-    roi_margins_page_2: dict = None
-    roi_margins_default: dict = None
+    roi_margins_page_1: Optional[dict] = None
+    roi_margins_page_2: Optional[dict] = None
+    roi_margins_default: Optional[dict] = None
 
     def __post_init__(self) -> None:
         """Initialize Stage 1 specific settings."""
@@ -266,7 +266,7 @@ class Stage1Config(Config):
             config_dict["roi_margins_page_2"] = margins.get("page_2")
             config_dict["roi_margins_default"] = margins.get("default")
 
-        return super().from_dict(config_dict)
+        return cls(**config_dict)
 
 
 @dataclass
@@ -287,9 +287,9 @@ class Stage2Config(Config):
     max_line_gap: int = 5
 
     # Stage 2 ROI margins (minimal, already cropped)
-    roi_margins_page_1: dict = None
-    roi_margins_page_2: dict = None
-    roi_margins_default: dict = None
+    roi_margins_page_1: Optional[dict] = None
+    roi_margins_page_2: Optional[dict] = None
+    roi_margins_default: Optional[dict] = None
 
     # Disable ROI detection for Stage 2 (already cropped)
     enable_roi_detection: bool = False
@@ -357,7 +357,7 @@ class Stage2Config(Config):
             config_dict["roi_margins_page_2"] = margins.get("page_2")
             config_dict["roi_margins_default"] = margins.get("default")
 
-        return super().from_dict(config_dict)
+        return cls(**config_dict)
 
 
 def get_default_config(config_path: Optional[Path] = None) -> Config:

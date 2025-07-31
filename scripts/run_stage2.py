@@ -37,7 +37,7 @@ Examples:
   python run_stage2.py                                      # Use default Stage 1 output
   python run_stage2.py cropped_tables/                      # Process custom directory
   python run_stage2.py stage1_output/05_cropped_tables/     # Specific Stage 1 output
-  python run_stage2.py cropped/ -o refined/ --verbose       # Custom input/output with verbose
+  python run_stage2.py cropped/ -o refined/ --verbose       # Custom input/output
         """,
     )
 
@@ -55,7 +55,10 @@ Examples:
         "-o",
         "--output",
         default="data/output/stage2_refinement",
-        help="Output directory for Stage 2 results (default: data/output/stage2_refinement/)",
+        help=(
+            "Output directory for Stage 2 results "
+            "(default: data/output/stage2_refinement/)"
+        ),
     )
 
     parser.add_argument(
@@ -171,7 +174,7 @@ Examples:
                 "   Your tables are ready for use in publications, reports, or further analysis."
             )
         else:
-            output_path = stage2_config.output_dir / '04_fitted_tables'
+            output_path = stage2_config.output_dir / "04_fitted_tables"
             print(f"Stage 2 complete: {len(results)} refined tables -> {output_path}")
 
         return True

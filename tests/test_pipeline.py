@@ -23,8 +23,8 @@ def test_default_config():
     """Test default configuration creation."""
     config = get_default_config()
     assert isinstance(config, Config)
-    assert config.input_dir == Path("input")
-    assert config.output_dir == Path("output")
+    assert config.input_dir == Path("data/input")
+    assert config.output_dir == Path("data/output")
 
 
 def test_config_path_conversion():
@@ -55,7 +55,7 @@ def test_deskew_image():
     image = np.ones((100, 100, 3), dtype=np.uint8) * 255
 
     # Deskewing should return an image of the same size
-    deskewed = deskew_image(image)
+    deskewed, angle = deskew_image(image)
     assert deskewed.shape == image.shape
 
 
