@@ -60,10 +60,10 @@ jobs:
         pip install black flake8 mypy
     
     - name: Run black
-      run: black --check src/ scripts/ tests/ examples/
+      run: black --check src/ scripts/ tests/ tools/
     
     - name: Run flake8
-      run: flake8 src/ scripts/ tests/ examples/
+      run: flake8 src/ scripts/ tests/ tools/
     
     - name: Run mypy
       run: mypy src/
