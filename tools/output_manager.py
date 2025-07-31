@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Any
 import webbrowser
 import tempfile
 import numpy as np
+from dataclasses import MISSING
 import sys
 import inspect
 
@@ -368,7 +369,7 @@ def save_step_parameters(step_name: str, config_obj: Any, command_args: Dict[str
         for field_name, field in config_obj.__class__.__dataclass_fields__.items():
             param_docs[field_name] = {
                 'type': str(field.type),
-                'default': field.default if field.default != field.default_factory() else field.default_factory(),
+                'default': field.default if field.default is not MISSING else (field.default_factory() if field.default_factory is not MISSING else None),
                 'description': getattr(field, 'metadata', {}).get('description', '')
             }
     

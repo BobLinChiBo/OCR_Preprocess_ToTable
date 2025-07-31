@@ -1,7 +1,7 @@
 """Simple utilities for OCR pipeline."""
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -812,7 +812,7 @@ def detect_roi_adaptive_threshold(
 
 def detect_roi_for_image(
     image: np.ndarray, config, return_analysis: bool = False
-) -> Dict:
+) -> Union[Dict, Tuple[Dict, Dict]]:
     """Detect ROI for an image using configurable edge detection methods and sliding window analysis.
 
     Args:
