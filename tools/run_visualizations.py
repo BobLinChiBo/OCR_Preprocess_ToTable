@@ -333,26 +333,36 @@ def parse_script_args_from_argv(argv: List[str]) -> Dict[str, List[str]]:
     """Parse script arguments directly from sys.argv, handling argparse limitations."""
     result = {}
     current_script = None
-    
+
     i = 0
     while i < len(argv):
         arg = argv[i]
-        
+
         if arg.startswith("--") and arg.endswith("-args"):
             # Extract script name (e.g., --roi-args -> roi)
             current_script = arg[2:-5]  # Remove -- and -args
             result[current_script] = []
             i += 1
-            
+
             # Collect arguments until next --flag or end
-            while i < len(argv) and not (argv[i].startswith("--") and not argv[i].startswith("--roi-") and not argv[i].startswith("--deskew-") and not argv[i].startswith("--page-split-")):
-                if argv[i] in ["--test-images", "--pipeline", "--save-report", "--list"]:
+            while i < len(argv) and not (
+                argv[i].startswith("--")
+                and not argv[i].startswith("--roi-")
+                and not argv[i].startswith("--deskew-")
+                and not argv[i].startswith("--page-split-")
+            ):
+                if argv[i] in [
+                    "--test-images",
+                    "--pipeline",
+                    "--save-report",
+                    "--list",
+                ]:
                     break
                 result[current_script].append(argv[i])
                 i += 1
         else:
             i += 1
-    
+
     return result
 
 
@@ -453,10 +463,10 @@ Examples:
 
     # Parse script-specific arguments using custom parser that handles argparse limitations
     script_args = parse_script_args_from_argv(sys.argv[1:])
-    
+
     # Also try the original method for any arguments in remaining
     remaining_script_args = parse_script_args(remaining)
-    
+
     # Merge the results
     for script, args_list in remaining_script_args.items():
         if script in script_args:

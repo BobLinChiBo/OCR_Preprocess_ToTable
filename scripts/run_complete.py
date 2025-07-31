@@ -20,9 +20,11 @@ import sys
 import traceback
 from pathlib import Path
 
+# Add project root to Python path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.ocr_pipeline.config import get_stage1_config, get_stage2_config
-from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
+
+from src.ocr_pipeline.config import get_stage1_config, get_stage2_config  # noqa: E402
+from src.ocr_pipeline.pipeline import TwoStageOCRPipeline  # noqa: E402
 
 
 def main():
@@ -289,5 +291,5 @@ Examples:
 
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()
+    sys.exit(0)

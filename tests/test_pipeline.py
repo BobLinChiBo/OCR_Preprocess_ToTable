@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ocr_pipeline.config import Config, get_default_config
-from ocr_pipeline.pipeline import OCRPipeline
-from ocr_pipeline.utils import (
+from src.ocr_pipeline.config import Config, get_default_config
+from src.ocr_pipeline.pipeline import OCRPipeline
+from src.ocr_pipeline.utils import (
     crop_to_roi,
     deskew_image,
     detect_roi_for_image,

@@ -17,13 +17,14 @@ Example:
 
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
-from src.ocr_pipeline.config import Stage2Config, get_stage2_config
+from src.ocr_pipeline.pipeline import TwoStageOCRPipeline  # noqa: E402
+from src.ocr_pipeline.config import get_stage2_config  # noqa: E402
 
 
 def main():
@@ -44,7 +45,10 @@ Examples:
         "input",
         nargs="?",
         default="data/output/stage1_initial_processing/05_cropped_tables",
-        help="Input directory with cropped tables from Stage 1 (default: data/output/stage1_initial_processing/05_cropped_tables/)",
+        help=(
+            "Input directory with cropped tables from Stage 1 "
+            "(default: data/output/stage1_initial_processing/05_cropped_tables/)"
+        ),
     )
 
     parser.add_argument(
@@ -141,7 +145,7 @@ Examples:
             print(f"Input: {input_path}")
             print(f"Output: {stage2_config.output_dir}")
             print(f"Found: {len(image_files)} cropped table images")
-            print(f"Parameters:")
+            print("Parameters:")
             print(f"   - Angle range: ±{stage2_config.angle_range}°")
             print(f"   - Angle step: {stage2_config.angle_step}°")
             print(f"   - Min line length: {stage2_config.min_line_length}px")
@@ -157,7 +161,7 @@ Examples:
 
         # Print results
         if args.verbose:
-            print(f"\n*** STAGE 2 COMPLETED SUCCESSFULLY! ***")
+            print("\n*** STAGE 2 COMPLETED SUCCESSFULLY! ***")
             print(f"Generated {len(results)} publication-ready table images")
             print(f"Results saved to: {stage2_config.output_dir}")
             print(f"Final tables: {stage2_config.output_dir / '04_fitted_tables'}")
@@ -167,9 +171,8 @@ Examples:
                 "   Your tables are ready for use in publications, reports, or further analysis."
             )
         else:
-            print(
-                f"Stage 2 complete: {len(results)} refined tables -> {stage2_config.output_dir / '04_fitted_tables'}"
-            )
+            output_path = stage2_config.output_dir / '04_fitted_tables'
+            print(f"Stage 2 complete: {len(results)} refined tables -> {output_path}")
 
         return True
 
@@ -179,8 +182,6 @@ Examples:
     except Exception as e:
         print(f"Stage 2 failed: {e}")
         if args.verbose:
-            import traceback
-
             traceback.print_exc()
         return False
 

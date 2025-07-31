@@ -71,7 +71,7 @@ class Config:
     save_debug_images: bool = False
     verbose: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure paths are Path objects and validate parameters."""
         self.input_dir = Path(self.input_dir)
         self.output_dir = Path(self.output_dir)
@@ -81,7 +81,7 @@ class Config:
         # Validate parameters
         self._validate_parameters()
 
-    def _validate_parameters(self):
+    def _validate_parameters(self) -> None:
         """Validate configuration parameters."""
         if not (0.0 <= self.gutter_search_start <= 1.0):
             raise ValueError(
@@ -110,7 +110,7 @@ class Config:
                 f"max_line_gap must be non-negative, got {self.max_line_gap}"
             )
 
-    def create_output_dirs(self):
+    def create_output_dirs(self) -> None:
         """Create output directories if they don't exist."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
         if self.debug_dir:
@@ -166,7 +166,7 @@ class Stage1Config(Config):
     roi_margins_page_2: dict = None
     roi_margins_default: dict = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize Stage 1 specific settings."""
         super().__post_init__()
 
@@ -188,7 +188,7 @@ class Stage1Config(Config):
         if self.roi_margins_default is None:
             self.roi_margins_default = {"top": 60, "bottom": 60, "left": 5, "right": 5}
 
-    def create_output_dirs(self):
+    def create_output_dirs(self) -> None:
         """Create Stage 1 specific output directories."""
         super().create_output_dirs()
 
@@ -294,7 +294,7 @@ class Stage2Config(Config):
     # Disable ROI detection for Stage 2 (already cropped)
     enable_roi_detection: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
         super().__post_init__()
 
@@ -306,7 +306,7 @@ class Stage2Config(Config):
         if self.roi_margins_default is None:
             self.roi_margins_default = {"top": 0, "bottom": 0, "left": 0, "right": 0}
 
-    def create_output_dirs(self):
+    def create_output_dirs(self) -> None:
         """Create Stage 2 specific output directories."""
         super().create_output_dirs()
 

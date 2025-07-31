@@ -82,7 +82,7 @@ def analyze_skew_detailed(
     _, detected_angle = ocr_utils.deskew_image(
         image, angle_range, angle_step, min_angle_correction
     )
-    
+
     # For visualization purposes, we still need to generate some score data
     # Use a simplified approach that matches the optimized algorithm's coarse search
     def histogram_variance_score(binary_img: np.ndarray, angle: float) -> float:
@@ -91,7 +91,9 @@ def analyze_skew_detailed(
         center = (w // 2, h // 2)
         rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated = cv2.warpAffine(
-            binary_img, rotation_matrix, (w, h),
+            binary_img,
+            rotation_matrix,
+            (w, h),
             flags=cv2.INTER_LINEAR,  # Fast interpolation for visualization
             borderMode=cv2.BORDER_REPLICATE,
         )
@@ -102,7 +104,7 @@ def analyze_skew_detailed(
     # Generate visualization data using coarse search (much faster than exhaustive)
     coarse_step = max(1.0, angle_step * 5)  # Use larger steps for visualization
     angles = np.arange(-angle_range, angle_range + coarse_step, coarse_step)
-    
+
     # Use downsampled image for speed (same as optimized algorithm)
     h, w = binary.shape
     small_binary = cv2.resize(binary, (w // 4, h // 4), interpolation=cv2.INTER_AREA)

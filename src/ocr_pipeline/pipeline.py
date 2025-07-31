@@ -390,7 +390,7 @@ class TwoStageOCRPipeline:
         return stage2_outputs
 
 
-def main():
+def main() -> None:
     """Command line interface."""
     parser = argparse.ArgumentParser(description="OCR Table Extraction Pipeline")
     parser.add_argument(

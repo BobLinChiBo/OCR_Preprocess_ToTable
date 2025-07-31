@@ -549,7 +549,7 @@ def main():
         "hough_threshold": args.hough_threshold,
         "config_file": str(args.config_file) if args.config_file else None,
         "stage": args.stage,
-        "save_debug": args.save_debug,
+        "save_debug": False,
     }
 
     # Determine config source

@@ -100,8 +100,7 @@ Examples:
         "--config",
         type=Path,
         help=(
-            "Path to JSON configuration file "
-            "(default: configs/stage1_default.json)"
+            "Path to JSON configuration file " "(default: configs/stage1_default.json)"
         ),
     )
 
@@ -118,9 +117,7 @@ Examples:
     stage1_config = get_stage1_config(args.config)
 
     # Override with command line arguments
-    stage1_config.input_dir = (
-        input_path if input_path.is_dir() else input_path.parent
-    )
+    stage1_config.input_dir = input_path if input_path.is_dir() else input_path.parent
     stage1_config.output_dir = Path(args.output)
     stage1_config.verbose = args.verbose
     stage1_config.save_debug_images = args.debug
@@ -139,13 +136,9 @@ Examples:
             print(f"   - Angle range: ±{stage1_config.angle_range}°")
             print(f"   - Angle step: {stage1_config.angle_step}°")
             print(f"   - Min line length: {stage1_config.min_line_length}px")
-            roi_status = (
-                "enabled" if stage1_config.enable_roi_detection else "disabled"
-            )
+            roi_status = "enabled" if stage1_config.enable_roi_detection else "disabled"
             print(f"   - ROI detection: {roi_status}")
-            debug_status = (
-                "enabled" if stage1_config.save_debug_images else "disabled"
-            )
+            debug_status = "enabled" if stage1_config.save_debug_images else "disabled"
             print(f"   - Debug images: {debug_status}")
             print()
 

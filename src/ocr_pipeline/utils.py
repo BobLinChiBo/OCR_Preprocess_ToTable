@@ -121,21 +121,21 @@ def deskew_image(
     min_angle_correction: float = 0.5,
 ) -> tuple:
     """Deskew image using optimized coarse-to-fine histogram variance optimization.
-    
+
     Performance optimizations:
     - Coarse-to-fine search: reduces iterations from ~100 to ~40
     - Multi-resolution: coarse search on downsampled image (16x faster)
     - Fast interpolation for search phase, high quality for final rotation
     - Early termination when improvement is minimal
-    
+
     Philosophy: Well-aligned text creates sharp peaks in horizontal projection.
     This approach maximizes the variance of adjacent histogram differences,
     which occurs when text lines are perfectly horizontal.
-    
+
     Args:
         image: Input image to deskew
         angle_range: Maximum rotation angle in degrees (±)
-        angle_step: Step size for fine search in degrees  
+        angle_step: Step size for fine search in degrees
         min_angle_correction: Minimum angle threshold to apply correction
     Returns:
         tuple: (deskewed_image, detected_angle)
@@ -143,8 +143,10 @@ def deskew_image(
     # Convert to binary for optimal histogram analysis
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    
-    def histogram_variance_score(binary_img: np.ndarray, angle: float, use_fast_interpolation: bool = True) -> float:
+
+    def histogram_variance_score(
+        binary_img: np.ndarray, angle: float, use_fast_interpolation: bool = True
+    ) -> float:
         """Calculate sharpness of horizontal projection after rotation.
         When text is well-aligned, the horizontal projection shows sharp peaks
         (text rows) and valleys (white space). This maximizes the variance of
@@ -168,52 +170,57 @@ def deskew_image(
         # Sharp transitions between text and whitespace maximize this value
         differences = horizontal_projection[1:] - horizontal_projection[:-1]
         return np.sum(differences**2)
-    
+
     # Phase 1: Coarse search on downsampled image for speed
     # Downsample by 4x for ~16x speedup (4x4 pixels -> 1 pixel)
     h, w = binary.shape
     small_binary = cv2.resize(binary, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-    
+
     # Coarse search with 1-degree steps
     coarse_step = 1.0
     coarse_angles = np.arange(-angle_range, angle_range + coarse_step, coarse_step)
     coarse_scores = []
-    
+
     for angle in coarse_angles:
-        score = histogram_variance_score(small_binary, angle, use_fast_interpolation=True)
+        score = histogram_variance_score(
+            small_binary, angle, use_fast_interpolation=True
+        )
         coarse_scores.append(score)
-        
+
         # Early termination: if we have enough samples and last few scores are decreasing
         if len(coarse_scores) >= 5:
             recent_scores = coarse_scores[-5:]
-            if all(recent_scores[i] >= recent_scores[i+1] for i in range(len(recent_scores)-1)):
+            if all(
+                recent_scores[i] >= recent_scores[i + 1]
+                for i in range(len(recent_scores) - 1)
+            ):
                 # Scores are consistently decreasing, likely past the optimum
                 break
-    
+
     # Find best coarse angle
     best_coarse_idx = np.argmax(coarse_scores)
     best_coarse_angle = coarse_angles[best_coarse_idx]
-    
+
     # Phase 2: Fine search around best coarse candidate on full resolution
     # Search ±2 degrees around best coarse angle with original step size
     fine_range = 2.0
     fine_start = max(-angle_range, best_coarse_angle - fine_range)
     fine_end = min(angle_range, best_coarse_angle + fine_range)
     fine_angles = np.arange(fine_start, fine_end + angle_step, angle_step)
-    
+
     fine_scores = []
     for angle in fine_angles:
         score = histogram_variance_score(binary, angle, use_fast_interpolation=True)
         fine_scores.append(score)
-    
+
     # Find best fine angle
     best_fine_idx = np.argmax(fine_scores)
     best_angle = fine_angles[best_fine_idx]
-    
+
     # Apply rotation only if significant
     if abs(best_angle) < min_angle_correction:
         return image, 0.0
-    
+
     # Apply optimal rotation to original color image with high quality interpolation
     h, w = image.shape[:2]
     center = (w // 2, h // 2)
@@ -230,7 +237,7 @@ def deskew_image(
 
 def visualize_detected_lines(
     image, h_lines, v_lines, line_color=(0, 0, 255), line_thickness=2
-):
+) -> np.ndarray:
     """Create visualization of detected lines on the image."""
     vis_image = image.copy()
 
