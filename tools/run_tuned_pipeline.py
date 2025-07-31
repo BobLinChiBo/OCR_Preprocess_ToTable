@@ -21,8 +21,8 @@ from pathlib import Path
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.config import Stage1Config, Stage2Config
-from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
+from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
+from src.ocr_pipeline.pipeline import TwoStageOCRPipeline  # noqa: E402
 
 
 # =============================================================================
@@ -178,10 +178,9 @@ def main():
         epilog="""
 Examples:
   python tools/run_tuned_pipeline.py data/input/test_images/         # Use test images
-  python tools/run_tuned_pipeline.py data/input/raw_images/          # Use full dataset  
+  python tools/run_tuned_pipeline.py data/input/raw_images/          # Use full dataset
   python tools/run_tuned_pipeline.py input/ -o results/ --verbose    # Custom paths
   python tools/run_tuned_pipeline.py input/ --stage1-only            # Only Stage 1
-  
 Note: Update TUNED_PARAMETERS in this script with your optimal values first!
         """,
     )
@@ -292,7 +291,7 @@ Note: Update TUNED_PARAMETERS in this script with your optimal values first!
             )
 
         # Print final results
-        print(f"\n🎉 TUNED PIPELINE COMPLETED SUCCESSFULLY!")
+        print("\n🎉 TUNED PIPELINE COMPLETED SUCCESSFULLY!")
         print(f"📊 Processed {len(results)} images")
 
         if args.stage1_only:
@@ -307,9 +306,9 @@ Note: Update TUNED_PARAMETERS in this script with your optimal values first!
         else:
             print(f"📁 Final results: {stage2_config.output_dir / '04_fitted_tables'}")
 
-        print(f"\n📝 PARAMETER TUNING RECORD:")
-        print(f"   These results used the tuned parameters in this script.")
-        print(f"   Compare with default pipeline to evaluate improvements.")
+        print("\n📝 PARAMETER TUNING RECORD:")
+        print("   These results used the tuned parameters in this script.")
+        print("   Compare with default pipeline to evaluate improvements.")
 
         return True
 

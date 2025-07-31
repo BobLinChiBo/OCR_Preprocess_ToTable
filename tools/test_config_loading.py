@@ -9,7 +9,7 @@ from pathlib import Path
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.config import Stage1Config, Stage2Config
+from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
 
 
 def load_config_from_file(config_path: Path = None, stage: int = 1):
@@ -61,7 +61,7 @@ def test_config_loading():
     # Test explicit config file path
     print("\n3. Testing Explicit Config File Path:")
     config3 = load_config_from_file(Path("configs/stage1_default.json"))
-    print(f"   - Config loaded from: configs/stage1_default.json")
+    print("   - Config loaded from: configs/stage1_default.json")
     print(f"   - deskewing.angle_range: {config3.angle_range}")
 
     # Test parameter override simulation

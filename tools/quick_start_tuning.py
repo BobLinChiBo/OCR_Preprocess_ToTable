@@ -413,7 +413,7 @@ def main():
         try:
             state.state_file.unlink()
             print("✅ State file removed")
-        except:
+        except (OSError, FileNotFoundError, PermissionError):
             print("❌ Could not remove state file")
 
 

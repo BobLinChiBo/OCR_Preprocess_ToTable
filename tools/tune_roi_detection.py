@@ -20,7 +20,7 @@ import json
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.utils import (
+from src.ocr_pipeline.utils import (  # noqa: E402
     load_image,
     save_image,
     get_image_files,
@@ -280,7 +280,7 @@ def test_roi_detection_parameters():
             with open(analysis_file, "w") as f:
                 f.write(f"ROI DETECTION ANALYSIS - {param_name}\n")
                 f.write("=" * 50 + "\n")
-                f.write(f"Parameters:\n")
+                f.write("Parameters:\n")
                 f.write(f"  gabor_kernel_size: {kernel_size}\n")
                 f.write(f"  gabor_sigma: {sigma}\n")
                 f.write(f"  gabor_lambda: {lambda_val}\n")
@@ -308,7 +308,7 @@ def test_roi_detection_parameters():
                         1 for entry in roi_log if 0.65 <= entry["area_ratio"] <= 0.95
                     )
                     success_rate = (in_target_count / len(roi_log)) * 100
-                    f.write(f"Statistics:\n")
+                    f.write("Statistics:\n")
                     f.write(f"  Images processed: {len(roi_log)}\n")
                     f.write(f"  Average area ratio: {avg_area_ratio:.2%}\n")
                     f.write(
@@ -333,7 +333,7 @@ def test_roi_detection_parameters():
         print(
             f"\n[INTERRUPTED] Processing stopped by user after {len(results_summary)} combinations"
         )
-        print(f"[INFO] Partial results will be saved...")
+        print("[INFO] Partial results will be saved...")
 
     # Generate comprehensive summary report
     summary_file = output_base / "roi_detection_test_summary.txt"
@@ -364,7 +364,7 @@ def test_roi_detection_parameters():
                     f"   Success rate: {success['success_rate']:.1f}% ({success['in_target_count']}/{success['total_count']} images)\n"
                 )
                 f.write(f"   Average area: {success['avg_area_ratio']:.1%}\n")
-                f.write(f"   → RECOMMENDED for 65-95% target\n\n")
+                f.write("   → RECOMMENDED for 65-95% target\n\n")
 
         f.write("ALL PARAMETER COMBINATIONS:\n")
         f.write("-" * 30 + "\n")
@@ -436,7 +436,7 @@ def test_roi_detection_parameters():
         f.write("   data/output/tuning/04_line_input/\n")
         f.write("3. Run: python tools/tune_line_detection.py\n")
 
-    print(f"\n[SUCCESS] ROI DETECTION PARAMETER TUNING COMPLETE!")
+    print("\n[SUCCESS] ROI DETECTION PARAMETER TUNING COMPLETE!")
     print(
         f"[TESTED] {len(results_summary)}/{total_combinations} parameter combinations"
     )

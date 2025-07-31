@@ -19,9 +19,9 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.config import Config
-from src.ocr_pipeline.utils import load_image, detect_table_lines, crop_table_region
-from output_manager import get_test_images, convert_numpy_types, save_step_parameters
+from src.ocr_pipeline.config import Config  # noqa: E402
+from src.ocr_pipeline.utils import load_image, detect_table_lines, crop_table_region  # noqa: E402
+from output_manager import get_test_images, convert_numpy_types, save_step_parameters  # noqa: E402
 
 
 def analyze_table_crop_detailed(

@@ -18,7 +18,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from output_manager import (
+from output_manager import (  # noqa: E402
     OutputManager,
     create_html_viewer,
     create_parameter_comparison,
@@ -197,7 +197,7 @@ def show_parameter_info(
         runs = [r for r in runs if r["script"] == script_name]
 
     if not runs:
-        print(f"No runs found" + (f" for {script_name}" if script_name else ""))
+        print("No runs found" + (f" for {script_name}" if script_name else ""))
         return
 
     if run_index is not None:
@@ -340,7 +340,7 @@ def validate_parameters(runs: List[Dict[str, Any]], script_name: Optional[str] =
         runs = [r for r in runs if r["script"] == script_name]
 
     if not runs:
-        print(f"No runs found" + (f" for {script_name}" if script_name else ""))
+        print("No runs found" + (f" for {script_name}" if script_name else ""))
         return
 
     print(f"\n{'='*80}")

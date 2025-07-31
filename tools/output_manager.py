@@ -647,7 +647,7 @@ def validate_parameter_usage(param_file: Path) -> Dict[str, Any]:
     }
 
     config = param_data.get("configuration", {})
-    params = config.get("parameters", {})
+    # params = config.get("parameters", {})  # Unused variable
     results = param_data.get("processing_results", {})
     indicators = results.get("success_indicators", {})
 

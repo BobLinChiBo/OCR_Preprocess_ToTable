@@ -1,0 +1,60 @@
+tools/check_results.py:21:1: E402 module level import not at top of file
+tools/check_results.py:200:15: F541 f-string is missing placeholders
+tools/check_results.py:343:15: F541 f-string is missing placeholders
+tools/compare_results.py:25:1: E402 module level import not at top of file
+tools/compare_results.py:26:1: E402 module level import not at top of file
+tools/compare_results.py:27:1: E402 module level import not at top of file
+tools/output_manager.py:650:5: F841 local variable 'params' is assigned to but never used
+tools/quick_start_tuning.py:416:9: E722 do not use bare 'except'
+tools/run_tuned_pipeline.py:24:1: E402 module level import not at top of file
+tools/run_tuned_pipeline.py:25:1: E402 module level import not at top of file
+tools/run_tuned_pipeline.py:181:88: W291 trailing whitespace
+tools/run_tuned_pipeline.py:184:1: W293 blank line contains whitespace
+tools/run_tuned_pipeline.py:295:15: F541 f-string is missing placeholders
+tools/run_tuned_pipeline.py:310:15: F541 f-string is missing placeholders
+tools/run_tuned_pipeline.py:311:15: F541 f-string is missing placeholders
+tools/run_tuned_pipeline.py:312:15: F541 f-string is missing placeholders
+tools/run_visualizations.py:21:1: E402 module level import not at top of file
+tools/setup_tuning.py:238:36: W291 trailing whitespace
+tools/setup_tuning.py:245:23: W291 trailing whitespace
+tools/setup_tuning.py:246:21: W291 trailing whitespace
+tools/setup_tuning.py:248:14: W291 trailing whitespace
+tools/setup_tuning.py:249:15: W291 trailing whitespace
+tools/setup_tuning_windows.py:219:36: W291 trailing whitespace
+tools/setup_tuning_windows.py:226:23: W291 trailing whitespace
+tools/setup_tuning_windows.py:227:21: W291 trailing whitespace
+tools/setup_tuning_windows.py:229:14: W291 trailing whitespace
+tools/setup_tuning_windows.py:230:15: W291 trailing whitespace
+tools/setup_tuning_windows.py:257:31: W291 trailing whitespace
+tools/test_config_loading.py:12:1: E402 module level import not at top of file
+tools/test_config_loading.py:64:11: F541 f-string is missing placeholders
+tools/tune_deskewing.py:22:1: E402 module level import not at top of file
+tools/tune_deskewing.py:23:1: E402 module level import not at top of file
+tools/tune_line_detection.py:23:1: E402 module level import not at top of file
+tools/tune_page_splitting.py:22:1: E402 module level import not at top of file
+tools/tune_page_splitting.py:169:11: F541 f-string is missing placeholders
+tools/tune_roi_detection.py:23:1: E402 module level import not at top of file
+tools/tune_roi_detection.py:283:25: F541 f-string is missing placeholders
+tools/tune_roi_detection.py:311:29: F541 f-string is missing placeholders
+tools/tune_roi_detection.py:336:15: F541 f-string is missing placeholders
+tools/tune_roi_detection.py:367:25: F541 f-string is missing placeholders
+tools/tune_roi_detection.py:439:11: F541 f-string is missing placeholders
+tools/visualize_deskew.py:22:1: E402 module level import not at top of file
+tools/visualize_deskew.py:23:1: E402 module level import not at top of file
+tools/visualize_deskew.py:24:1: E402 module level import not at top of file
+tools/visualize_deskew.py:1030:13: F541 f-string is missing placeholders
+tools/visualize_deskew.py:1035:13: F541 f-string is missing placeholders
+tools/visualize_page_split.py:22:1: E402 module level import not at top of file
+tools/visualize_page_split.py:23:1: E402 module level import not at top of file
+tools/visualize_page_split.py:24:1: E402 module level import not at top of file
+tools/visualize_roi.py:26:1: E402 module level import not at top of file
+tools/visualize_roi.py:27:1: E402 module level import not at top of file
+tools/visualize_roi.py:28:1: E402 module level import not at top of file
+tools/visualize_roi.py:254:25: E203 whitespace before ':'
+tools/visualize_roi.py:254:52: E203 whitespace before ':'
+tools/visualize_table_crop.py:22:1: E402 module level import not at top of file
+tools/visualize_table_crop.py:23:1: E402 module level import not at top of file
+tools/visualize_table_crop.py:24:1: E402 module level import not at top of file
+tools/visualize_table_lines.py:22:1: E402 module level import not at top of file
+tools/visualize_table_lines.py:23:1: E402 module level import not at top of file
+tools/visualize_table_lines.py:24:1: E402 module level import not at top of file

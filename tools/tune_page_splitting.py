@@ -19,7 +19,7 @@ import itertools
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.utils import (
+from src.ocr_pipeline.utils import (  # noqa: E402
     load_image,
     save_image,
     split_two_page_image,
@@ -166,7 +166,7 @@ def test_page_splitting_parameters():
         f.write("   data/output/tuning/02_deskewed_input/\n")
         f.write("3. Run: python tools/tune_deskewing.py\n")
 
-    print(f"\n[SUCCESS] PARAMETER TUNING COMPLETE!")
+    print("\n[SUCCESS] PARAMETER TUNING COMPLETE!")
     print(f"[DIR] Results saved in: {output_base}")
     print(f"[FILE] Summary report: {summary_file}")
     print()

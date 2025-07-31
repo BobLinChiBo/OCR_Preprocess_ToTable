@@ -22,9 +22,9 @@ from pathlib import Path
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.utils import load_image, save_image, get_image_files
-import cv2
-import numpy as np
+from src.ocr_pipeline.utils import load_image, save_image, get_image_files  # noqa: E402
+import cv2  # noqa: E402
+import numpy as np  # noqa: E402
 
 
 def create_comparison_grid(image_paths, labels, output_path, grid_cols=3):

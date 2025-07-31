@@ -18,7 +18,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from output_manager import OutputManager
+from output_manager import OutputManager  # noqa: E402
 
 
 class VisualizationRunner:

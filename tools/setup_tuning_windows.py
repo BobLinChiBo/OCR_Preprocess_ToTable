@@ -49,7 +49,7 @@ def check_test_images():
         print(f"  [ERROR] Test image directory not found: {test_dir}")
         return False
 
-    from src.ocr_pipeline.utils import get_image_files
+    from src.ocr_pipeline.utils import get_image_files  # noqa: E402
 
     image_files = get_image_files(test_dir)
 
@@ -216,18 +216,18 @@ pause
 
 ## Tuning Progress
 - [ ] Page Splitting - tune_page_splitting.py
-- [ ] Deskewing - tune_deskewing.py  
+- [ ] Deskewing - tune_deskewing.py
 - [ ] ROI Detection - tune_roi_detection.py
 - [ ] Line Detection - tune_line_detection.py
 - [ ] Final Pipeline - run_tuned_pipeline.py
 
 ## Best Parameters Found
 ### Page Splitting
-- gutter_search_start: 
-- gutter_search_end: 
+- gutter_search_start:
+- gutter_search_end:
 
-### Deskewing  
-- angle_range: 
+### Deskewing
+- angle_range:
 - angle_step:
 - min_angle_correction:
 
@@ -254,7 +254,7 @@ pause
 ### Page Splitting -> Deskewing
 copy "data\\output\\tuning\\01_split_pages\\BEST_FOLDER\\*.jpg" "data\\output\\tuning\\02_deskewed_input\\"
 
-### Deskewing -> ROI Detection  
+### Deskewing -> ROI Detection
 copy "data\\output\\tuning\\02_deskewed\\BEST_FOLDER\\*.jpg" "data\\output\\tuning\\03_roi_input\\"
 
 ### ROI Detection -> Line Detection
