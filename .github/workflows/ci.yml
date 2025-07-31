@@ -62,7 +62,7 @@ jobs:
       run: black --check src/ scripts/ tests/ tools/
     
     - name: Run flake8
-      run: flake8 src/ scripts/ tests/ tools/ --extend-ignore=E501
+      run: flake8 src/ scripts/ tests/ tools/
     
     - name: Run mypy
       run: mypy src/
