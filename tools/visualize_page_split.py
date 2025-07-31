@@ -12,7 +12,7 @@ from pathlib import Path
 import argparse
 import json
 import sys
-from typing import Dict, Any, Tuple
+from typing import Dict, Any
 
 # Add project root to Python path
 script_dir = Path(__file__).parent
@@ -539,8 +539,8 @@ def main():
 
     print(f"Visualizing page splitting on {len(image_paths)} images")
     if args.test_images:
-        print(f"Batch mode: Processing all images from test_images directory")
-    print(f"Parameters:")
+        print("Batch mode: Processing all images from test_images directory")
+    print("Parameters:")
     print(
         f"  - Gutter search range: {config.gutter_search_start:.2f} - {config.gutter_search_end:.2f}"
     )
@@ -578,7 +578,7 @@ def main():
         )
 
     print(f"\nOutput files saved to: {output_dir}")
-    print(f"Review the '_split_comparison.jpg' files to assess splitting quality")
+    print("Review the '_split_comparison.jpg' files to assess splitting quality")
 
     # Save summary
     summary_file = output_dir / "split_visualization_summary.json"

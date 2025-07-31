@@ -10,8 +10,6 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-import webbrowser
-import tempfile
 import numpy as np
 from dataclasses import MISSING
 import sys
@@ -77,7 +75,7 @@ class OutputManager:
                     try:
                         with open(summary_files[0]) as f:
                             summary_info = json.load(f)
-                    except:
+                    except (json.JSONDecodeError, FileNotFoundError, IOError):
                         pass
 
                 # Count output files
@@ -170,12 +168,12 @@ def organize_visualization_output(
         try:
             shutil.move(str(source_path), str(dest_path))
             organized_files[file_type] = str(dest_path)
-        except:
+        except (OSError, shutil.Error, PermissionError):
             try:
                 shutil.copy2(str(source_path), str(dest_path))
                 organized_files[file_type] = str(dest_path)
                 source_path.unlink()  # Remove original
-            except:
+            except (OSError, shutil.Error, PermissionError):
                 organized_files[file_type] = str(source_path)  # Keep original location
 
     # Copy parameter file if provided separately
@@ -185,7 +183,7 @@ def organize_visualization_output(
             if parameter_file != param_dest:  # Don't copy to itself
                 shutil.copy2(str(parameter_file), str(param_dest))
                 organized_files["parameters"] = str(param_dest)
-        except:
+        except (OSError, shutil.Error, PermissionError):
             organized_files["parameters"] = str(parameter_file)
 
     # Save analysis data

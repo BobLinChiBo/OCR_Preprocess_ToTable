@@ -28,8 +28,6 @@ from src.ocr_pipeline.utils import (
     crop_table_region,
     visualize_detected_lines,
 )
-import cv2
-import numpy as np
 
 
 def test_line_detection_parameters():
@@ -174,7 +172,7 @@ def test_line_detection_parameters():
         with open(analysis_file, "w") as f:
             f.write(f"LINE DETECTION ANALYSIS - {param_name}\n")
             f.write("=" * 50 + "\n")
-            f.write(f"Parameters:\n")
+            f.write("Parameters:\n")
             f.write(f"  min_line_length: {min_line_length}px\n")
             f.write(f"  max_line_gap: {max_line_gap}px\n\n")
 
@@ -202,7 +200,7 @@ def test_line_detection_parameters():
                     entry["crop_area_ratio"] for entry in line_log
                 ) / len(line_log)
 
-                f.write(f"Statistics:\n")
+                f.write("Statistics:\n")
                 f.write(f"  Images processed: {len(line_log)}\n")
                 f.write(f"  Images with lines detected: {detected_count}\n")
                 f.write(f"  Detection rate: {detected_count/len(line_log):.1%}\n")
@@ -282,7 +280,7 @@ def test_line_detection_parameters():
         f.write("3. Run: python tools/run_tuned_pipeline.py\n")
         f.write("4. Use the optimal parameters in your production pipeline\n")
 
-    print(f"\n[SUCCESS] LINE DETECTION PARAMETER TUNING COMPLETE!")
+    print("\n[SUCCESS] LINE DETECTION PARAMETER TUNING COMPLETE!")
     print(f"[DIR] Results saved in: {output_base}")
     print(f"[FILE] Summary report: {summary_file}")
     print()

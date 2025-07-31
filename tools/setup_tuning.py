@@ -16,7 +16,6 @@ This script will:
 """
 
 import sys
-import subprocess
 from pathlib import Path
 
 # Add project root to Python path

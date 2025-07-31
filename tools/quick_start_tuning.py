@@ -17,7 +17,6 @@ Features:
 
 import sys
 import subprocess
-import time
 from pathlib import Path
 
 # Add project root to Python path
@@ -147,7 +146,7 @@ def check_directory_has_files(directory, pattern="*"):
 
 def guide_file_copying(source_stage, target_dir, file_pattern="*.jpg"):
     """Guide user through file copying process."""
-    print(f"\n📁 FILE COPYING STEP")
+    print("\n📁 FILE COPYING STEP")
     print("-" * 30)
     print(f"1. Open the results directory: data/output/tuning/{source_stage}/")
     print("2. Browse through the parameter combination folders")
@@ -161,7 +160,7 @@ def guide_file_copying(source_stage, target_dir, file_pattern="*.jpg"):
         print(f"Creating target directory: {target_dir}")
         target_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"Copy command example (replace 'best_folder' with actual folder name):")
+    print("Copy command example (replace 'best_folder' with actual folder name):")
 
     # Provide OS-specific copy commands
     if sys.platform.startswith("win"):

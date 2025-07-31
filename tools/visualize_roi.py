@@ -16,7 +16,7 @@ from pathlib import Path
 import argparse
 import json
 import sys
-from typing import Dict, Any, Tuple
+from typing import Dict, Any
 
 # Add project root to Python path
 script_dir = Path(__file__).parent
@@ -1301,12 +1301,12 @@ def main():
 
     print(f"Visualizing ROI detection on {len(image_paths)} images")
     if args.test_images:
-        print(f"Batch mode: Processing all images from test_images directory")
+        print("Batch mode: Processing all images from test_images directory")
 
     # Get the current ROI detection method
     current_method = getattr(config, "roi_detection_method", "gabor")
     print(f"ROI Detection Method: {current_method}")
-    print(f"Parameters:")
+    print("Parameters:")
 
     if current_method == "gabor":
         print(f"  - Gabor threshold: {config.gabor_binary_threshold}")
@@ -1366,7 +1366,7 @@ def main():
         )
 
     print(f"\nOutput files saved to: {output_dir}")
-    print(f"Review the '_comparison.jpg' files to assess ROI quality")
+    print("Review the '_comparison.jpg' files to assess ROI quality")
 
     # Save summary
     summary_file = output_dir / "visualization_summary.json"

@@ -12,7 +12,7 @@ from pathlib import Path
 import argparse
 import json
 import sys
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any
 
 # Add project root to Python path
 script_dir = Path(__file__).parent
@@ -583,8 +583,8 @@ def main():
 
     print(f"Visualizing table cropping on {len(image_paths)} images")
     if args.test_images:
-        print(f"Batch mode: Processing all images from test_images directory")
-    print(f"Parameters:")
+        print("Batch mode: Processing all images from test_images directory")
+    print("Parameters:")
     print(f"  - Min line length: {config.min_line_length}px")
     print(f"  - Max line gap: {config.max_line_gap}px")
     print(f"  - Crop padding: {args.crop_padding}px")
@@ -641,7 +641,7 @@ def main():
             )
 
     print(f"\nOutput files saved to: {output_dir}")
-    print(f"Review the '_crop_comparison.jpg' files to assess cropping quality")
+    print("Review the '_crop_comparison.jpg' files to assess cropping quality")
 
     # Save summary
     summary_file = output_dir / "crop_visualization_summary.json"

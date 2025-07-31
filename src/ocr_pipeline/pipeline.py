@@ -217,18 +217,18 @@ class TwoStageOCRPipeline:
                         self.stage1_config.max_line_gap,
                     )
 
-                    # Save line detection visualization
-                    lines_dir = self.stage1_config.output_dir / "03_line_detection"
-                    lines_path = lines_dir / f"{page_name}_lines.jpg"
+                    # TODO: Save line detection visualization
+                    # lines_dir = self.stage1_config.output_dir / "03_line_detection"
+                    # lines_path = lines_dir / f"{page_name}_lines.jpg"
                     # TODO: Add visualization function for detected lines
 
-                    # Table reconstruction
-                    reconstruction_dir = (
-                        self.stage1_config.output_dir / "04_table_reconstruction"
-                    )
-                    reconstruction_path = (
-                        reconstruction_dir / f"{page_name}_reconstructed.jpg"
-                    )
+                    # TODO: Table reconstruction
+                    # reconstruction_dir = (
+                    #     self.stage1_config.output_dir / "04_table_reconstruction"
+                    # )
+                    # reconstruction_path = (
+                    #     reconstruction_dir / f"{page_name}_reconstructed.jpg"
+                    # )
                     # TODO: Add table reconstruction function
 
                     # Final table cropping
@@ -319,18 +319,18 @@ class TwoStageOCRPipeline:
                     self.stage2_config.max_line_gap,
                 )
 
-                # Save refined line detection
-                lines_dir = self.stage2_config.output_dir / "02_line_detection"
-                lines_path = lines_dir / f"{base_name}_refined_lines.jpg"
+                # TODO: Save refined line detection
+                # lines_dir = self.stage2_config.output_dir / "02_line_detection"
+                # lines_path = lines_dir / f"{base_name}_refined_lines.jpg"
                 # TODO: Add visualization function for detected lines
 
-                # Final table reconstruction
-                reconstruction_dir = (
-                    self.stage2_config.output_dir / "03_table_reconstruction"
-                )
-                reconstruction_path = (
-                    reconstruction_dir / f"{base_name}_final_reconstructed.jpg"
-                )
+                # TODO: Final table reconstruction
+                # reconstruction_dir = (
+                #     self.stage2_config.output_dir / "03_table_reconstruction"
+                # )
+                # reconstruction_path = (
+                #     reconstruction_dir / f"{base_name}_final_reconstructed.jpg"
+                # )
                 # TODO: Add final table reconstruction function
 
                 # Table fitting for publication-ready output
@@ -375,13 +375,13 @@ class TwoStageOCRPipeline:
         if not stage1_outputs:
             raise RuntimeError("Stage 1 produced no output. Cannot proceed to Stage 2.")
 
-        print(f"\nStage 1 -> Stage 2 transition")
+        print("\nStage 1 -> Stage 2 transition")
         print(f"   {len(stage1_outputs)} cropped tables ready for refinement")
 
         # Run Stage 2
         stage2_outputs = self.run_stage2()
 
-        print(f"\n*** COMPLETE PIPELINE FINISHED! ***")
+        print("\n*** COMPLETE PIPELINE FINISHED! ***")
         print(f"   {len(stage2_outputs)} publication-ready tables generated")
         print(
             f"   Check final results in: {self.stage2_config.output_dir / '04_fitted_tables'}"

@@ -20,7 +20,6 @@ import itertools
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ocr_pipeline.utils import load_image, save_image, get_image_files, deskew_image
-import cv2
 import numpy as np
 
 
@@ -146,7 +145,7 @@ def test_deskewing_parameters():
         with open(angle_log_file, "w") as f:
             f.write(f"DESKEWING ANALYSIS - {param_name}\n")
             f.write("=" * 50 + "\n")
-            f.write(f"Parameters:\n")
+            f.write("Parameters:\n")
             f.write(f"  angle_range: ±{angle_range}°\n")
             f.write(f"  angle_step: {angle_step}°\n")
             f.write(f"  min_angle_correction: {min_angle_correction}°\n\n")
@@ -165,7 +164,7 @@ def test_deskewing_parameters():
             )
             avg_angle = np.mean([abs(entry["detected_angle"]) for entry in angle_log])
 
-            f.write(f"\nStatistics:\n")
+            f.write("\nStatistics:\n")
             f.write(f"  Images processed: {len(angle_log)}\n")
             f.write(f"  Images corrected: {corrected_count}\n")
             f.write(f"  Images unchanged: {len(angle_log) - corrected_count}\n")
@@ -231,7 +230,7 @@ def test_deskewing_parameters():
         f.write("   data/output/tuning/03_roi_input/\n")
         f.write("3. Run: python tools/tune_roi_detection.py\n")
 
-    print(f"\n[SUCCESS] DESKEWING PARAMETER TUNING COMPLETE!")
+    print("\n[SUCCESS] DESKEWING PARAMETER TUNING COMPLETE!")
     print(f"[DIR] Results saved in: {output_base}")
     print(f"[FILE] Summary report: {summary_file}")
     print()

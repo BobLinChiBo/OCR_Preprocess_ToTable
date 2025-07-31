@@ -8,7 +8,7 @@ A comprehensive tool for viewing, comparing, and managing OCR visualization resu
 import argparse
 import json
 import webbrowser
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import sys
@@ -69,7 +69,7 @@ def show_run_details(run: Dict[str, Any]):
     print(f"Analysis files: {run['analysis_count']}")
 
     # Show file structure
-    print(f"\nFile Structure:")
+    print("\nFile Structure:")
     for subdir in ["images", "analysis", "comparisons"]:
         subdir_path = run["path"] / subdir
         if subdir_path.exists():
@@ -82,9 +82,9 @@ def show_run_details(run: Dict[str, Any]):
 
     # Show summary data if available
     if run["summary"]:
-        print(f"\nSummary Data:")
+        print("\nSummary Data:")
         if "config_parameters" in run["summary"]:
-            print(f"  Config Parameters:")
+            print("  Config Parameters:")
             for key, value in run["summary"]["config_parameters"].items():
                 print(f"    {key}: {value}")
 
@@ -314,17 +314,17 @@ def compare_parameters(runs: List[Dict[str, Any]], script_name: str):
             variations = comparison_data.get("parameter_variations", {})
             if script_name in variations:
                 step_comparison = variations[script_name]
-                print(f"\nComparison Summary:")
+                print("\nComparison Summary:")
                 print(f"  Runs compared: {step_comparison['runs_compared']}")
 
                 param_diffs = step_comparison.get("parameter_differences", {})
                 if param_diffs:
-                    print(f"  Parameters that varied:")
+                    print("  Parameters that varied:")
                     for param, info in param_diffs.items():
                         values = info["unique_values"]
                         print(f"    {param}: {len(values)} different values - {values}")
                 else:
-                    print(f"  All parameters were identical across runs")
+                    print("  All parameters were identical across runs")
 
                 success_rates = step_comparison.get("success_rates", {})
                 success_rate = success_rates.get("success_rate", 0)
@@ -370,12 +370,12 @@ def validate_parameters(runs: List[Dict[str, Any]], script_name: Optional[str] =
                 print(f"  Effectiveness Score: {score:.2f}")
 
                 if warnings:
-                    print(f"  Warnings:")
+                    print("  Warnings:")
                     for warning in warnings:
                         print(f"    - {warning}")
 
                 if suggestions:
-                    print(f"  Suggestions:")
+                    print("  Suggestions:")
                     for suggestion in suggestions:
                         print(f"    - {suggestion}")
 
@@ -479,8 +479,8 @@ def main():
         print_run_summary(runs, args.limit)
 
         if runs:
-            print(f"\nUse 'check-results show <index>' to see details")
-            print(f"Use 'check-results view <index>' to open HTML viewer")
+            print("\nUse 'check-results show <index>' to see details")
+            print("Use 'check-results view <index>' to open HTML viewer")
 
     elif args.command == "show":
         runs = manager.list_runs(args.script)

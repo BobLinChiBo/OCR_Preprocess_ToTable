@@ -12,7 +12,7 @@ from pathlib import Path
 import argparse
 import json
 import sys
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 # Add project root to Python path
 script_dir = Path(__file__).parent
@@ -976,8 +976,8 @@ def main():
 
     print(f"Visualizing deskewing on {len(image_paths)} images")
     if args.test_images:
-        print(f"Batch mode: Processing all images from test_images directory")
-    print(f"Parameters:")
+        print("Batch mode: Processing all images from test_images directory")
+    print("Parameters:")
     print(f"  - Angle range: ±{config.angle_range}°")
     print(f"  - Angle step: {config.angle_step}°")
     print(f"  - Min correction: {config.min_angle_correction}°")
@@ -1029,18 +1029,18 @@ def main():
         print(
             f"Use 'python tools/check_results.py latest deskew --view' to view results"
         )
-        print(f"Use 'python tools/check_results.py list' to see all runs")
+        print("Use 'python tools/check_results.py list' to see all runs")
     else:
         print(
             f"Review the '_08_deskew_comparison.jpg' files to assess deskewing quality"
         )
         if args.save_intermediates:
-            print(f"Intermediate steps saved:")
-            print(f"  01_grayscale.jpg - Converted to grayscale")
-            print(f"  02_edges.jpg - Canny edge detection")
-            print(f"  03_raw_hough_lines.jpg - All detected Hough lines")
-            print(f"  04_filtered_lines.jpg - Lines after angle filtering")
-            print(f"  05_line_detection.jpg - Final analysis overlay")
+            print("Intermediate steps saved:")
+            print("  01_grayscale.jpg - Converted to grayscale")
+            print("  02_edges.jpg - Canny edge detection")
+            print("  03_raw_hough_lines.jpg - All detected Hough lines")
+            print("  04_filtered_lines.jpg - Lines after angle filtering")
+            print("  05_line_detection.jpg - Final analysis overlay")
 
     # Save summary (only for flat structure, organized structure handles this automatically)
     if not use_organized:

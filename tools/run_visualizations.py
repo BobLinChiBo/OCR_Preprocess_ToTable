@@ -11,7 +11,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # Add project root to Python path
 script_dir = Path(__file__).parent
@@ -153,7 +153,7 @@ class VisualizationRunner:
             print(
                 f"\nRunning {len(script_names)} visualization scripts on all test images"
             )
-            print(f"Using batch mode: processing images from input/test_images/")
+            print("Using batch mode: processing images from input/test_images/")
         else:
             print(
                 f"\nRunning {len(script_names)} visualization scripts on {len(images)} images"
@@ -181,7 +181,7 @@ class VisualizationRunner:
         # Summary
         successful = sum(1 for r in results if r["success"])
         print(f"\n{'='*60}")
-        print(f"BATCH RUN SUMMARY")
+        print("BATCH RUN SUMMARY")
         print(f"{'='*60}")
         print(f"Completed: {successful}/{len(results)} scripts")
         print(f"Total time: {total_duration:.1f}s")
@@ -277,7 +277,7 @@ class VisualizationRunner:
         # Pipeline summary
         successful = sum(1 for r in results if r["success"])
         print(f"\n{'='*60}")
-        print(f"PIPELINE SUMMARY")
+        print("PIPELINE SUMMARY")
         print(f"{'='*60}")
         print(f"Completed: {successful}/{len(script_names)} stages")
         print(f"Total time: {total_duration:.1f}s")
@@ -574,7 +574,7 @@ Examples:
 
         print(f"\nExecution report saved to: {report_file}")
 
-    print(f"\nUse 'python tools/check_results.py list' to view all results")
+    print("\nUse 'python tools/check_results.py list' to view all results")
 
 
 if __name__ == "__main__":

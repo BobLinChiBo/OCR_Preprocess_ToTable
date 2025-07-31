@@ -1,7 +1,7 @@
 """Simple utilities for OCR pipeline."""
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import cv2
 import numpy as np
