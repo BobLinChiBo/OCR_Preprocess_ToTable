@@ -24,7 +24,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 libfontconfig1
+        sudo apt-get install -y libgl1-mesa-dev libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 libfontconfig1 libglu1-mesa-dev
     
     - name: Install dependencies
       run: |
