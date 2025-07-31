@@ -25,7 +25,11 @@ sys.path.insert(0, str(project_root))
 
 from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
 import src.ocr_pipeline.utils as ocr_utils  # noqa: E402
-from output_manager import get_test_images, convert_numpy_types, save_step_parameters  # noqa: E402
+from output_manager import (
+    get_test_images,
+    convert_numpy_types,
+    save_step_parameters,
+)  # noqa: E402
 
 
 def load_config_from_file(config_path: Path = None, stage: int = 1):
@@ -251,7 +255,7 @@ def draw_roi_overlay(
         # Overlay response in top-right corner
         y_offset = 10
         x_offset = width - 210
-        overlay[y_offset:y_offset + 150, x_offset:x_offset + 200] = mask_colored
+        overlay[y_offset : y_offset + 150, x_offset : x_offset + 200] = mask_colored
 
         # Label for edge detection method
         method = getattr(config, "roi_detection_method", "gabor")

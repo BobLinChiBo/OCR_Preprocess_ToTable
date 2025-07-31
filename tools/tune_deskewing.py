@@ -19,7 +19,12 @@ import itertools
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.utils import load_image, save_image, get_image_files, deskew_image  # noqa: E402
+from src.ocr_pipeline.utils import (
+    load_image,
+    save_image,
+    get_image_files,
+    deskew_image,
+)  # noqa: E402
 import numpy as np  # noqa: E402
 
 
