@@ -7,7 +7,7 @@ Comprehensive visualization and parameter tuning tools for optimizing OCR pipeli
 ### Visualization (Debugging & Analysis)
 ```bash
 # Complete pipeline analysis
-python tools/visualize_pipeline.py image.jpg --save-intermediates
+python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
 
 # Individual step analysis
 python tools/visualize_deskew.py image.jpg
@@ -42,7 +42,7 @@ python tools/compare_results.py              # Compare parameter sets
 
 | Script | Purpose | Key Parameters |
 |--------|---------|----------------|
-| `visualize_pipeline.py` | Complete workflow analysis | `--save-intermediates`, `--config-file` |
+| `run_visualizations.py all --pipeline` | Complete workflow analysis | `--save-intermediates` |
 | `visualize_deskew.py` | Skew detection/correction | `--angle-range`, `--angle-step` |
 | `visualize_page_split.py` | Two-page document splitting | `--gutter-start`, `--gutter-end` |
 | `visualize_roi.py` | Region of interest detection | `--gabor-threshold`, `--cut-strength` |
@@ -83,7 +83,6 @@ python tools/run_visualizations.py deskew page-split roi image.jpg
 | `quick_start_tuning.py` | Interactive guided tuning process |
 | `run_tuned_pipeline.py` | Test optimized parameters on new images |
 | `compare_results.py` | Compare different parameter combinations |
-| `copy_best_results.bat` | Helper for copying best results between stages |
 
 ### Tuning Workflow
 
@@ -93,10 +92,10 @@ python tools/run_visualizations.py deskew page-split roi image.jpg
    - Copy best results to `02_deskewed_input/`
 3. **Stage 2 - Deskewing**: `python tools/tune_deskewing.py`
    - Review results in `data/output/tuning/02_deskewed/`
-   - Copy best results to `03_roi_input/`
+   - Manually copy best results to `03_roi_input/`
 4. **Stage 3 - ROI Detection**: `python tools/tune_roi_detection.py`
    - Review results in `data/output/tuning/03_roi_detection/`
-   - Copy best results to `04_line_input/`
+   - Manually copy best results to `04_line_input/`
 5. **Stage 4 - Line Detection**: `python tools/tune_line_detection.py`
    - Review results in `data/output/tuning/04_line_detection/`
    - Note optimal parameters
@@ -199,14 +198,14 @@ echo '{
   "min_line_length": 80
 }' > config.json
 
-# Use with pipeline
-python tools/visualize_pipeline.py image.jpg --config-file config.json
+# Use with pipeline (note: config files not yet supported with run_visualizations.py)
+python tools/run_visualizations.py all --pipeline image.jpg
 ```
 
 ### Batch Processing
 ```bash
 # Test multiple images
-python tools/visualize_pipeline.py input/*.jpg --save-intermediates
+python tools/run_visualizations.py all --pipeline input/*.jpg --save-intermediates
 
 # Parameter sensitivity testing
 for t in 100 120 140 160; do
@@ -239,7 +238,7 @@ done
 ## Workflow Recommendations
 
 ### For New Document Types
-1. **Quick Assessment**: `python tools/visualize_pipeline.py sample.jpg --save-intermediates`
+1. **Quick Assessment**: `python tools/run_visualizations.py all --pipeline sample.jpg --save-intermediates`
 2. **Identify Problems**: Review comparison images to find issues
 3. **Systematic Tuning**: Use `python tools/quick_start_tuning.py` for guided optimization
 4. **Validation**: Test optimized parameters on larger dataset with `run_tuned_pipeline.py`

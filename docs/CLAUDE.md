@@ -14,15 +14,15 @@ OCR_Preprocess_ToTable is an OCR table extraction pipeline that processes scanne
 
 ### Architecture
 
-- **ocr/config.py**: Configuration management with Config, Stage1Config, Stage2Config classes
-- **ocr/pipeline.py**: OCRPipeline (single-stage) and TwoStageOCRPipeline classes
-- **ocr/utils.py**: Core image processing utilities (splitting, deskewing, line detection, cropping, ROI detection)
-- **ocr/processors/**: Empty module for potential future processing extensions
-- **visualization/**: Debugging and visualization tools for each pipeline stage
+- **src/ocr_pipeline/config.py**: Configuration management with Config, Stage1Config, Stage2Config classes
+- **src/ocr_pipeline/pipeline.py**: OCRPipeline (single-stage) and TwoStageOCRPipeline classes
+- **src/ocr_pipeline/utils.py**: Core image processing utilities (splitting, deskewing, line detection, cropping, ROI detection)
+- **src/ocr_pipeline/processors/**: Empty module for potential future processing extensions
+- **tools/**: Debugging and visualization tools for each pipeline stage
 - **examples/**: Usage examples and basic integration demos
-- **run_stage1.py**: CLI for Stage 1 initial processing
-- **run_stage2.py**: CLI for Stage 2 refinement processing
-- **run_complete.py**: CLI for complete two-stage pipeline
+- **scripts/run_stage1.py**: CLI for Stage 1 initial processing
+- **scripts/run_stage2.py**: CLI for Stage 2 refinement processing
+- **scripts/run_complete.py**: CLI for complete two-stage pipeline
 
 ### Processing Workflows
 
@@ -53,40 +53,40 @@ pip install -e .
 #### Single-Stage Pipeline (Simple)
 ```bash
 # Process images using module
-python -m ocr.pipeline
+python -m src.ocr_pipeline.pipeline
 
 # Process specific directory
-python -m ocr.pipeline input/ -o output/ --verbose
+python -m src.ocr_pipeline.pipeline input/ -o output/ --verbose
 
 # Process single file
-python -m ocr.pipeline image.jpg -o output/
+python -m src.ocr_pipeline.pipeline image.jpg -o output/
 
-# Using installed console script
+# Using installed console script (if available)
 ocr-pipeline input/ -o output/ --verbose
 ```
 
 #### Two-Stage Pipeline (Professional)
 ```bash
 # Complete two-stage pipeline (recommended)
-python run_complete.py input/ --verbose
+python scripts/run_complete.py input/ --verbose
 
 # Process single image through both stages
-python run_complete.py image.jpg --verbose
+python scripts/run_complete.py image.jpg --verbose
 
 # Custom output directory
-python run_complete.py input/ -o custom_output/ --verbose
+python scripts/run_complete.py input/ -o custom_output/ --verbose
 
 # Run stages individually
-python run_stage1.py input/ --verbose              # Stage 1: Initial processing
-python run_stage2.py --verbose                     # Stage 2: Refinement
+python scripts/run_stage1.py input/ --verbose              # Stage 1: Initial processing
+python scripts/run_stage2.py --verbose                     # Stage 2: Refinement
 
 # Stage-specific options
-python run_stage1.py input/ --disable-roi --debug  # Disable ROI detection, save debug images
-python run_stage2.py --s2-min-line-length 25       # Custom line detection parameters
+python scripts/run_stage1.py input/ --disable-roi --debug  # Disable ROI detection, save debug images
+python scripts/run_stage2.py --s2-min-line-length 25       # Custom line detection parameters
 
 # Run only one stage
-python run_complete.py input/ --stage1-only        # Only initial processing
-python run_complete.py --stage2-only               # Only refinement (requires Stage 1 output)
+python scripts/run_complete.py input/ --stage1-only        # Only initial processing
+python scripts/run_complete.py --stage2-only               # Only refinement (requires Stage 1 output)
 ```
 
 ### Testing
@@ -98,31 +98,27 @@ python -m pytest tests/
 python -m pytest tests/test_pipeline.py -v
 
 # Run with coverage (install pytest-cov first)
-python -m pytest tests/ --cov=ocr
+python -m pytest tests/ --cov=src.ocr_pipeline
 ```
 
 ### Development Workflow
 ```bash
-# Run example
-python examples/basic_usage.py
-
 # Run single test
 python tests/test_pipeline.py
 
 # Run visualization tools
-python visualization/run_visualizations.py
-python visualization/visualize_pipeline.py
-python visualization/check_results.py
+python tools/run_visualizations.py
+python tools/check_results.py
 ```
 
 ### Visualization and Debugging
 ```bash
 # Visualize specific pipeline stages
-python visualization/visualize_page_split.py
-python visualization/visualize_deskew.py
-python visualization/visualize_roi.py
-python visualization/visualize_table_lines.py
-python visualization/visualize_table_crop.py
+python tools/visualize_page_split.py
+python tools/visualize_deskew.py
+python tools/visualize_roi.py
+python tools/visualize_table_lines.py
+python tools/visualize_table_crop.py
 ```
 
 ## Key Configuration Parameters

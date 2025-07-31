@@ -414,37 +414,39 @@ def find_vertical_cuts(
 
     window_size = max(width // window_size_divisor, min_window_size)
 
-    # Find left cut
+    # Find left cut (search only in leftmost 30%)
+    left_search_end = int(width * 0.3)
     max_drop_left = 0
     cut_x_left = 0
-    for i in range(window_size, width // 2):
-        #        left_avg = np.mean(vertical_projection[i-window_size:i])
-        #        right_avg = np.mean(vertical_projection[i:i+window_size]) if i+window_size < width else 0
-        #        drop = abs(left_avg - right_avg)
+    for i in range(window_size, left_search_end):
         drop = (
-            abs(vertical_projection[i] - vertical_projection[i + window_size])
-            if i + window_size < width
+            abs(
+                float(vertical_projection[i])
+                - float(vertical_projection[i - window_size])
+            )
+            if i - window_size > 0
             else 0
         )
         if drop > max_drop_left:
             max_drop_left = drop
-            cut_x_left = i + window_size
+            cut_x_left = i
 
-    # Find right cut
+    # Find right cut (search only in rightmost 30%)
+    right_search_end = int(width * 0.7)
     max_drop_right = 0
     cut_x_right = width
-    for i in range(width - window_size, width // 2, -1):
-        #        right_avg = np.mean(vertical_projection[i:i+window_size])
-        #        left_avg = np.mean(vertical_projection[i-window_size:i]) if i-window_size >= 0 else 0
-        #        drop = abs(right_avg - left_avg)
+    for i in range(width - window_size, right_search_end, -1):
         drop = (
-            abs(vertical_projection[i] - vertical_projection[i - window_size])
+            abs(
+                float(vertical_projection[i])
+                - float(vertical_projection[i + window_size])
+            )
             if i + window_size < width
             else 0
         )
         if drop > max_drop_right:
             max_drop_right = drop
-            cut_x_right = i - window_size
+            cut_x_right = i
 
     # Evaluate whether cuts should be applied
     apply_left_cut = (
@@ -472,9 +474,12 @@ def find_vertical_cuts(
         )
 
     # For single_best mode, choose the stronger cut
-    midpoint = width // 2
-    left_density = np.sum(vertical_projection[:midpoint])
-    right_density = np.sum(vertical_projection[midpoint:])
+    left_density = np.sum(vertical_projection[:left_search_end]) // (
+        left_search_end - 0
+    )
+    right_density = np.sum(vertical_projection[right_search_end:]) // (
+        width - right_search_end
+    )
 
     if right_density < left_density:
         # Prefer right cut
@@ -518,37 +523,39 @@ def find_horizontal_cuts(
 
     window_size = max(height // window_size_divisor, min_window_size)
 
-    # Find top cut
+    # Find top cut (search only in topmost 30%)
+    top_search_end = int(height * 0.3)
     max_drop_top = 0
     cut_y_top = 0
-    for i in range(window_size, height // 2):
-        #        top_avg = np.mean(horizontal_projection[i-window_size:i])
-        #        bottom_avg = np.mean(horizontal_projection[i:i+window_size]) if i+window_size < height else 0
-        #        drop = top_avg - bottom_avg
+    for i in range(window_size, top_search_end):
         drop = (
-            abs(horizontal_projection[i] - horizontal_projection[i + window_size])
-            if i + window_size < height
+            abs(
+                float(horizontal_projection[i])
+                - float(horizontal_projection[i - window_size])
+            )
+            if i - window_size > 0
             else 0
         )
         if drop > max_drop_top:
             max_drop_top = drop
-            cut_y_top = i + window_size
+            cut_y_top = i
 
-    # Find bottom cut
+    # Find bottom cut (search only in bottommost 30%)
+    bottom_search_end = int(height * 0.7)
     max_drop_bottom = 0
     cut_y_bottom = height
-    for i in range(height - window_size, height // 2, -1):
-        #        bottom_avg = np.mean(horizontal_projection[i:i+window_size])
-        #        top_avg = np.mean(horizontal_projection[i-window_size:i]) if i-window_size >= 0 else 0
-        #        drop = bottom_avg - top_avg
+    for i in range(height - window_size, bottom_search_end, -1):
         drop = (
-            abs(horizontal_projection[i] - horizontal_projection[i - window_size])
+            abs(
+                float(horizontal_projection[i])
+                - float(horizontal_projection[i + window_size])
+            )
             if i + window_size < height
             else 0
         )
         if drop > max_drop_bottom:
             max_drop_bottom = drop
-            cut_y_bottom = i - window_size
+            cut_y_bottom = i
 
     # Evaluate whether cuts should be applied
     apply_top_cut = (
@@ -575,9 +582,10 @@ def find_horizontal_cuts(
         )
 
     # For single_best mode, choose the stronger cut
-    midpoint_y = height // 2
-    top_density = np.sum(horizontal_projection[:midpoint_y])
-    bottom_density = np.sum(horizontal_projection[midpoint_y:])
+    top_density = np.sum(horizontal_projection[:top_search_end]) // (top_search_end - 0)
+    bottom_density = np.sum(horizontal_projection[bottom_search_end:]) // (
+        height - bottom_search_end
+    )
 
     if bottom_density < top_density:
         # Prefer bottom cut
@@ -651,10 +659,161 @@ def detect_roi_gabor(
     return binary_mask
 
 
+def detect_roi_canny_sobel(
+    image: np.ndarray,
+    canny_low: int = 50,
+    canny_high: int = 150,
+    sobel_kernel_size: int = 3,
+    gaussian_blur_size: int = 5,
+    binary_threshold: int = 127,
+    morphology_kernel_size: int = 3,
+) -> np.ndarray:
+    """Apply Canny and Sobel edge detection to detect ROI structures.
+
+    This alternative method uses:
+    - Canny edge detection for precise edge localization
+    - Sobel operators for gradient-based edge detection
+    - Morphological operations for noise cleanup
+    - Combined response for robust edge detection
+
+    Args:
+        image: Input image
+        canny_low: Lower threshold for Canny edge detection
+        canny_high: Upper threshold for Canny edge detection
+        sobel_kernel_size: Kernel size for Sobel operators (3, 5, or 7)
+        gaussian_blur_size: Gaussian blur kernel size for preprocessing
+        binary_threshold: Final binary threshold for mask creation
+        morphology_kernel_size: Kernel size for morphological operations
+
+    Returns:
+        Binary mask with detected edges
+    """
+    gray_img = (
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    )
+
+    # Preprocessing: Apply Gaussian blur to reduce noise
+    blurred = cv2.GaussianBlur(gray_img, (gaussian_blur_size, gaussian_blur_size), 0)
+
+    # Method 1: Canny edge detection
+    canny_edges = cv2.Canny(blurred, canny_low, canny_high)
+
+    # Method 2: Sobel edge detection (horizontal and vertical)
+    sobel_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=sobel_kernel_size)
+    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=sobel_kernel_size)
+
+    # Combine Sobel responses using magnitude
+    sobel_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+    sobel_magnitude = cv2.normalize(
+        sobel_magnitude, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+
+    # Method 3: Laplacian edge detection for fine details
+    laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
+    laplacian = cv2.normalize(
+        np.abs(laplacian), None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+
+    # Combine all edge detection methods
+    # Weight Canny higher for precise edges, Sobel for gradients, Laplacian for details
+    combined_edges = (
+        canny_edges.astype(np.float32) * 0.5  # 50% weight for Canny
+        + sobel_magnitude.astype(np.float32) * 0.35  # 35% weight for Sobel
+        + laplacian.astype(np.float32) * 0.15  # 15% weight for Laplacian
+    )
+
+    # Normalize combined response
+    combined_edges = cv2.normalize(
+        combined_edges, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+    )
+
+    # Apply morphological operations to clean up noise and connect edges
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (morphology_kernel_size, morphology_kernel_size)
+    )
+    combined_edges = cv2.morphologyEx(
+        combined_edges, cv2.MORPH_CLOSE, kernel
+    )  # Close gaps
+    combined_edges = cv2.morphologyEx(
+        combined_edges, cv2.MORPH_OPEN, kernel
+    )  # Remove noise
+
+    # Final binary threshold
+    _, binary_mask = cv2.threshold(
+        combined_edges, binary_threshold, 255, cv2.THRESH_BINARY
+    )
+
+    return binary_mask
+
+
+def detect_roi_adaptive_threshold(
+    image: np.ndarray,
+    adaptive_method: int = cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    threshold_type: int = cv2.THRESH_BINARY,
+    block_size: int = 11,
+    C: float = 2.0,
+    morphology_kernel_size: int = 3,
+    edge_enhancement: bool = True,
+) -> np.ndarray:
+    """Apply adaptive thresholding with edge enhancement for ROI detection.
+
+    This method uses:
+    - Adaptive thresholding to handle varying lighting conditions
+    - Optional edge enhancement using gradient information
+    - Morphological operations for structure cleanup
+
+    Args:
+        image: Input image
+        adaptive_method: Adaptive method (ADAPTIVE_THRESH_MEAN_C or ADAPTIVE_THRESH_GAUSSIAN_C)
+        threshold_type: Threshold type (THRESH_BINARY or THRESH_BINARY_INV)
+        block_size: Size of neighborhood area for threshold calculation (odd number)
+        C: Constant subtracted from the mean
+        morphology_kernel_size: Kernel size for morphological operations
+        edge_enhancement: Whether to enhance edges using gradient information
+
+    Returns:
+        Binary mask with detected structures
+    """
+    gray_img = (
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    )
+
+    # Apply adaptive thresholding
+    adaptive_thresh = cv2.adaptiveThreshold(
+        gray_img, 255, adaptive_method, threshold_type, block_size, C
+    )
+
+    if edge_enhancement:
+        # Enhance edges using gradient information
+        grad_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=3)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        gradient_magnitude = cv2.normalize(
+            gradient_magnitude, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
+        )
+
+        # Threshold gradient magnitude
+        _, gradient_mask = cv2.threshold(gradient_magnitude, 50, 255, cv2.THRESH_BINARY)
+
+        # Combine adaptive threshold with gradient edges
+        combined_mask = cv2.bitwise_or(adaptive_thresh, gradient_mask)
+    else:
+        combined_mask = adaptive_thresh
+
+    # Apply morphological operations to clean up
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (morphology_kernel_size, morphology_kernel_size)
+    )
+    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
+    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
+
+    return combined_mask
+
+
 def detect_roi_for_image(
     image: np.ndarray, config, return_analysis: bool = False
 ) -> Dict:
-    """Detect ROI for an image using Gabor filters and sliding window analysis.
+    """Detect ROI for an image using configurable edge detection methods and sliding window analysis.
 
     Args:
         image: Input image
@@ -664,15 +823,44 @@ def detect_roi_for_image(
     Returns:
         dict: ROI coordinates and optionally analysis information
     """
-    # Apply Gabor filtering
-    binary_mask = detect_roi_gabor(
-        image,
-        config.gabor_kernel_size,
-        config.gabor_sigma,
-        config.gabor_lambda,
-        config.gabor_gamma,
-        config.gabor_binary_threshold,
-    )
+    # Apply edge detection based on configured method
+    method = getattr(config, "roi_detection_method", "gabor")
+
+    if method == "canny_sobel":
+        binary_mask = detect_roi_canny_sobel(
+            image,
+            canny_low=config.canny_low_threshold,
+            canny_high=config.canny_high_threshold,
+            sobel_kernel_size=config.sobel_kernel_size,
+            gaussian_blur_size=config.gaussian_blur_size,
+            binary_threshold=config.edge_binary_threshold,
+            morphology_kernel_size=config.morphology_kernel_size,
+        )
+    elif method == "adaptive_threshold":
+        # Convert adaptive method string to OpenCV constant
+        adaptive_method = (
+            cv2.ADAPTIVE_THRESH_MEAN_C
+            if config.adaptive_method == "mean"
+            else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
+        )
+        binary_mask = detect_roi_adaptive_threshold(
+            image,
+            adaptive_method=adaptive_method,
+            threshold_type=cv2.THRESH_BINARY,
+            block_size=config.adaptive_block_size,
+            C=config.adaptive_C,
+            morphology_kernel_size=config.morphology_kernel_size,
+            edge_enhancement=config.edge_enhancement,
+        )
+    else:  # Default to 'gabor'
+        binary_mask = detect_roi_gabor(
+            image,
+            config.gabor_kernel_size,
+            config.gabor_sigma,
+            config.gabor_lambda,
+            config.gabor_gamma,
+            config.gabor_binary_threshold,
+        )
 
     # Find cuts
     cut_x_left, cut_x_right, vertical_info = find_vertical_cuts(

@@ -19,16 +19,7 @@ import itertools
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Import directly from the utils.py file
-import importlib.util
-spec = importlib.util.spec_from_file_location("utils", str(Path(__file__).parent.parent / "src" / "ocr_pipeline" / "utils.py"))
-utils_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(utils_module)
-
-load_image = utils_module.load_image
-save_image = utils_module.save_image
-get_image_files = utils_module.get_image_files
-deskew_image = utils_module.deskew_image
+from src.ocr_pipeline.utils import load_image, save_image, get_image_files, deskew_image
 import cv2
 import numpy as np
 
@@ -47,15 +38,15 @@ def test_deskewing_parameters():
     angle_step_values = [0.1, 0.2, 0.5]  # Angle search step (not used in basic implementation)
     min_angle_correction_values = [0.1, 0.2, 0.5, 1.0]  # Minimum angle to apply correction
     
-    print("🔧 DESKEWING PARAMETER TUNING")
+    print("[CONFIG] DESKEWING PARAMETER TUNING")
     print("=" * 50)
-    print(f"📂 Input: {input_dir}")
-    print(f"📁 Output: {output_base}")
+    print(f"[DIR] Input: {input_dir}")
+    print(f"[DIR] Output: {output_base}")
     print()
     
     # Validate input directory
     if not input_dir.exists():
-        print(f"❌ Error: Input directory not found: {input_dir}")
+        print(f"[ERROR] Error: Input directory not found: {input_dir}")
         print("Please first run page splitting tuning and copy the best results to:")
         print(f"   {input_dir}")
         return
@@ -63,7 +54,7 @@ def test_deskewing_parameters():
     # Get split page images
     image_files = get_image_files(input_dir)
     if not image_files:
-        print(f"❌ Error: No image files found in {input_dir}")
+        print(f"[ERROR] Error: No image files found in {input_dir}")
         print("Please copy split page images from page splitting tuning results")
         return
     
@@ -129,11 +120,11 @@ def test_deskewing_parameters():
                     'correction_applied': abs(detected_angle) >= min_angle_correction
                 })
                 
-                status = "✅" if abs(detected_angle) >= min_angle_correction else "⚪"
+                status = "[OK]" if abs(detected_angle) >= min_angle_correction else "[  ]"
                 print(f"    {status} {image_path.name} -> angle: {detected_angle:.2f}°")
                 
             except Exception as e:
-                print(f"    ❌ Error processing {image_path.name}: {e}")
+                print(f"    [ERROR] Error processing {image_path.name}: {e}")
         
         # Save angle analysis for this parameter set
         angle_log_file = param_dir / "angle_analysis.txt"
@@ -215,19 +206,19 @@ def test_deskewing_parameters():
         f.write("   data/output/tuning/03_roi_input/\n")
         f.write("3. Run: python tools/tune_roi_detection.py\n")
     
-    print(f"\n🎉 DESKEWING PARAMETER TUNING COMPLETE!")
-    print(f"📁 Results saved in: {output_base}")
-    print(f"📄 Summary report: {summary_file}")
+    print(f"\n[SUCCESS] DESKEWING PARAMETER TUNING COMPLETE!")
+    print(f"[DIR] Results saved in: {output_base}")
+    print(f"[FILE] Summary report: {summary_file}")
     print()
     print("EVALUATION GUIDELINES:")
-    print("👀 Look for properly aligned text and table borders")
-    print("⚖️  Balance between correction sensitivity and stability")
-    print("🚫 Avoid over-correction of already straight images")
+    print("[CHECK] Look for properly aligned text and table borders")
+    print("[WARNING] Balance between correction sensitivity and stability")
+    print("[WARNING] Avoid over-correction of already straight images")
     print()
     print("NEXT STEPS:")
-    print("1. 📋 Choose the best parameter combination")
-    print("2. 📂 Copy best results to: data/output/tuning/03_roi_input/")
-    print("3. 🚀 Run: python tools/tune_roi_detection.py")
+    print("1. [LIST] Choose the best parameter combination")
+    print("2. [DIR] Copy best results to: data/output/tuning/03_roi_input/")
+    print("3. [START] Run: python tools/tune_roi_detection.py")
 
 
 if __name__ == "__main__":

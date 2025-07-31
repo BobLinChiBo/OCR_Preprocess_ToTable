@@ -53,11 +53,13 @@ python tools\setup_tuning.py
 REM 2. Run each tuning stage in sequence
 python tools\tune_page_splitting.py
 REM → Evaluate results, copy best to data\output\tuning\02_deskewed_input\
-copy "data\output\tuning\01_split_pages\start0.4_end0.6_width50"
-   "data\output\tuning\02_deskewed_input\"
+
+copy "data\output\tuning\01_split_pages\start0.4_end0.6_width50\*" "data\output\tuning\02_deskewed_input\"
 
 python tools\tune_deskewing.py  
 REM → Evaluate results, copy best to data\output\tuning\03_roi_input\
+
+copy "data\output\tuning\02_deskewed\range5_step0.1_min0.1\*"  "data\output\tuning\03_roi_input\"
 
 python tools\tune_roi_detection.py
 REM → Evaluate results, copy best to data\output\tuning\04_line_input\

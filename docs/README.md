@@ -124,17 +124,17 @@ The project includes comprehensive visualization tools to help debug and underst
 
 ```bash
 # Run all visualizations
-python visualization/run_visualizations.py
+python tools/run_visualizations.py
 
 # Visualize specific stages
-python visualization/visualize_page_split.py
-python visualization/visualize_deskew.py
-python visualization/visualize_roi.py
-python visualization/visualize_table_lines.py
-python visualization/visualize_table_crop.py
+python tools/visualize_page_split.py
+python tools/visualize_deskew.py
+python tools/visualize_roi.py
+python tools/visualize_table_lines.py
+python tools/visualize_table_crop.py
 
 # Check results
-python visualization/check_results.py
+python tools/check_results.py
 ```
 
 ## 📦 Dependencies
@@ -160,14 +160,11 @@ python visualization/check_results.py
 # Install in development mode
 pip install -e .
 
-# Run example
-python examples/basic_usage.py
-
 # Run single test
 python tests/test_pipeline.py
 
 # Format code (optional)
-python -m black ocr/ tests/
+python -m black src/ tests/
 ```
 
 ## 📖 Examples
@@ -175,19 +172,25 @@ python -m black ocr/ tests/
 ### Processing a Directory
 
 ```python
-from ocr.pipeline import OCRPipeline
+from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
+from src.ocr_pipeline.config import Stage1Config, Stage2Config
 
-pipeline = OCRPipeline()
-output_files = pipeline.process_directory("scanned_documents/")
-print(f"Created {len(output_files)} table extractions")
+# Configure two-stage pipeline
+stage1_config = Stage1Config(input_dir="scanned_documents/")
+stage2_config = Stage2Config()
+pipeline = TwoStageOCRPipeline(stage1_config, stage2_config)
+
+# Run complete pipeline
+results = pipeline.run_complete_pipeline()
+print(f"Created {len(results)} table extractions")
 ```
 
 ### Custom Processing with ROI Detection
 
 ```python
 from pathlib import Path
-from ocr.config import Config
-from ocr.utils import load_image, detect_roi_for_image, crop_to_roi
+from src.ocr_pipeline.config import Config
+from src.ocr_pipeline.utils import load_image, detect_roi_for_image, crop_to_roi
 
 # Load image and detect ROI
 image = load_image(Path("scan.jpg"))
@@ -204,7 +207,7 @@ print(f"ROI: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
 
 ```python
 from pathlib import Path
-from ocr.utils import (
+from src.ocr_pipeline.utils import (
     load_image, split_two_page_image, deskew_image, 
     detect_table_lines, crop_table_region
 )
@@ -224,13 +227,18 @@ print(f"Found {len(h_lines)} horizontal and {len(v_lines)} vertical lines")
 ## 🔧 Command Line Options
 
 ```bash
-python -m ocr.pipeline [input] [-o OUTPUT] [-v] [--debug]
+# Two-stage pipeline (recommended)
+python scripts/run_complete.py [input] [-o OUTPUT] [-v] [--debug]
+
+# Individual stages
+python scripts/run_stage1.py [input] [-o OUTPUT] [-v] [--debug]
+python scripts/run_stage2.py [input] [-o OUTPUT] [-v] [--debug]
 
 Arguments:
-  input                 Input directory or file (default: input)
+  input                 Input directory or file
 
 Options:
-  -o, --output OUTPUT   Output directory (default: output)
+  -o, --output OUTPUT   Output directory (default: data/output)
   -v, --verbose         Verbose output
   --debug              Save debug images
 ```
@@ -239,11 +247,11 @@ Options:
 
 The pipeline is built with a modular design:
 
-- **Config**: Dataclass-based configuration with validation
-- **Pipeline**: Main orchestration class with error handling
+- **Config**: Dataclass-based configuration with JSON support and validation
+- **Pipeline**: Two-stage orchestration with TwoStageOCRPipeline class
 - **Utils**: Core image processing functions using OpenCV
-- **Visualization**: Debug tools for each processing stage
-- **Tests**: Comprehensive test suite with synthetic images
+- **Tools**: Comprehensive tuning and visualization utilities
+- **Tests**: Test suite with real document examples
 
 ## 📝 License
 

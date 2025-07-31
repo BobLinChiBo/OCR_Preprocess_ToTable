@@ -18,7 +18,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from output_manager import OutputManager, create_html_viewer
+from output_manager import OutputManager, create_html_viewer, create_parameter_comparison, validate_parameter_usage
 
 
 def print_run_summary(runs: List[Dict[str, Any]], limit: int = 10):
@@ -170,6 +170,182 @@ def cleanup_old_runs(manager: OutputManager, keep_latest: int, script_name: Opti
             print(f"  {script}: {after} runs (no change)")
 
 
+def show_parameter_info(runs: List[Dict[str, Any]], script_name: Optional[str] = None, 
+                       run_index: Optional[int] = None):
+    """Show parameter information for runs."""
+    if script_name:
+        runs = [r for r in runs if r['script'] == script_name]
+    
+    if not runs:
+        print(f"No runs found" + (f" for {script_name}" if script_name else ""))
+        return
+    
+    if run_index is not None:
+        if 0 <= run_index < len(runs):
+            runs = [runs[run_index]]
+        else:
+            print(f"Run index {run_index} out of range (0-{len(runs)-1})")
+            return
+    
+    print(f"\n{'='*80}")
+    print("PARAMETER INFORMATION")
+    print(f"{'='*80}")
+    
+    for i, run in enumerate(runs[:5]):  # Limit to first 5 runs
+        print(f"\n[{i}] {run['script']} - {run['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Path: {run['path']}")
+        
+        # Look for parameter files
+        param_dir = run['path'] / "parameters"
+        if param_dir.exists():
+            param_files = list(param_dir.glob("*_parameters.json"))
+            if param_files:
+                print(f"    Parameter files found: {len(param_files)}")
+                for param_file in param_files:
+                    try:
+                        with open(param_file) as f:
+                            param_data = json.load(f)
+                        
+                        step_info = param_data.get('step_info', {})
+                        config = param_data.get('configuration', {})
+                        params = config.get('parameters', {})
+                        
+                        print(f"      Step: {step_info.get('step_name', 'unknown')}")
+                        print(f"      Config source: {config.get('source', 'unknown')}")
+                        print(f"      Parameters: {len(params)} values")
+                        
+                        # Show key parameters
+                        key_params = ['angle_range', 'min_line_length', 'enable_roi_detection', 
+                                    'gutter_search_start', 'roi_min_cut_strength']
+                        for key in key_params:
+                            if key in params:
+                                print(f"        {key}: {params[key]}")
+                        
+                        # Show success indicators
+                        indicators = param_data.get('processing_results', {}).get('success_indicators', {})
+                        if indicators:
+                            success_keys = ['overall_success', 'deskew_confidence', 'roi_coverage', 
+                                          'has_table_structure']
+                            for key in success_keys:
+                                if key in indicators:
+                                    value = indicators[key]
+                                    if isinstance(value, float):
+                                        print(f"        {key}: {value:.3f}")
+                                    else:
+                                        print(f"        {key}: {value}")
+                    
+                    except Exception as e:
+                        print(f"      Error reading {param_file.name}: {e}")
+            else:
+                print("    No parameter files found")
+        else:
+            print("    No parameters directory found")
+
+
+def compare_parameters(runs: List[Dict[str, Any]], script_name: str):
+    """Compare parameters across runs of the same script."""
+    script_runs = [r for r in runs if r['script'] == script_name]
+    
+    if len(script_runs) < 2:
+        print(f"Need at least 2 runs of {script_name} to compare parameters. Found {len(script_runs)}.")
+        return
+    
+    print(f"\nComparing parameters for {script_name} across {len(script_runs)} runs...")
+    
+    # Collect all parameter files from these runs
+    param_files = []
+    for run in script_runs:
+        param_dir = run['path'] / "parameters"
+        if param_dir.exists():
+            step_files = list(param_dir.glob(f"{script_name}_parameters.json"))
+            param_files.extend(step_files)
+    
+    if not param_files:
+        print(f"No parameter files found for {script_name}")
+        return
+    
+    # Create comparison using utility function
+    try:
+        comparison_file = create_parameter_comparison(param_files, Path("data/output/temp"))
+        if comparison_file:
+            print(f"Parameter comparison saved to: {comparison_file}")
+            
+            # Display key findings
+            with open(comparison_file) as f:
+                comparison_data = json.load(f)
+            
+            variations = comparison_data.get('parameter_variations', {})
+            if script_name in variations:
+                step_comparison = variations[script_name]
+                print(f"\nComparison Summary:")
+                print(f"  Runs compared: {step_comparison['runs_compared']}")
+                
+                param_diffs = step_comparison.get('parameter_differences', {})
+                if param_diffs:
+                    print(f"  Parameters that varied:")
+                    for param, info in param_diffs.items():
+                        values = info['unique_values']
+                        print(f"    {param}: {len(values)} different values - {values}")
+                else:
+                    print(f"  All parameters were identical across runs")
+                
+                success_rates = step_comparison.get('success_rates', {})
+                success_rate = success_rates.get('success_rate', 0)
+                print(f"  Success rate: {success_rate:.1%}")
+        
+    except Exception as e:
+        print(f"Error creating parameter comparison: {e}")
+
+
+def validate_parameters(runs: List[Dict[str, Any]], script_name: Optional[str] = None):
+    """Validate parameter effectiveness for runs."""
+    if script_name:
+        runs = [r for r in runs if r['script'] == script_name]
+    
+    if not runs:
+        print(f"No runs found" + (f" for {script_name}" if script_name else ""))
+        return
+    
+    print(f"\n{'='*80}")
+    print("PARAMETER VALIDATION")
+    print(f"{'='*80}")
+    
+    for run in runs[:3]:  # Limit to first 3 runs
+        param_dir = run['path'] / "parameters"
+        if not param_dir.exists():
+            continue
+        
+        param_files = list(param_dir.glob("*_parameters.json"))
+        if not param_files:
+            continue
+            
+        print(f"\n{run['script']} - {run['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+        
+        for param_file in param_files:
+            try:
+                validation = validate_parameter_usage(param_file)
+                step = validation['file_info']['step']
+                score = validation['effectiveness_score']
+                warnings = validation['parameter_warnings']
+                suggestions = validation['suggestions']
+                
+                print(f"  Step: {step}")
+                print(f"  Effectiveness Score: {score:.2f}")
+                
+                if warnings:
+                    print(f"  Warnings:")
+                    for warning in warnings:
+                        print(f"    - {warning}")
+                
+                if suggestions:
+                    print(f"  Suggestions:")
+                    for suggestion in suggestions:
+                        print(f"    - {suggestion}")
+                        
+            except Exception as e:
+                print(f"  Error validating {param_file.name}: {e}")
+
+
 def main():
     """Main function for the results checker."""
     parser = argparse.ArgumentParser(description="Check and manage OCR visualization results")
@@ -207,6 +383,13 @@ def main():
     latest_parser = subparsers.add_parser('latest', help='Show and optionally view latest run')
     latest_parser.add_argument('script', help='Script name')
     latest_parser.add_argument('--view', action='store_true', help='Open HTML viewer')
+    
+    # Parameters command
+    params_parser = subparsers.add_parser('parameters', help='Show parameter information for runs')
+    params_parser.add_argument('script', nargs='?', help='Script name (optional)')
+    params_parser.add_argument('--compare', action='store_true', help='Compare parameters across runs')
+    params_parser.add_argument('--validate', action='store_true', help='Validate parameter effectiveness')
+    params_parser.add_argument('--run-index', type=int, help='Show parameters for specific run index')
     
     args = parser.parse_args()
     
@@ -283,6 +466,16 @@ def main():
                     open_results_viewer(runs[0])
         else:
             print(f"No runs found for script: {args.script}")
+    
+    elif args.command == 'parameters':
+        runs = manager.list_runs(args.script)
+        
+        if args.compare and args.script:
+            compare_parameters(runs, args.script)
+        elif args.validate:
+            validate_parameters(runs, args.script)
+        else:
+            show_parameter_info(runs, args.script, args.run_index)
 
 
 if __name__ == "__main__":

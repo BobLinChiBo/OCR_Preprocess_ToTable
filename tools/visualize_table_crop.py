@@ -19,9 +19,9 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from ocr.config import Config
+from src.ocr_pipeline.config import Config
 from src.ocr_pipeline.utils import load_image, detect_table_lines, crop_table_region
-from visualization.output_manager import get_test_images, convert_numpy_types
+from output_manager import get_test_images, convert_numpy_types, save_step_parameters
 
 
 def analyze_table_crop_detailed(image: np.ndarray, min_line_length: int = 100, 
@@ -314,7 +314,9 @@ def create_crop_comparison(original: np.ndarray, overlay: np.ndarray,
 
 
 def process_image_table_crop_visualization(image_path: Path, config: Config, 
-                                         output_dir: Path, crop_padding: int = 10) -> Dict[str, Any]:
+                                         output_dir: Path, crop_padding: int = 10,
+                                         command_args: Dict[str, Any] = None,
+                                         config_source: str = "default") -> Dict[str, Any]:
     """Process a single image and create table crop visualization."""
     print(f"Processing: {image_path.name}")
     
@@ -377,11 +379,37 @@ def process_image_table_crop_visualization(image_path: Path, config: Config,
         
         output_files['analysis'] = str(analysis_file)
         
+        # Prepare processing results for parameter documentation
+        processing_results = {
+            'image_name': image_path.name,
+            'success': True,
+            'crop_info': crop_info,
+            'output_files': output_files,
+            'analysis_data': analysis_data
+        }
+        
+        # Save parameter documentation
+        if command_args is None:
+            command_args = {}
+        
+        param_file = save_step_parameters(
+            step_name="table_crop",
+            config_obj=config,
+            command_args=command_args,
+            processing_results=processing_results,
+            output_dir=output_dir,
+            config_source=config_source
+        )
+        
+        # Include parameter file in output files
+        output_files['parameters'] = str(param_file)
+        
         result = {
             'image_name': image_path.name,
             'success': True,
             'crop_info': crop_info,
-            'output_files': output_files
+            'output_files': output_files,
+            'parameter_file': str(param_file) if param_file else None
         }
         
         print(f"  SUCCESS: Has crop region: {crop_info['has_crop_region']}")
@@ -441,6 +469,17 @@ def main():
             print("No valid images found!")
             return
     
+    # Collect command line arguments for parameter documentation
+    command_args = {
+        'min_line_length': args.min_line_length,
+        'max_line_gap': args.max_line_gap,
+        'crop_padding': args.crop_padding,
+        'save_debug': args.save_debug
+    }
+    
+    # Config source is always command line for this script since Config is created from args
+    config_source = "command_line"
+    
     # Create configuration
     config = Config(
         min_line_length=args.min_line_length,
@@ -464,7 +503,7 @@ def main():
     for i, image_path in enumerate(image_paths, 1):
         print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
         result = process_image_table_crop_visualization(
-            image_path, config, output_dir, args.crop_padding
+            image_path, config, output_dir, args.crop_padding, command_args, config_source
         )
         results.append(result)
     

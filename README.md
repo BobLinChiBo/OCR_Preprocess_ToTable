@@ -36,8 +36,7 @@ OCR_Preprocess_ToTable/
 ├── docs/                 # Documentation
 ├── data/                 # Input, output, and debug data
 ├── configs/              # Configuration files
-├── tests/                # Test suite
-└── examples/             # Usage examples
+└── tests/                # Test suite
 ```
 
 ## Documentation

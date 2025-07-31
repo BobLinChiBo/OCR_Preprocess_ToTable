@@ -34,21 +34,21 @@ def test_page_splitting_parameters():
     gutter_end_values = [0.55, 0.6, 0.65]
     min_gutter_width_values = [30, 50, 70]  # Not used in current implementation, but for future
     
-    print("🔧 PAGE SPLITTING PARAMETER TUNING")
+    print("[CONFIG] PAGE SPLITTING PARAMETER TUNING")
     print("=" * 50)
-    print(f"📂 Input: {input_dir}")
-    print(f"📁 Output: {output_base}")
+    print(f"[DIR] Input: {input_dir}")
+    print(f"[DIR] Output: {output_base}")
     print()
     
     # Validate input directory
     if not input_dir.exists():
-        print(f"❌ Error: Input directory not found: {input_dir}")
+        print(f"[ERROR] Error: Input directory not found: {input_dir}")
         return
     
     # Get test images
     image_files = get_image_files(input_dir)
     if not image_files:
-        print(f"❌ Error: No image files found in {input_dir}")
+        print(f"[ERROR] Error: No image files found in {input_dir}")
         return
     
     print(f"Found {len(image_files)} test images:")
@@ -106,10 +106,10 @@ def test_page_splitting_parameters():
                 save_image(left_page, left_path)
                 save_image(right_page, right_path)
                 
-                print(f"    ✅ {image_path.name} -> {left_path.name}, {right_path.name}")
+                print(f"    [OK] {image_path.name} -> {left_path.name}, {right_path.name}")
                 
             except Exception as e:
-                print(f"    ❌ Error processing {image_path.name}: {e}")
+                print(f"    [ERROR] Error processing {image_path.name}: {e}")
         
         # Record results for summary
         results_summary.append({
@@ -152,15 +152,15 @@ def test_page_splitting_parameters():
         f.write("   data/output/tuning/02_deskewed_input/\n")
         f.write("3. Run: python tools/tune_deskewing.py\n")
     
-    print(f"\n🎉 PARAMETER TUNING COMPLETE!")
-    print(f"📁 Results saved in: {output_base}")
-    print(f"📄 Summary report: {summary_file}")
+    print(f"\n[SUCCESS] PARAMETER TUNING COMPLETE!")
+    print(f"[DIR] Results saved in: {output_base}")
+    print(f"[FILE] Summary report: {summary_file}")
     print()
     print("NEXT STEPS:")
-    print("1. 👀 Visually inspect all parameter combination folders")
-    print("2. 📋 Choose the best parameter combination")
-    print("3. 📂 Copy the best results to: data/output/tuning/02_deskewed_input/")
-    print("4. 🚀 Run: python tools/tune_deskewing.py")
+    print("1. [CHECK] Visually inspect all parameter combination folders")
+    print("2. [LIST] Choose the best parameter combination")
+    print("3. [DIR] Copy the best results to: data/output/tuning/02_deskewed_input/")
+    print("4. [START] Run: python tools/tune_deskewing.py")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from src.ocr_pipeline.config import Stage1Config, Stage2Config
 import src.ocr_pipeline.utils as ocr_utils
-from output_manager import get_test_images, convert_numpy_types
+from output_manager import get_test_images, convert_numpy_types, save_step_parameters
 
 
 def load_config_from_file(config_path: Path = None, stage: int = 1):
@@ -231,7 +231,8 @@ def create_split_comparison(original: np.ndarray, left_page: np.ndarray,
 
 
 def process_image_split_visualization(image_path: Path, config, 
-                                    output_dir: Path) -> Dict[str, Any]:
+                                    output_dir: Path, command_args: Dict[str, Any] = None,
+                                    config_source: str = "default") -> Dict[str, Any]:
     """Process a single image and create split visualization."""
     print(f"Processing: {image_path.name}")
     
@@ -267,11 +268,15 @@ def process_image_split_visualization(image_path: Path, config,
         base_name = image_path.stem
         output_dir.mkdir(parents=True, exist_ok=True)
         
+        # Create subdirectory for processed images (for pipeline use)
+        processed_dir = output_dir / "processed_images"
+        processed_dir.mkdir(exist_ok=True)
+        
         output_files = {
             'original': str(output_dir / f"{base_name}_original.jpg"),
             'overlay': str(output_dir / f"{base_name}_split_overlay.jpg"),
-            'left_page': str(output_dir / f"{base_name}_left_page.jpg"),
-            'right_page': str(output_dir / f"{base_name}_right_page.jpg"),
+            'left_page': str(processed_dir / f"{base_name}_left_page.jpg"),
+            'right_page': str(processed_dir / f"{base_name}_right_page.jpg"),
             'gutter_plot': str(output_dir / f"{base_name}_gutter_analysis.jpg"),
             'comparison': str(output_dir / f"{base_name}_split_comparison.jpg")
         }
@@ -302,11 +307,37 @@ def process_image_split_visualization(image_path: Path, config,
         
         output_files['analysis'] = str(analysis_file)
         
+        # Prepare processing results for parameter documentation
+        processing_results = {
+            'image_name': image_path.name,
+            'success': True,
+            'gutter_info': gutter_info,
+            'output_files': output_files,
+            'analysis_data': analysis_data
+        }
+        
+        # Save parameter documentation
+        if command_args is None:
+            command_args = {}
+        
+        param_file = save_step_parameters(
+            step_name="page_split",
+            config_obj=config,
+            command_args=command_args,
+            processing_results=processing_results,
+            output_dir=output_dir,
+            config_source=config_source
+        )
+        
+        # Include parameter file in output files
+        output_files['parameters'] = str(param_file)
+        
         result = {
             'image_name': image_path.name,
             'success': True,
             'gutter_info': gutter_info,
-            'output_files': output_files
+            'output_files': output_files,
+            'parameter_file': str(param_file) if param_file else None
         }
         
         print(f"  SUCCESS: Gutter at X={gutter_info['gutter_x']}, strength={gutter_info['gutter_strength']:.3f}")
@@ -331,6 +362,8 @@ def main():
                        help="Images to visualize")
     parser.add_argument("--test-images", action="store_true",
                        help="Process all images in input/test_images directory")
+    parser.add_argument("--input-dir", type=str, default=None,
+                       help="Custom input directory (overrides --test-images)")
     parser.add_argument("--output-dir", default="data/output/visualization/page_split",
                        help="Output directory for visualizations")
     
@@ -351,7 +384,19 @@ def main():
     args = parser.parse_args()
     
     # Determine which images to process
-    if args.test_images:
+    if args.input_dir:
+        print(f"Using custom input directory: {args.input_dir}")
+        input_dir = Path(args.input_dir)
+        if not input_dir.exists():
+            print(f"Error: Input directory {args.input_dir} does not exist!")
+            return
+        image_paths = []
+        for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
+            image_paths.extend(input_dir.glob(ext))
+        if not image_paths:
+            print(f"No images found in {args.input_dir}!")
+            return
+    elif args.test_images:
         print("Using batch mode: processing all images in input/test_images/")
         image_paths = get_test_images()
         if not image_paths:
@@ -373,6 +418,22 @@ def main():
     
     # Load configuration from JSON file
     config = load_config_from_file(args.config_file, args.stage)
+    
+    # Collect command line arguments for parameter documentation
+    command_args = {
+        'gutter_start': args.gutter_start,
+        'gutter_end': args.gutter_end,
+        'min_gutter_width': args.min_gutter_width,
+        'config_file': str(args.config_file) if args.config_file else None,
+        'stage': args.stage
+    }
+    
+    # Determine config source
+    config_source = "default"
+    if args.config_file and args.config_file.exists():
+        config_source = "file"
+    if any(v is not None for v in [args.gutter_start, args.gutter_end, args.min_gutter_width]):
+        config_source += "_with_overrides"
     
     # Apply command line parameter overrides
     if args.gutter_start is not None:
@@ -398,7 +459,7 @@ def main():
     results = []
     for i, image_path in enumerate(image_paths, 1):
         print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
-        result = process_image_split_visualization(image_path, config, output_dir)
+        result = process_image_split_visualization(image_path, config, output_dir, command_args, config_source)
         results.append(result)
     
     # Summary

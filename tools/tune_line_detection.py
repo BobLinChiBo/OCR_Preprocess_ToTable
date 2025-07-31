@@ -20,10 +20,7 @@ import json
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.ocr_pipeline.utils import (
-    load_image, save_image, get_image_files, 
-    detect_table_lines, crop_table_region, visualize_detected_lines
-)
+from src.ocr_pipeline.utils import load_image, save_image, get_image_files, detect_table_lines, crop_table_region, visualize_detected_lines
 import cv2
 import numpy as np
 
@@ -41,15 +38,15 @@ def test_line_detection_parameters():
     min_line_lengths = [20, 30, 40, 50, 60, 80]
     max_line_gaps = [5, 10, 15, 20, 25]
     
-    print("🔧 LINE DETECTION PARAMETER TUNING")
+    print("[CONFIG] LINE DETECTION PARAMETER TUNING")
     print("=" * 50)
-    print(f"📂 Input: {input_dir}")
-    print(f"📁 Output: {output_base}")
+    print(f"[DIR] Input: {input_dir}")
+    print(f"[DIR] Output: {output_base}")
     print()
     
     # Validate input directory
     if not input_dir.exists():
-        print(f"❌ Error: Input directory not found: {input_dir}")
+        print(f"[ERROR] Error: Input directory not found: {input_dir}")
         print("Please first run ROI detection tuning and copy the best results to:")
         print(f"   {input_dir}")
         return
@@ -57,7 +54,7 @@ def test_line_detection_parameters():
     # Get ROI-cropped images
     image_files = get_image_files(input_dir)
     if not image_files:
-        print(f"❌ Error: No image files found in {input_dir}")
+        print(f"[ERROR] Error: No image files found in {input_dir}")
         print("Please copy ROI-cropped images from ROI detection tuning results")
         return
     
@@ -152,11 +149,11 @@ def test_line_detection_parameters():
                     'crop_area_ratio': crop_area_ratio
                 })
                 
-                status = "✅" if len(h_lines) > 0 and len(v_lines) > 0 else "⚪"
+                status = "[OK]" if len(h_lines) > 0 and len(v_lines) > 0 else "[  ]"
                 print(f"    {status} {image_path.name} -> H:{len(h_lines)} V:{len(v_lines)}")
                 
             except Exception as e:
-                print(f"    ❌ Error processing {image_path.name}: {e}")
+                print(f"    [ERROR] Error processing {image_path.name}: {e}")
         
         # Save analysis for this parameter set
         analysis_file = param_dir / "line_detection_analysis.txt"
@@ -253,19 +250,19 @@ def test_line_detection_parameters():
         f.write("3. Run: python tools/run_tuned_pipeline.py\n")
         f.write("4. Use the optimal parameters in your production pipeline\n")
     
-    print(f"\n🎉 LINE DETECTION PARAMETER TUNING COMPLETE!")
-    print(f"📁 Results saved in: {output_base}")
-    print(f"📄 Summary report: {summary_file}")
+    print(f"\n[SUCCESS] LINE DETECTION PARAMETER TUNING COMPLETE!")
+    print(f"[DIR] Results saved in: {output_base}")
+    print(f"[FILE] Summary report: {summary_file}")
     print()
     print("EVALUATION GUIDELINES:")
-    print("📏 Check line visualization images for detection accuracy")
-    print("🎯 Look for complete table structure detection")
-    print("⚖️  Balance sensitivity vs noise reduction")
+    print("[CHECK] Check line visualization images for detection accuracy")
+    print("[TARGET] Look for complete table structure detection")
+    print("[WARNING] Balance sensitivity vs noise reduction")
     print()
     print("NEXT STEPS:")
-    print("1. 📋 Choose the best parameter combination")
-    print("2. 📝 Note optimal parameters for your document type")
-    print("3. 🚀 Run: python tools/run_tuned_pipeline.py")
+    print("1. [LIST] Choose the best parameter combination")
+    print("2. [FILE] Note optimal parameters for your document type")
+    print("3. [START] Run: python tools/run_tuned_pipeline.py")
 
 
 if __name__ == "__main__":

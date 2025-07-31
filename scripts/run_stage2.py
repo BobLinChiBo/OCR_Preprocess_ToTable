@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
-from src.ocr_pipeline.config import Stage2Config
+from src.ocr_pipeline.config import Stage2Config, get_stage2_config
 
 
 def main():
@@ -93,6 +93,12 @@ Examples:
         help="Maximum line gap for refined table detection (default: 5)"
     )
     
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Path to JSON configuration file (default: configs/stage2_default.json)"
+    )
+    
     args = parser.parse_args()
     
     # Validate input
@@ -107,24 +113,26 @@ Examples:
         sys.exit(1)
     
     # Check if input directory has images
-    from src.ocr_pipeline.utils import get_image_files
-    image_files = get_image_files(input_path)
+    from src.ocr_pipeline import utils
+    image_files = utils.get_image_files(input_path)
     if not image_files:
         print(f"Error: No image files found in: {input_path}")
         print("Hint: Make sure Stage 1 completed successfully")
         sys.exit(1)
     
     # Create Stage 2 configuration
-    stage2_config = Stage2Config(
-        input_dir=input_path,
-        output_dir=Path(args.output),
-        verbose=args.verbose,
-        save_debug_images=args.debug,
-        angle_range=args.angle_range,
-        angle_step=args.angle_step,
-        min_line_length=args.min_line_length,
-        max_line_gap=args.max_line_gap
-    )
+    # Start with JSON config if provided, otherwise use defaults
+    stage2_config = get_stage2_config(args.config)
+    
+    # Override with command line arguments
+    stage2_config.input_dir = input_path
+    stage2_config.output_dir = Path(args.output)
+    stage2_config.verbose = args.verbose
+    stage2_config.save_debug_images = args.debug
+    stage2_config.angle_range = args.angle_range
+    stage2_config.angle_step = args.angle_step
+    stage2_config.min_line_length = args.min_line_length
+    stage2_config.max_line_gap = args.max_line_gap
     
     try:
         if args.verbose:

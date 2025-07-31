@@ -5,11 +5,7 @@ from pathlib import Path
 from typing import List
 
 from .config import Config, get_default_config, Stage1Config, Stage2Config, get_stage1_config, get_stage2_config
-from .utils import (
-    get_image_files, load_image, save_image, split_two_page_image,
-    deskew_image, detect_table_lines, crop_table_region,
-    detect_roi_for_image, crop_to_roi
-)
+from . import utils
 
 
 class OCRPipeline:
@@ -26,10 +22,10 @@ class OCRPipeline:
             print(f"Processing: {image_path}")
         
         # Load image
-        image = load_image(image_path)
+        image = utils.load_image(image_path)
         
         # Split into two pages
-        left_page, right_page = split_two_page_image(
+        left_page, right_page = utils.split_two_page_image(
             image, 
             self.config.gutter_search_start, 
             self.config.gutter_search_end
@@ -40,7 +36,7 @@ class OCRPipeline:
         # Process each page
         for i, page in enumerate([left_page, right_page], 1):
             # Deskew
-            deskewed, _ = deskew_image(
+            deskewed, _ = utils.deskew_image(
                 page, 
                 self.config.angle_range, 
                 self.config.angle_step,
@@ -51,15 +47,15 @@ class OCRPipeline:
             processing_image = deskewed
             roi_coords = None
             if self.config.enable_roi_detection:
-                roi_coords = detect_roi_for_image(deskewed, self.config)
-                processing_image = crop_to_roi(deskewed, roi_coords)
+                roi_coords = utils.detect_roi_for_image(deskewed, self.config)
+                processing_image = utils.crop_to_roi(deskewed, roi_coords)
                 
                 if self.config.verbose:
                     print(f"    ROI detected: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
                           f"({roi_coords['roi_right']}, {roi_coords['roi_bottom']})")
             
             # Detect table lines
-            h_lines, v_lines = detect_table_lines(
+            h_lines, v_lines = utils.detect_table_lines(
                 processing_image,
                 self.config.min_line_length,
                 self.config.max_line_gap
@@ -67,14 +63,14 @@ class OCRPipeline:
             
             # Crop to table region
             if h_lines and v_lines:
-                cropped = crop_table_region(processing_image, h_lines, v_lines)
+                cropped = utils.crop_table_region(processing_image, h_lines, v_lines)
             else:
                 cropped = processing_image
             
             # Save result
             output_name = f"{image_path.stem}_page_{i}.jpg"
             output_path = self.config.output_dir / output_name
-            save_image(cropped, output_path)
+            utils.save_image(cropped, output_path)
             output_paths.append(output_path)
             
             if self.config.verbose:
@@ -89,7 +85,7 @@ class OCRPipeline:
         if not input_dir.exists():
             raise ValueError(f"Input directory does not exist: {input_dir}")
         
-        image_files = get_image_files(input_dir)
+        image_files = utils.get_image_files(input_dir)
         
         if not image_files:
             print(f"No image files found in: {input_dir}")
@@ -142,7 +138,7 @@ class TwoStageOCRPipeline:
         if not input_dir.exists():
             raise ValueError(f"Input directory does not exist: {input_dir}")
         
-        image_files = get_image_files(input_dir)
+        image_files = utils.get_image_files(input_dir)
         if not image_files:
             raise ValueError(f"No image files found in: {input_dir}")
         
@@ -156,8 +152,8 @@ class TwoStageOCRPipeline:
                     print(f"\nProcessing: {image_path.name}")
                 
                 # Load and split image
-                image = load_image(image_path)
-                left_page, right_page = split_two_page_image(
+                image = utils.load_image(image_path)
+                left_page, right_page = utils.split_two_page_image(
                     image,
                     self.stage1_config.gutter_search_start,
                     self.stage1_config.gutter_search_end
@@ -167,7 +163,7 @@ class TwoStageOCRPipeline:
                 split_dir = self.stage1_config.output_dir / "01_split_pages"
                 for i, page in enumerate([left_page, right_page], 1):
                     split_path = split_dir / f"{image_path.stem}_page_{i}.jpg"
-                    save_image(page, split_path)
+                    utils.save_image(page, split_path)
                     if self.stage1_config.verbose:
                         print(f"  Split page saved: {split_path.name}")
                 
@@ -176,7 +172,7 @@ class TwoStageOCRPipeline:
                     page_name = f"{image_path.stem}_page_{i}"
                     
                     # Deskew
-                    deskewed, _ = deskew_image(
+                    deskewed, _ = utils.deskew_image(
                         page,
                         self.stage1_config.angle_range,
                         self.stage1_config.angle_step,
@@ -186,25 +182,25 @@ class TwoStageOCRPipeline:
                     # Save deskewed image
                     deskew_dir = self.stage1_config.output_dir / "02_deskewed"
                     deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
-                    save_image(deskewed, deskew_path)
+                    utils.save_image(deskewed, deskew_path)
                     
                     # ROI detection and cropping
                     processing_image = deskewed
                     if self.stage1_config.enable_roi_detection:
-                        roi_coords = detect_roi_for_image(deskewed, self.stage1_config)
-                        processing_image = crop_to_roi(deskewed, roi_coords)
+                        roi_coords = utils.detect_roi_for_image(deskewed, self.stage1_config)
+                        processing_image = utils.crop_to_roi(deskewed, roi_coords)
                         
                         # Save ROI cropped image
                         roi_dir = self.stage1_config.output_dir / "02.5_edge_detection"
                         roi_path = roi_dir / f"{page_name}_roi.jpg"
-                        save_image(processing_image, roi_path)
+                        utils.save_image(processing_image, roi_path)
                         
                         if self.stage1_config.verbose:
                             print(f"    ROI: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
                                   f"({roi_coords['roi_right']}, {roi_coords['roi_bottom']})")
                     
                     # Table line detection
-                    h_lines, v_lines = detect_table_lines(
+                    h_lines, v_lines = utils.detect_table_lines(
                         processing_image,
                         self.stage1_config.min_line_length,
                         self.stage1_config.max_line_gap
@@ -222,14 +218,14 @@ class TwoStageOCRPipeline:
                     
                     # Final table cropping
                     if h_lines and v_lines:
-                        cropped_table = crop_table_region(processing_image, h_lines, v_lines)
+                        cropped_table = utils.crop_table_region(processing_image, h_lines, v_lines)
                     else:
                         cropped_table = processing_image
                     
                     # Save final cropped table for Stage 2
                     crop_dir = self.stage1_config.output_dir / "05_cropped_tables"
                     crop_path = crop_dir / f"{page_name}_cropped.jpg"
-                    save_image(cropped_table, crop_path)
+                    utils.save_image(cropped_table, crop_path)
                     cropped_tables.append(crop_path)
                     
                     if self.stage1_config.verbose:
@@ -263,7 +259,7 @@ class TwoStageOCRPipeline:
         if not input_dir.exists():
             raise ValueError(f"Stage 1 output not found: {input_dir}. Run Stage 1 first.")
         
-        image_files = get_image_files(input_dir)
+        image_files = utils.get_image_files(input_dir)
         if not image_files:
             raise ValueError(f"No cropped table images found in: {input_dir}")
         
@@ -279,11 +275,11 @@ class TwoStageOCRPipeline:
                     print(f"\nRefining: {image_path.name}")
                 
                 # Load cropped table
-                table_image = load_image(image_path)
+                table_image = utils.load_image(image_path)
                 base_name = image_path.stem.replace("_cropped", "")
                 
                 # Re-deskew for fine-tuning
-                refined_deskewed, _ = deskew_image(
+                refined_deskewed, _ = utils.deskew_image(
                     table_image,
                     self.stage2_config.angle_range,
                     self.stage2_config.angle_step,
@@ -293,10 +289,10 @@ class TwoStageOCRPipeline:
                 # Save refined deskewed
                 deskew_dir = self.stage2_config.output_dir / "01_deskewed"
                 deskew_path = deskew_dir / f"{base_name}_refined_deskewed.jpg"
-                save_image(refined_deskewed, deskew_path)
+                utils.save_image(refined_deskewed, deskew_path)
                 
                 # Refined line detection with tighter parameters
-                h_lines, v_lines = detect_table_lines(
+                h_lines, v_lines = utils.detect_table_lines(
                     refined_deskewed,
                     self.stage2_config.min_line_length,
                     self.stage2_config.max_line_gap
@@ -318,7 +314,7 @@ class TwoStageOCRPipeline:
                 
                 # For now, use the refined deskewed as the final result
                 # TODO: Implement table fitting algorithm
-                save_image(refined_deskewed, fitted_path)
+                utils.save_image(refined_deskewed, fitted_path)
                 refined_tables.append(fitted_path)
                 
                 if self.stage2_config.verbose:

@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ocr_pipeline.pipeline import TwoStageOCRPipeline
-from src.ocr_pipeline.config import Stage1Config
+from src.ocr_pipeline.config import Stage1Config, get_stage1_config
 
 
 def main():
@@ -91,6 +91,12 @@ Examples:
         help="Disable ROI detection preprocessing"
     )
     
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Path to JSON configuration file (default: configs/stage1_default.json)"
+    )
+    
     args = parser.parse_args()
     
     # Validate input
@@ -100,16 +106,18 @@ Examples:
         sys.exit(1)
     
     # Create Stage 1 configuration
-    stage1_config = Stage1Config(
-        input_dir=input_path if input_path.is_dir() else input_path.parent,
-        output_dir=Path(args.output),
-        verbose=args.verbose,
-        save_debug_images=args.debug,
-        angle_range=args.angle_range,
-        angle_step=args.angle_step,
-        min_line_length=args.min_line_length,
-        enable_roi_detection=not args.disable_roi
-    )
+    # Start with JSON config if provided, otherwise use defaults
+    stage1_config = get_stage1_config(args.config)
+    
+    # Override with command line arguments
+    stage1_config.input_dir = input_path if input_path.is_dir() else input_path.parent
+    stage1_config.output_dir = Path(args.output)
+    stage1_config.verbose = args.verbose
+    stage1_config.save_debug_images = args.debug
+    stage1_config.angle_range = args.angle_range
+    stage1_config.angle_step = args.angle_step
+    stage1_config.min_line_length = args.min_line_length
+    stage1_config.enable_roi_detection = not args.disable_roi
     
     try:
         if args.verbose:

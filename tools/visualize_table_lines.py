@@ -21,7 +21,7 @@ sys.path.insert(0, str(project_root))
 
 from src.ocr_pipeline.config import Stage1Config, Stage2Config
 import src.ocr_pipeline.utils as ocr_utils
-from visualization.output_manager import get_test_images, convert_numpy_types
+from output_manager import get_test_images, convert_numpy_types, save_step_parameters
 
 
 def load_config_from_file(config_path: Path = None, stage: int = 1):
@@ -249,7 +249,9 @@ def create_table_lines_comparison(original: np.ndarray, overlay: np.ndarray,
 
 def process_image_table_lines_visualization(image_path: Path, config, 
                                           output_dir: Path, kernel_h_size: int = 40,
-                                          kernel_v_size: int = 40, hough_threshold: int = 50) -> Dict[str, Any]:
+                                          kernel_v_size: int = 40, hough_threshold: int = 50,
+                                          command_args: Dict[str, Any] = None,
+                                          config_source: str = "default") -> Dict[str, Any]:
     """Process a single image and create table lines visualization."""
     print(f"Processing: {image_path.name}")
     
@@ -312,11 +314,37 @@ def process_image_table_lines_visualization(image_path: Path, config,
         
         output_files['analysis'] = str(analysis_file)
         
+        # Prepare processing results for parameter documentation
+        processing_results = {
+            'image_name': image_path.name,
+            'success': True,
+            'line_info': line_info,
+            'output_files': output_files,
+            'analysis_data': analysis_data
+        }
+        
+        # Save parameter documentation
+        if command_args is None:
+            command_args = {}
+        
+        param_file = save_step_parameters(
+            step_name="table_lines",
+            config_obj=config,
+            command_args=command_args,
+            processing_results=processing_results,
+            output_dir=output_dir,
+            config_source=config_source
+        )
+        
+        # Include parameter file in output files
+        output_files['parameters'] = str(param_file)
+        
         result = {
             'image_name': image_path.name,
             'success': True,
             'line_info': line_info,
-            'output_files': output_files
+            'output_files': output_files,
+            'parameter_file': str(param_file) if param_file else None
         }
         
         print(f"  SUCCESS: H lines: {line_info['h_line_count']}, V lines: {line_info['v_line_count']}")
@@ -388,6 +416,25 @@ def main():
     # Load configuration from JSON file
     config = load_config_from_file(args.config_file, args.stage)
     
+    # Collect command line arguments for parameter documentation
+    command_args = {
+        'min_line_length': args.min_line_length,
+        'max_line_gap': args.max_line_gap,
+        'kernel_h_size': args.kernel_h_size,
+        'kernel_v_size': args.kernel_v_size,
+        'hough_threshold': args.hough_threshold,
+        'config_file': str(args.config_file) if args.config_file else None,
+        'stage': args.stage,
+        'save_debug': args.save_debug
+    }
+    
+    # Determine config source
+    config_source = "default"
+    if args.config_file and args.config_file.exists():
+        config_source = "file"
+    if any(v is not None for v in [args.min_line_length, args.max_line_gap]):
+        config_source += "_with_overrides"
+    
     # Apply command line parameter overrides
     if args.min_line_length is not None:
         config.min_line_length = args.min_line_length
@@ -415,7 +462,8 @@ def main():
         print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
         result = process_image_table_lines_visualization(
             image_path, config, output_dir, 
-            args.kernel_h_size, args.kernel_v_size, args.hough_threshold
+            args.kernel_h_size, args.kernel_v_size, args.hough_threshold,
+            command_args, config_source
         )
         results.append(result)
     
