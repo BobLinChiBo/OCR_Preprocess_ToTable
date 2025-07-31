@@ -95,7 +95,9 @@ class VisualizationRunner:
         try:
             # Run the script from project root directory for proper path resolution
             project_root = script_dir.parent
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, cwd=project_root
+            )
 
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -199,28 +201,28 @@ class VisualizationRunner:
     ) -> List[Dict[str, Any]]:
         """Run scripts in pipeline mode where each stage uses previous stage's output as input."""
         results = []
-        
+
         # Create pipeline output directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         pipeline_dir = self.manager.base_dir / f"pipeline_{timestamp}"
         pipeline_dir.mkdir(parents=True, exist_ok=True)
-        
+
         print(f"\nRunning {len(script_names)} scripts in pipeline mode")
         print(f"Pipeline directory: {pipeline_dir}")
         print(f"Scripts: {' -> '.join(script_names)}")
-        
+
         total_start = datetime.now()
         current_input_dir = None
-        
+
         for i, script_name in enumerate(script_names):
             stage_num = i + 1
             stage_dir = pipeline_dir / f"{stage_num:02d}_{script_name}"
             stage_dir.mkdir(exist_ok=True)
-            
+
             print(f"\n{'='*60}")
             print(f"PIPELINE STAGE {stage_num}/{len(script_names)}: {script_name}")
             print(f"{'='*60}")
-            
+
             # Determine input for this stage
             if i == 0:
                 # First stage uses test images or specified input
@@ -234,35 +236,44 @@ class VisualizationRunner:
                 # Subsequent stages use previous stage's processed images
                 processed_input_dir = current_input_dir / "processed_images"
                 if processed_input_dir.exists():
-                    print(f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input")
+                    print(
+                        f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input"
+                    )
                     extra_args = ["--input-dir", str(processed_input_dir.resolve())]
                 else:
-                    print(f"Stage {stage_num}: Using all output from {script_names[i-1]} as input")
+                    print(
+                        f"Stage {stage_num}: Using all output from {script_names[i-1]} as input"
+                    )
                     extra_args = ["--input-dir", str(current_input_dir.resolve())]
-            
+
             # Add output directory and any custom args (use absolute paths)
             extra_args.extend(["--output-dir", str(stage_dir.resolve())])
             if args_per_script and script_name in args_per_script:
                 extra_args.extend(args_per_script[script_name])
-            
+
             # Run the script
             result = self.run_single_script(
-                script_name, [], extra_args, False  # Don't use test_images flag for individual scripts
+                script_name,
+                [],
+                extra_args,
+                False,  # Don't use test_images flag for individual scripts
             )
             results.append(result)
-            
+
             if not result["success"]:
                 print(f"PIPELINE FAILED: Stage {stage_num} ({script_name}) failed!")
                 print("Stopping pipeline execution.")
                 break
-            
+
             # Set up for next stage
             current_input_dir = stage_dir
-            print(f"Stage {stage_num} completed successfully. Output saved to: {stage_dir}")
-        
+            print(
+                f"Stage {stage_num} completed successfully. Output saved to: {stage_dir}"
+            )
+
         total_end = datetime.now()
         total_duration = (total_end - total_start).total_seconds()
-        
+
         # Pipeline summary
         successful = sum(1 for r in results if r["success"])
         print(f"\n{'='*60}")
@@ -270,16 +281,20 @@ class VisualizationRunner:
         print(f"{'='*60}")
         print(f"Completed: {successful}/{len(script_names)} stages")
         print(f"Total time: {total_duration:.1f}s")
-        print(f"Average time per stage: {total_duration/len(results):.1f}s" if results else "N/A")
+        print(
+            f"Average time per stage: {total_duration/len(results):.1f}s"
+            if results
+            else "N/A"
+        )
         print(f"Pipeline directory: {pipeline_dir}")
-        
+
         if successful < len(script_names):
             failed_scripts = [r["script"] for r in results if not r["success"]]
             print(f"Failed stages: {', '.join(failed_scripts)}")
         else:
             print(f"SUCCESS: All {len(script_names)} stages completed successfully!")
             print(f"Final output available in: {current_input_dir}")
-        
+
         return results
 
     def list_available_scripts(self):
@@ -311,6 +326,33 @@ def parse_script_args(script_args: List[str]) -> Dict[str, List[str]]:
             # Global argument - ignore for now
             pass
 
+    return result
+
+
+def parse_script_args_from_argv(argv: List[str]) -> Dict[str, List[str]]:
+    """Parse script arguments directly from sys.argv, handling argparse limitations."""
+    result = {}
+    current_script = None
+    
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        
+        if arg.startswith("--") and arg.endswith("-args"):
+            # Extract script name (e.g., --roi-args -> roi)
+            current_script = arg[2:-5]  # Remove -- and -args
+            result[current_script] = []
+            i += 1
+            
+            # Collect arguments until next --flag or end
+            while i < len(argv) and not (argv[i].startswith("--") and not argv[i].startswith("--roi-") and not argv[i].startswith("--deskew-") and not argv[i].startswith("--page-split-")):
+                if argv[i] in ["--test-images", "--pipeline", "--save-report", "--list"]:
+                    break
+                result[current_script].append(argv[i])
+                i += 1
+        else:
+            i += 1
+    
     return result
 
 
@@ -350,7 +392,6 @@ Examples:
     parser.add_argument(
         "scripts", nargs="*", help='Script names to run (or "all" for all scripts)'
     )
-    parser.add_argument("images", nargs="*", help="Image files to process")
 
     parser.add_argument(
         "--list", action="store_true", help="List available scripts and exit"
@@ -410,8 +451,18 @@ Examples:
         runner.list_available_scripts()
         return
 
-    # Parse script-specific arguments from remaining args
-    script_args = parse_script_args(remaining)
+    # Parse script-specific arguments using custom parser that handles argparse limitations
+    script_args = parse_script_args_from_argv(sys.argv[1:])
+    
+    # Also try the original method for any arguments in remaining
+    remaining_script_args = parse_script_args(remaining)
+    
+    # Merge the results
+    for script, args_list in remaining_script_args.items():
+        if script in script_args:
+            script_args[script].extend(args_list)
+        else:
+            script_args[script] = args_list
 
     # Determine which scripts to run
     script_names = args.scripts if args.scripts else []
@@ -437,17 +488,16 @@ Examples:
         valid_images = []  # Will be ignored anyway
         print("Using --test-images mode: Individual image validation skipped")
     else:
-        # Get images (from args.images or remaining args)
-        images = args.images if args.images else []
-        if not images:
-            # Try to find images in remaining args (after script args)
-            potential_images = [
-                arg
-                for arg in remaining
-                if not arg.startswith("--")
-                and Path(arg).suffix.lower() in [".jpg", ".png", ".jpeg"]
-            ]
-            images = potential_images
+        # Get images from remaining args (after script args are parsed)
+        images = []
+        # Try to find images in remaining args (after script args)
+        potential_images = [
+            arg
+            for arg in remaining
+            if not arg.startswith("--")
+            and Path(arg).suffix.lower() in [".jpg", ".png", ".jpeg"]
+        ]
+        images = potential_images
 
         if not images:
             print("No images specified.")
@@ -475,7 +525,9 @@ Examples:
     if args.pipeline:
         # Pipeline mode: each stage uses previous stage's output as input
         if len(script_names) < 2:
-            print("Pipeline mode requires at least 2 scripts. Use regular mode for single script.")
+            print(
+                "Pipeline mode requires at least 2 scripts. Use regular mode for single script."
+            )
             return
         results = runner.run_pipeline(script_names, script_args, args.test_images)
     elif len(script_names) == 1:
