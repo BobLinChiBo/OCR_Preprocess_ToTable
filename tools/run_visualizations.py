@@ -45,7 +45,7 @@ class VisualizationRunner:
             "table-lines": {
                 "script": "visualize_table_lines.py",
                 "description": "Table line detection visualization",
-                "default_args": ["--save-debug"],
+                "default_args": ["--save-debug", "--show-filtering-steps"],
             },
             "table-crop": {
                 "script": "visualize_table_crop.py",
@@ -60,6 +60,7 @@ class VisualizationRunner:
         images: List[str],
         extra_args: List[str] = None,
         use_test_images: bool = False,
+        no_filtering_steps: bool = False,
     ) -> Dict[str, Any]:
         """Run a single visualization script."""
         if script_name not in self.available_scripts:
@@ -80,7 +81,17 @@ class VisualizationRunner:
         else:
             cmd.extend(images)
 
-        cmd.extend(script_info["default_args"])
+        # Add default args, but handle filtering steps override
+        default_args = script_info["default_args"].copy()
+        
+        # For table-lines script, handle --no-filtering-steps override
+        if script_name == "table-lines" and no_filtering_steps:
+            # Remove --show-filtering-steps from default args and add --no-filtering-steps
+            if "--show-filtering-steps" in default_args:
+                default_args.remove("--show-filtering-steps")
+            default_args.append("--no-filtering-steps")
+        
+        cmd.extend(default_args)
 
         if extra_args:
             cmd.extend(extra_args)
@@ -96,7 +107,7 @@ class VisualizationRunner:
             # Run the script from project root directory for proper path resolution
             project_root = script_dir.parent
             result = subprocess.run(
-                cmd, capture_output=True, text=True, cwd=project_root
+                cmd, capture_output=True, text=True, cwd=project_root, timeout=600
             )
 
             end_time = datetime.now()
@@ -123,6 +134,23 @@ class VisualizationRunner:
                 "returncode": result.returncode,
             }
 
+        except subprocess.TimeoutExpired as e:
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+
+            print(f"TIMEOUT: {script_name} timed out after {duration:.1f}s (600s limit)")
+            print(f"Command: {' '.join(cmd)}")
+
+            return {
+                "script": script_name,
+                "success": False,
+                "duration": duration,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "error": f"Script timed out after 600 seconds",
+                "returncode": -1,
+            }
+
         except Exception as e:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
@@ -145,6 +173,7 @@ class VisualizationRunner:
         images: List[str],
         args_per_script: Dict[str, List[str]] = None,
         use_test_images: bool = False,
+        no_filtering_steps: bool = False,
     ) -> List[Dict[str, Any]]:
         """Run multiple visualization scripts."""
         results = []
@@ -165,7 +194,7 @@ class VisualizationRunner:
         for script_name in script_names:
             extra_args = args_per_script.get(script_name, []) if args_per_script else []
             result = self.run_single_script(
-                script_name, images, extra_args, use_test_images
+                script_name, images, extra_args, use_test_images, no_filtering_steps
             )
             results.append(result)
 
@@ -198,6 +227,7 @@ class VisualizationRunner:
         script_names: List[str],
         args_per_script: Dict[str, List[str]] = None,
         use_test_images: bool = False,
+        no_filtering_steps: bool = False,
     ) -> List[Dict[str, Any]]:
         """Run scripts in pipeline mode where each stage uses previous stage's output as input."""
         results = []
@@ -248,6 +278,11 @@ class VisualizationRunner:
 
             # Add output directory and any custom args (use absolute paths)
             extra_args.extend(["--output-dir", str(stage_dir.resolve())])
+            
+            # Add --no-params flag for intermediate pipeline stages to prevent hanging
+            if script_name == "deskew":
+                extra_args.append("--no-params")
+            
             if args_per_script and script_name in args_per_script:
                 extra_args.extend(args_per_script[script_name])
 
@@ -257,6 +292,7 @@ class VisualizationRunner:
                 [],
                 extra_args,
                 False,  # Don't use test_images flag for individual scripts
+                no_filtering_steps,
             )
             results.append(result)
 
@@ -419,6 +455,11 @@ Examples:
     parser.add_argument(
         "--save-report", action="store_true", help="Save detailed execution report"
     )
+    parser.add_argument(
+        "--no-filtering-steps",
+        action="store_true", 
+        help="Disable step-by-step filtering visualization for table-lines (default: enabled)"
+    )
 
     # Per-script arguments (parsed manually)
     parser.add_argument(
@@ -539,18 +580,19 @@ Examples:
                 "Pipeline mode requires at least 2 scripts. Use regular mode for single script."
             )
             return
-        results = runner.run_pipeline(script_names, script_args, args.test_images)
+        results = runner.run_pipeline(script_names, script_args, args.test_images, args.no_filtering_steps)
     elif len(script_names) == 1:
         result = runner.run_single_script(
             script_names[0],
             valid_images,
             script_args.get(script_names[0], []),
             args.test_images,
+            args.no_filtering_steps,
         )
         results = [result]
     else:
         results = runner.run_multiple_scripts(
-            script_names, valid_images, script_args, args.test_images
+            script_names, valid_images, script_args, args.test_images, args.no_filtering_steps
         )
 
     # Save report if requested

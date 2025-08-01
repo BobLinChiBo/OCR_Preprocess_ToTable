@@ -377,15 +377,202 @@ Line detection identifies table structure by finding horizontal and vertical lin
 
 ### `max_line_gap`
 - **Type**: `int`
-- **Default**: `10` (Base), `15` (Stage 1), `5` (Stage 2)
+- **Default**: `20` (Base), `40` (Stage 1), `30` (Stage 2)
 - **Range**: `1 - 50` pixels
 - **Description**: Maximum gap allowed within a single line (bridges broken lines)
 - **Examples**:
-  - `5`: Strict line continuity (Stage 2 default)
-  - `10`: Standard gap tolerance (Base default)
-  - `15`: Generous gap tolerance (Stage 1 default)
-  - `25`: Very forgiving (connects highly fragmented lines)
+  - `5`: Strict line continuity 
+  - `20`: Standard gap tolerance (Base default)
+  - `40`: Generous gap tolerance (Stage 1 default)
+  - `30`: Moderate gap tolerance (Stage 2 default)
 - **Tuning**: Increase for broken/faded lines, decrease for precise detection
+
+### `hough_threshold`
+- **Type**: `int`
+- **Default**: `80` (Base), `40` (Stages 1&2)
+- **Range**: `20 - 200`
+- **Description**: Hough transform threshold for line detection sensitivity
+- **Examples**:
+  - `20`: Very sensitive (detects many weak lines, more noise)
+  - `40`: Standard sensitivity (default for stages)
+  - `80`: Conservative sensitivity (Base default)
+  - `120`: High threshold (only strong, clear lines)
+- **Tuning**: Decrease for faint table lines, increase to reduce noise
+
+### Morphological Operation Parameters
+
+#### `horizontal_kernel_ratio`
+- **Type**: `int`
+- **Default**: `30`
+- **Range**: `10 - 50`
+- **Description**: Ratio for horizontal morphological kernel size (image_width / ratio)
+- **Examples**:
+  - `20`: Larger kernel (connects longer horizontal gaps)
+  - `30`: Standard kernel (default)
+  - `40`: Smaller kernel (more precise horizontal detection)
+- **Tuning**: Decrease for tables with wide horizontal spacing, increase for precise detection
+
+#### `vertical_kernel_ratio`
+- **Type**: `int`
+- **Default**: `20` (Base/Stage1), `20` (Stage2)
+- **Range**: `10 - 50`
+- **Description**: Ratio for vertical morphological kernel size (image_height / ratio)
+- **Examples**:
+  - `15`: Larger kernel (connects longer vertical gaps)
+  - `20`: Standard kernel (default)
+  - `30`: Smaller kernel (more precise vertical detection)
+- **Tuning**: Decrease for tables with tall cells, increase for precise detection
+
+#### `h_erode_iterations`
+- **Type**: `int`
+- **Default**: `1`
+- **Range**: `1 - 5`
+- **Description**: Number of erosion iterations for horizontal morphological operations
+- **Examples**:
+  - `1`: Minimal erosion (preserves thin lines)
+  - `2`: Standard erosion (removes some noise)
+  - `3`: Aggressive erosion (removes more noise, may break thin lines)
+- **Tuning**: Increase to remove noise, decrease to preserve thin lines
+
+#### `h_dilate_iterations`
+- **Type**: `int`
+- **Default**: `1`
+- **Range**: `1 - 5`
+- **Description**: Number of dilation iterations for horizontal morphological operations
+- **Examples**:
+  - `1`: Minimal dilation (preserves line precision)
+  - `2`: Standard dilation (connects small gaps)
+  - `3`: Aggressive dilation (connects larger gaps, may merge separate lines)
+- **Tuning**: Increase to connect broken lines, decrease for precise boundaries
+
+#### `v_erode_iterations`
+- **Type**: `int`
+- **Default**: `1`
+- **Range**: `1 - 5`
+- **Description**: Number of erosion iterations for vertical morphological operations
+- **Examples**:
+  - `1`: Minimal erosion (preserves thin lines)
+  - `2`: Standard erosion (removes some noise)
+  - `3`: Aggressive erosion (removes more noise, may break thin lines)
+- **Tuning**: Increase to remove noise, decrease to preserve thin lines
+
+#### `v_dilate_iterations`
+- **Type**: `int`
+- **Default**: `1`
+- **Range**: `1 - 5`
+- **Description**: Number of dilation iterations for vertical morphological operations
+- **Examples**:
+  - `1`: Minimal dilation (preserves line precision)
+  - `2`: Standard dilation (connects small gaps)
+  - `3`: Aggressive dilation (connects larger gaps, may merge separate lines)
+- **Tuning**: Increase to connect broken lines, decrease for precise boundaries
+
+### Coverage and Filtering Parameters
+
+#### `min_table_coverage`
+- **Type**: `float`
+- **Default**: `0.4` (Base), `0.10` (Stage 1), `0.2` (Stage 2)
+- **Range**: `0.05 - 0.8`
+- **Description**: Minimum coverage ratio for lines to be considered table borders
+- **Examples**:
+  - `0.05`: Very permissive (accepts short line segments)
+  - `0.10`: Permissive (Stage 1 default)
+  - `0.2`: Moderate (Stage 2 default)
+  - `0.4`: Conservative (Base default, requires substantial coverage)
+- **Tuning**: Decrease for tables with short borders, increase to filter noise
+
+#### `max_parallel_distance`
+- **Type**: `int`
+- **Default**: `15` (Base), `12` (Stage 1), `10` (Stage 2)
+- **Range**: `3 - 30` pixels
+- **Description**: Maximum distance between parallel lines before considering them duplicates
+- **Examples**:
+  - `5`: Strict deduplication (removes very close lines)
+  - `12`: Standard deduplication (Stage 1 default)
+  - `10`: Moderate deduplication (Stage 2 default)
+  - `20`: Loose deduplication (allows closer parallel lines)
+- **Tuning**: Decrease for precise line removal, increase to preserve close parallel lines
+
+#### `angle_tolerance`
+- **Type**: `float`
+- **Default**: `5.0`
+- **Range**: `1.0 - 15.0` degrees
+- **Description**: Maximum angle deviation from horizontal/vertical for line classification
+- **Examples**:
+  - `2.0`: Strict orientation (only near-perfect horizontal/vertical lines)
+  - `5.0`: Standard tolerance (default)
+  - `10.0`: Permissive (accepts moderately skewed lines)
+- **Tuning**: Decrease for precise table lines, increase for skewed documents
+
+#### `h_length_filter_ratio`
+- **Type**: `float`
+- **Default**: `0.6` (Base), `0.5` (Stages 1&2)
+- **Range**: `0.1 - 0.9`
+- **Description**: Remove horizontal lines shorter than this ratio of the longest horizontal line
+- **Examples**:
+  - `0.3`: Permissive (keeps shorter horizontal segments)
+  - `0.5`: Standard filtering (default for stages)
+  - `0.7`: Strict filtering (only keeps longer horizontal lines)
+- **Tuning**: Decrease to keep more horizontal segments, increase for quality filtering
+
+#### `v_length_filter_ratio`
+- **Type**: `float`
+- **Default**: `0.6` (Base), `0.4` (Stage 1), `0.4` (Stage 2)
+- **Range**: `0.1 - 0.9`
+- **Description**: Remove vertical lines shorter than this ratio of the longest vertical line
+- **Examples**:
+  - `0.2`: Very permissive (keeps short vertical segments)
+  - `0.4`: Standard filtering (default for stages)
+  - `0.6`: Strict filtering (Base default)
+- **Tuning**: Decrease to keep more vertical segments, increase for quality filtering
+
+### Line Merging Parameters
+
+#### `line_merge_distance_h`
+- **Type**: `int`
+- **Default**: `15`
+- **Range**: `5 - 50` pixels
+- **Description**: Maximum horizontal offset to merge horizontal lines that are slightly misaligned
+- **Examples**:
+  - `5`: Strict horizontal alignment required
+  - `15`: Standard tolerance (default)
+  - `25`: Permissive horizontal alignment
+- **Tuning**: Increase for documents with alignment issues, decrease for precise merging
+
+#### `line_merge_distance_v`
+- **Type**: `int`
+- **Default**: `15`
+- **Range**: `5 - 50` pixels
+- **Description**: Maximum vertical offset to merge vertical lines that are slightly misaligned
+- **Examples**:
+  - `5`: Strict vertical alignment required
+  - `15`: Standard tolerance (default)
+  - `25`: Permissive vertical alignment
+- **Tuning**: Increase for documents with alignment issues, decrease for precise merging
+
+#### `line_extension_tolerance`
+- **Type**: `int`
+- **Default**: `20`
+- **Range**: `5 - 60` pixels
+- **Description**: Maximum gap that can be bridged when extending lines for merging
+- **Examples**:
+  - `10`: Small gaps only
+  - `20`: Standard gap bridging (default)
+  - `40`: Large gap bridging
+- **Tuning**: Increase to connect distant segments, decrease for conservative merging
+
+#### `min_overlap_ratio`
+- **Type**: `float`
+- **Default**: `0.3`
+- **Range**: `0.0 - 0.8`
+- **Description**: Minimum overlap ratio required between line segments before merging
+- **Examples**:
+  - `0.0`: No overlap required (gap bridging only)
+  - `0.1`: Minimal overlap (10% of shorter line)
+  - `0.3`: Standard overlap (30% of shorter line, default)
+  - `0.6`: Strict overlap (60% of shorter line)
+- **Tuning**: Decrease for aggressive merging, increase for quality control
+- **Note**: Lines can also merge based on `line_extension_tolerance` even without overlap
 
 ---
 
@@ -453,10 +640,26 @@ Line detection identifies table structure by finding horizontal and vertical lin
 4. **Representative Testing**: Use diverse test images
 5. **Document Changes**: Keep notes on what works for different document types
 
+### Line Processing Pipeline Order
+
+The line detection follows a specific processing order for optimal results:
+
+1. **Step 1**: Raw morphological detection (separate horizontal/vertical kernels)
+2. **Step 2**: Orientation filtering (removes non-horizontal/vertical lines)
+3. **Step 3**: **Line merging** (connects nearby misaligned segments - CRITICAL EARLY STEP)
+4. **Step 4**: Coverage filtering (removes lines with insufficient span)
+5. **Step 5**: Length filtering (removes lines shorter than ratio of longest)
+6. **Step 6**: Deduplication (removes duplicate parallel lines)
+
+**Key Insight**: Line merging happens BEFORE coverage and length filtering. This allows short segments that individually fail quality filters to be merged together first, then evaluated as complete lines.
+
 ### Parameter Interdependencies
 - **ROI + Line Detection**: Aggressive ROI cropping may remove table lines needed for detection
 - **Deskewing + ROI**: Poor deskewing can affect ROI boundary detection
 - **Stage 1 ↔ Stage 2**: Stage 1 parameters directly affect Stage 2 input quality
+- **Morphological + Merging**: More aggressive dilation creates thicker lines that merge more easily
+- **Merging + Coverage**: Early merging allows short segments to meet coverage requirements after combination
+- **Kernel Ratios + Line Lengths**: Smaller kernel ratios detect shorter segments that benefit more from merging
 
 ### Performance Considerations
 - **Gabor Kernel Size**: Larger kernels = slower processing but more robust detection
@@ -474,6 +677,45 @@ Line detection identifies table structure by finding horizontal and vertical lin
 - **Poor Quality**: Increase noise tolerance (larger kernels, higher thresholds)
 - **Varied Content**: Use moderate parameters with good generalization
 - **Consistent Layout**: Can use more aggressive/specialized parameters
+
+### Line Merging Tuning Strategy
+
+Line merging is particularly important for fragmented table borders. Follow this systematic approach:
+
+#### Step 1: Assess Fragmentation
+Run visualization with `--show-filtering-steps` to see the pipeline:
+- Look at `step1_initial.jpg` - how fragmented are the raw lines?
+- Compare `step3_merged.jpg` vs `step4_coverage.jpg` - is merging helping?
+
+#### Step 2: Tune Merge Distance Parameters
+Start with alignment tolerance:
+- **Horizontal tables**: Focus on `line_merge_distance_h` (vertical misalignment of horizontal lines)
+- **Vertical tables**: Focus on `line_merge_distance_v` (horizontal misalignment of vertical lines)
+- **Poor scan quality**: Increase both merge distances (15→25px)
+- **Clean scans**: Decrease for precision (15→8px)
+
+#### Step 3: Adjust Extension Tolerance
+Control gap bridging:
+- **Broken borders**: Increase `line_extension_tolerance` (20→40px)
+- **Dense content**: Decrease to avoid merging separate elements (20→10px)
+
+#### Step 4: Fine-tune Overlap Requirements
+Balance quality vs. coverage:
+- **Aggressive merging**: Lower `min_overlap_ratio` (0.3→0.1)
+- **Quality control**: Higher ratio (0.3→0.6)
+- **Gap-only merging**: Set to 0.0 (relies entirely on extension_tolerance)
+
+#### Step 5: Morphological Pre-processing
+Optimize line thickness before merging:
+- **Thin lines**: Increase `v_dilate_iterations` for better vertical connection
+- **Thick lines**: Keep iterations low to preserve boundaries
+- **Asymmetric needs**: Different h/v iteration values
+
+#### Common Patterns
+- **Chinese/Dense Text**: `line_merge_distance_v=20, line_extension_tolerance=30, min_overlap_ratio=0.1`
+- **Technical Diagrams**: `line_merge_distance_h=25, line_merge_distance_v=15, min_overlap_ratio=0.2`
+- **Old/Faded Documents**: `line_extension_tolerance=40, min_overlap_ratio=0.0` (gap-bridging only)
+- **High-Quality Scans**: `line_merge_distance_h=8, line_merge_distance_v=8, min_overlap_ratio=0.5`
 
 ---
 
@@ -498,7 +740,19 @@ Line detection identifies table structure by finding horizontal and vertical lin
   },
   "line_detection": {
     "min_line_length": 20,
-    "max_line_gap": 25
+    "max_line_gap": 40,
+    "hough_threshold": 20,
+    "horizontal_kernel_ratio": 20,
+    "vertical_kernel_ratio": 15,
+    "h_dilate_iterations": 3,
+    "v_dilate_iterations": 3,
+    "line_merge_distance_h": 25,
+    "line_merge_distance_v": 25,
+    "line_extension_tolerance": 40,
+    "min_overlap_ratio": 0.1,
+    "min_table_coverage": 0.05,
+    "h_length_filter_ratio": 0.3,
+    "v_length_filter_ratio": 0.2
   }
 }
 ```
@@ -515,7 +769,44 @@ Line detection identifies table structure by finding horizontal and vertical lin
   },
   "line_detection": {
     "min_line_length": 80,
-    "max_line_gap": 5
+    "max_line_gap": 10,
+    "hough_threshold": 100,
+    "horizontal_kernel_ratio": 40,
+    "vertical_kernel_ratio": 30,
+    "h_erode_iterations": 1,
+    "h_dilate_iterations": 1,
+    "v_erode_iterations": 1,
+    "v_dilate_iterations": 1,
+    "line_merge_distance_h": 8,
+    "line_merge_distance_v": 8,
+    "line_extension_tolerance": 10,
+    "min_overlap_ratio": 0.5,
+    "min_table_coverage": 0.3,
+    "h_length_filter_ratio": 0.7,
+    "v_length_filter_ratio": 0.6
+  }
+}
+```
+
+### Optimized for Fragmented Tables
+```json
+{
+  "line_detection": {
+    "min_line_length": 10,
+    "max_line_gap": 50,
+    "hough_threshold": 30,
+    "horizontal_kernel_ratio": 25,
+    "vertical_kernel_ratio": 18,
+    "h_dilate_iterations": 2,
+    "v_dilate_iterations": 3,
+    "line_merge_distance_h": 20,
+    "line_merge_distance_v": 20,
+    "line_extension_tolerance": 30,
+    "min_overlap_ratio": 0.2,
+    "min_table_coverage": 0.08,
+    "h_length_filter_ratio": 0.4,
+    "v_length_filter_ratio": 0.3,
+    "max_parallel_distance": 8
   }
 }
 ```

@@ -153,6 +153,29 @@ data/output/
 
 ## Best Practices
 
+### Git Operations Safety
+**CRITICAL**: Before performing any git operations (stash, checkout, branch switching, etc.), always check for uncommitted changes and commit them first.
+
+Required Process:
+1. **Always run `git status` first** to check for uncommitted changes
+2. **If there are uncommitted changes, commit them** before proceeding with git operations  
+3. **Then perform the intended git operation** (stash, checkout, etc.)
+
+Example workflow:
+```bash
+# Check status first
+git status
+
+# If changes exist, commit them
+git add -A
+git commit -m "Work in progress: [describe changes]"
+
+# Then proceed with git operation
+git stash push -m "temporary backup"
+```
+
+This prevents accidental code loss and maintains system functionality during git operations.
+
 ### Development Workflow
 1. **Parameter Tuning**: Always tune parameters on representative test images before processing large datasets
 2. **Stage Validation**: Visually inspect intermediate results at each stage

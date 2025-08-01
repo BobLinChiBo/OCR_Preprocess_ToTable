@@ -23,8 +23,8 @@
     "gabor_binary_threshold": 127,
     "roi_vertical_mode": "single_best",
     "roi_horizontal_mode": "both_sides",
-    "roi_window_size_divisor": 20,
-    "roi_min_window_size": 10,
+    "roi_window_size_divisor": 10,
+    "roi_min_window_size": 8,
     "roi_min_cut_strength": 20.0,
     "roi_min_confidence_threshold": 5.0
   },
@@ -49,7 +49,23 @@
     }
   },
   "line_detection": {
-    "min_line_length": 40,
-    "max_line_gap": 15
+    "min_line_length": 5,
+    "max_line_gap": 40,
+    "hough_threshold": 5,
+    "horizontal_kernel_ratio": 30,
+    "vertical_kernel_ratio": 30,
+    "h_erode_iterations": 1,
+    "h_dilate_iterations": 1,
+    "v_erode_iterations": 1,
+    "v_dilate_iterations": 4,
+    "min_table_coverage": 0.40,
+    "max_parallel_distance": 6,
+    "angle_tolerance": 5.0,
+    "h_length_filter_ratio": 0.7,
+    "v_length_filter_ratio": 0.7,
+    "line_merge_distance_h": 10,
+    "line_merge_distance_v": 5,
+    "line_extension_tolerance": 10,
+    "max_merge_iterations": 2
   }
 }

@@ -12,6 +12,7 @@ from pathlib import Path
 import argparse
 import json
 import sys
+import time
 from typing import Dict, Any, List
 
 # Add project root to Python path
@@ -21,13 +22,28 @@ sys.path.insert(0, str(project_root))
 
 from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
 import src.ocr_pipeline.utils as ocr_utils  # noqa: E402
-from output_manager import (  # noqa: E402
+from tools.output_manager import (  # noqa: E402
     get_default_output_manager,
     organize_visualization_output,
     get_test_images,
     convert_numpy_types,
     save_step_parameters,
 )
+
+
+def create_lightweight_summary(skew_info):
+    """Create a lightweight summary of skew info, excluding heavy image data."""
+    return {
+        "rotation_angle": skew_info["rotation_angle"],
+        "confidence": skew_info["confidence"],
+        "will_rotate": skew_info["will_rotate"],
+        "method": skew_info["method"],
+        "line_count": skew_info.get("line_count", 0),
+        "best_score": skew_info.get("best_score", 0),
+        "angle_std": skew_info.get("angle_std", 0),
+        "has_lines": skew_info.get("has_lines", True),
+        # Exclude heavy data: gray, binary, deskewed_image, angles, scores, angle_histogram
+    }
 
 
 def load_config_from_file(config_path: Path = None, stage: int = 1):
@@ -60,109 +76,97 @@ def analyze_skew_detailed(
     save_intermediates=False,
     output_base=None,
 ):
-    """Enhanced skew analysis using histogram variance optimization - matches main pipeline logic.
+    """Enhanced skew analysis using the optimized utils.deskew_image function.
 
-    This function uses the exact same algorithm as utils.deskew_image() but provides
-    detailed analysis and intermediate step visualization for debugging.
+    This function uses the optimized deskew_image() function from utils.py to get both
+    the result and analysis data in a single pass, eliminating redundant computation.
     """
-    # Convert to binary for optimal histogram analysis (same as main pipeline)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Use the optimized deskewing function with analysis data
+    # For visualization purposes, use very aggressive optimization parameters
+    viz_angle_range = min(angle_range, 3)  # Limit to ±3° for visualization
+    viz_angle_step = max(angle_step, 1.0)  # Use at least 1.0° steps for speed
+    
+    print(f"    Calling deskew_image with visualization params: range=±{viz_angle_range}°, step={viz_angle_step}°")
+    try:
+        deskewed_image, detected_angle, analysis_data = ocr_utils.deskew_image(
+            image, viz_angle_range, viz_angle_step, min_angle_correction, return_analysis_data=True
+        )
+        print(f"    deskew_image returned angle: {detected_angle}")
+    except Exception as e:
+        print(f"    ERROR in deskew_image: {e}")
+        raise
 
-    # Step 1: Save grayscale and binary conversion
+    # Step 1: Save grayscale and binary conversion if requested
     if save_intermediates and output_base:
         grayscale_file = f"{output_base}_01_grayscale.jpg"
         binary_file = f"{output_base}_02_binary.jpg"
         print(f"  DEBUG: Saving grayscale to {grayscale_file}")
         print(f"  DEBUG: Saving binary to {binary_file}")
-        cv2.imwrite(grayscale_file, gray)
-        cv2.imwrite(binary_file, binary)
+        cv2.imwrite(grayscale_file, analysis_data["gray"])
+        cv2.imwrite(binary_file, analysis_data["binary"])
 
-    # Use the optimized deskewing function from utils.py instead of duplicating logic
-    _, detected_angle = ocr_utils.deskew_image(
-        image, angle_range, angle_step, min_angle_correction
-    )
+        # Step 2: Save histogram analysis visualizations
+        # Use optimized projection calculation - avoid full rotation for performance
+        # For visualization purposes, we can use a smaller preview or skip this step
+        if abs(detected_angle) > 0.1:  # Only create projection for meaningful rotations
+            # Use a smaller version for performance
+            h, w = analysis_data["binary"].shape
+            small_binary = cv2.resize(analysis_data["binary"], (w//2, h//2), interpolation=cv2.INTER_AREA)
+            best_rotated_small = cv2.warpAffine(
+                small_binary,
+                cv2.getRotationMatrix2D((w//4, h//4), detected_angle, 1.0),
+                (w//2, h//2),
+                flags=cv2.INTER_LINEAR,  # Use faster interpolation
+                borderMode=cv2.BORDER_REPLICATE,
+            )
+            best_projection = np.sum(best_rotated_small, axis=1)
+            
+            # Create projection visualization with smaller image
+            proj_vis = create_projection_visualization(
+                best_rotated_small, best_projection, detected_angle
+            )
+            cv2.imwrite(f"{output_base}_03_best_projection.jpg", proj_vis)
+        else:
+            # Skip projection visualization for minimal rotations
+            print(f"  Skipping projection visualization for minimal rotation ({detected_angle:.2f}°)")
 
-    # For visualization purposes, we still need to generate some score data
-    # Use a simplified approach that matches the optimized algorithm's coarse search
-    def histogram_variance_score(binary_img: np.ndarray, angle: float) -> float:
-        """Calculate sharpness of horizontal projection after rotation."""
-        h, w = binary_img.shape
-        center = (w // 2, h // 2)
-        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated = cv2.warpAffine(
-            binary_img,
-            rotation_matrix,
-            (w, h),
-            flags=cv2.INTER_LINEAR,  # Fast interpolation for visualization
-            borderMode=cv2.BORDER_REPLICATE,
-        )
-        horizontal_projection = np.sum(rotated, axis=1)
-        differences = horizontal_projection[1:] - horizontal_projection[:-1]
-        return np.sum(differences**2)
-
-    # Generate visualization data using coarse search (much faster than exhaustive)
-    coarse_step = max(1.0, angle_step * 5)  # Use larger steps for visualization
-    angles = np.arange(-angle_range, angle_range + coarse_step, coarse_step)
-
-    # Use downsampled image for speed (same as optimized algorithm)
-    h, w = binary.shape
-    small_binary = cv2.resize(binary, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-    scores = [histogram_variance_score(small_binary, angle) for angle in angles]
-
-    best_angle = detected_angle  # Use the accurate result from optimized algorithm
-    best_score = max(scores) if scores else 0
-
-    # Calculate confidence based on score distribution
-    score_std = np.std(scores)
-    confidence = min(1.0, best_score / (np.mean(scores) + score_std + 1e-6))
-
-    # Step 2: Save histogram analysis visualizations
-    if save_intermediates and output_base:
-        # Save best angle projection
-        best_rotated = cv2.warpAffine(
-            binary,
-            cv2.getRotationMatrix2D(
-                (binary.shape[1] // 2, binary.shape[0] // 2), best_angle, 1.0
-            ),
-            (binary.shape[1], binary.shape[0]),
-            flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE,
-        )
-        best_projection = np.sum(best_rotated, axis=1)
-
-        # Create projection visualization
-        proj_vis = create_projection_visualization(
-            best_rotated, best_projection, best_angle
-        )
-        cv2.imwrite(f"{output_base}_03_best_projection.jpg", proj_vis)
-
-        # Create angle score plot
-        score_plot = create_angle_score_plot(angles, scores, best_angle)
+        # Create angle score plot with data sampling for performance
+        print(f"  DEBUG: Creating angle score plot...")
+        # Limit data points for performance - sample every N points if too many
+        angles_to_plot = analysis_data["angles"]
+        scores_to_plot = analysis_data["scores"]
+        if len(angles_to_plot) > 50:  # Sample data if too many points
+            step = len(angles_to_plot) // 50
+            angles_to_plot = angles_to_plot[::step]
+            scores_to_plot = scores_to_plot[::step]
+        
+        score_plot = create_angle_score_plot(angles_to_plot, scores_to_plot, detected_angle)
+        print(f"  DEBUG: Angle score plot created, saving...")
         cv2.imwrite(f"{output_base}_04_angle_scores.jpg", score_plot)
+        print(f"  DEBUG: Angle score plot saved")
 
-    # Create angle histogram for compatibility with existing visualization code
+    # Create angle_histogram for compatibility with existing visualization code
     angle_histogram = {}
-    for i, angle in enumerate(angles):
-        angle_histogram[round(angle, 1)] = scores[i]
+    for i, angle in enumerate(analysis_data["angles"]):
+        if i < len(analysis_data["scores"]):
+            angle_histogram[round(angle, 1)] = analysis_data["scores"][i]
 
-    # Determine if rotation will be applied (same logic as main pipeline)
-    will_rotate = abs(best_angle) >= min_angle_correction
-
+    # Return enhanced analysis data from the optimized function including deskewed image
     return {
-        "has_lines": True,  # Always true for histogram-based analysis
-        "rotation_angle": best_angle,
-        "line_count": len(angles),  # Number of tested angles
-        "angles": angles.tolist(),
-        "scores": scores,
-        "confidence": confidence,
-        "angle_std": score_std,
+        "has_lines": analysis_data["has_lines"],
+        "rotation_angle": analysis_data["rotation_angle"],
+        "line_count": analysis_data["line_count"],
+        "angles": analysis_data["angles"],
+        "scores": analysis_data["scores"],
+        "confidence": analysis_data["confidence"],
+        "angle_std": analysis_data.get("angle_std", 0),
         "angle_histogram": angle_histogram,
-        "best_score": best_score,
-        "gray": gray,
-        "binary": binary,
-        "will_rotate": will_rotate,
-        "method": "histogram_variance",  # Identifier for visualization
+        "best_score": analysis_data["best_score"],
+        "gray": analysis_data["gray"],
+        "binary": analysis_data["binary"],
+        "will_rotate": analysis_data["will_rotate"],
+        "method": analysis_data["method"],
+        "deskewed_image": deskewed_image,  # Include the deskewed image to avoid recomputation
     }
 
 
@@ -271,7 +275,11 @@ def create_angle_score_plot(
     # Plot score curve
     points = []
     for i, (angle, score) in enumerate(zip(angles, scores)):
-        x = margin + int((i / (len(angles) - 1)) * plot_area_width)
+        # Avoid division by zero when there's only one angle
+        if len(angles) > 1:
+            x = margin + int((i / (len(angles) - 1)) * plot_area_width)
+        else:
+            x = margin + plot_area_width // 2  # Center the single point
         y = (
             plot_height
             - margin
@@ -477,7 +485,14 @@ def create_angle_histogram_plot(skew_info: Dict[str, Any]) -> np.ndarray:
 
     # Mark the selected angle (best score)
     rotation_angle = skew_info["rotation_angle"]
-    best_angle_idx = angles.index(rotation_angle) if rotation_angle in angles else -1
+    # Find closest angle index instead of exact match to avoid floating-point precision issues
+    best_angle_idx = -1
+    if angles:
+        angle_diffs = [abs(angle - rotation_angle) for angle in angles]
+        min_diff_idx = angle_diffs.index(min(angle_diffs))
+        # Only use it if the difference is small (within 0.1 degrees)
+        if angle_diffs[min_diff_idx] < 0.1:
+            best_angle_idx = min_diff_idx
     if best_angle_idx >= 0:
         x = best_angle_idx * bar_width + bar_width // 2
         cv2.line(plot_img, (x, 0), (x, plot_height - 40), (0, 255, 0), 3)
@@ -525,7 +540,8 @@ def create_deskew_comparison(
     skew_info: Dict[str, Any],
 ) -> np.ndarray:
     """Create a comprehensive comparison showing all deskew results."""
-    target_height = 500
+    # Use smaller target height to reduce memory usage and speed up processing
+    target_height = 300  # Further reduced from 400 to 300 for better performance
 
     # Resize main images
     scale = target_height / original.shape[0]
@@ -594,6 +610,10 @@ def create_deskew_comparison(
 
     comparison = np.vstack([top_row, middle_row])
 
+    # Clear intermediate arrays to free memory
+    del top_row, middle_row
+    del orig_resized, deskewed_resized, overlay_resized, binary_resized, plot_resized
+
     return comparison
 
 
@@ -606,11 +626,23 @@ def process_image_deskew_visualization(
     config_source: str = "default",
 ) -> Dict[str, Any]:
     """Process a single image and create deskew visualization."""
-    print(f"Processing: {image_path.name}")
+    print(f"  Processing: {image_path.name} (analyzing skew...)")
 
     try:
         # Load image
+        print(f"  Loading image: {image_path.name}")
         image = ocr_utils.load_image(image_path)
+        print(f"  Image loaded, shape: {image.shape}")
+        
+        # For visualization, downsample large images to improve performance
+        max_dimension = 1200  # Maximum width or height for processing
+        if max(image.shape[:2]) > max_dimension:
+            scale = max_dimension / max(image.shape[:2])
+            new_height = int(image.shape[0] * scale)
+            new_width = int(image.shape[1] * scale)
+            print(f"  Downsampling large image from {image.shape[:2]} to ({new_height}, {new_width})")
+            image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            print(f"  Image downsampled for performance")
         base_name = image_path.stem
 
         # Analyze skew with optional intermediate step saving
@@ -622,6 +654,10 @@ def process_image_deskew_visualization(
         save_intermediates = (
             command_args.get("save_intermediates", False) if command_args else False
         )
+        print(f"  Starting skew analysis with range: {config.angle_range}, step: {config.angle_step}")
+        
+        # Add performance monitoring
+        start_time = time.time()
         skew_info = analyze_skew_detailed(
             image,
             config.angle_range,
@@ -630,22 +666,34 @@ def process_image_deskew_visualization(
             save_intermediates=save_intermediates,
             output_base=output_base,
         )
+        analysis_time = time.time() - start_time
+        print(f"  Skew analysis complete in {analysis_time:.1f}s, angle: {skew_info['rotation_angle']:.2f}°")
 
-        # Get the deskewed image using the detected angle from analysis
-        deskewed, _ = ocr_utils.deskew_image(
-            image, config.angle_range, config.angle_step, config.min_angle_correction
-        )
-        # Note: We use the detected_angle from skew_info which was calculated in analyze_skew_detailed
+        # Use the deskewed image from analysis (no duplicate computation needed!)
+        print(f"  Using already computed deskewed image...")
+        deskewed = skew_info["deskewed_image"]
+        print(f"  Deskewed image ready")
 
-        # Create visualizations
+        # Create visualizations (optimized for performance)
+        print(f"  Creating visualizations...")
         overlay = draw_line_detection_overlay(image, skew_info)
+        print(f"  Line detection overlay created")
         angle_plot = create_angle_histogram_plot(skew_info)
-        binary_vis = create_binary_visualization(skew_info["binary"])
+        print(f"  Angle histogram plot created")
+        
+        # Use smaller binary image for visualization to improve performance
+        binary_small = cv2.resize(skew_info["binary"], 
+                                 (skew_info["binary"].shape[1]//2, skew_info["binary"].shape[0]//2), 
+                                 interpolation=cv2.INTER_AREA)
+        binary_vis = create_binary_visualization(binary_small)
+        print(f"  Binary visualization created")
 
         # Create comparison
+        print(f"  Creating comprehensive comparison visualization...")
         comparison = create_deskew_comparison(
             image, deskewed, overlay, angle_plot, binary_vis, skew_info
         )
+        print(f"  Comparison visualization created")
 
         if use_organized_output:
             # Create temporary files first
@@ -664,12 +712,14 @@ def process_image_deskew_visualization(
                 "comparison": str(temp_dir / f"{base_name}_08_deskew_comparison.jpg"),
             }
 
+            print(f"  Saving visualization files...")
             cv2.imwrite(temp_files["original"], image)
             # Intermediate files already saved by analyze_skew_detailed
             cv2.imwrite(temp_files["overlay"], overlay)
             cv2.imwrite(temp_files["deskewed"], deskewed)
             cv2.imwrite(temp_files["angle_plot"], angle_plot)
             cv2.imwrite(temp_files["comparison"], comparison)
+            print(f"  5 visualization files saved to temp directory")
 
             # Prepare analysis data
             analysis_data = {
@@ -728,44 +778,34 @@ def process_image_deskew_visualization(
                 "comparison": str(output_dir / f"{base_name}_08_deskew_comparison.jpg"),
             }
 
+            print(f"  Saving visualization files to flat structure...")
             cv2.imwrite(output_files["original"], image)
             # Intermediate files already saved by analyze_skew_detailed
             cv2.imwrite(output_files["overlay"], overlay)
             cv2.imwrite(output_files["deskewed"], deskewed)
             cv2.imwrite(output_files["angle_plot"], angle_plot)
             cv2.imwrite(output_files["comparison"], comparison)
+            print(f"  5 visualization files saved")
 
-            # Save analysis data
-            analysis_file = output_dir / f"{base_name}_deskew_analysis.json"
-            analysis_data = {
-                "skew_info": {
-                    k: (
-                        float(v)
-                        if isinstance(v, np.floating)
-                        else (
-                            int(v)
-                            if isinstance(v, np.integer)
-                            else (
-                                v.tolist()
-                                if isinstance(v, np.ndarray) and k != "edges"
-                                else v
-                            )
-                        )
-                    )
-                    for k, v in skew_info.items()
-                    if k != "edges"
-                },
-                "config_used": {
-                    "angle_range": config.angle_range,
-                    "angle_step": config.angle_step,
-                    "min_angle_correction": config.min_angle_correction,
-                },
-            }
+            # Save analysis data (skip if --no-params flag is set to avoid huge files)
+            if not command_args.get("no_params", False):
+                analysis_file = output_dir / f"{base_name}_deskew_analysis.json"
+                # Use lightweight summary instead of full data to prevent huge JSON files
+                analysis_data = {
+                    "skew_info": create_lightweight_summary(skew_info),
+                    "config_used": {
+                        "angle_range": config.angle_range,
+                        "angle_step": config.angle_step,
+                        "min_angle_correction": config.min_angle_correction,
+                    },
+                }
 
-            with open(analysis_file, "w") as f:
-                json.dump(convert_numpy_types(analysis_data), f, indent=2)
+                with open(analysis_file, "w") as f:
+                    json.dump(convert_numpy_types(analysis_data), f, indent=2)
 
-            output_files["analysis"] = str(analysis_file)
+                output_files["analysis"] = str(analysis_file)
+            else:
+                print(f"  Skipping detailed analysis file (--no-params flag set)")
 
         # Prepare processing results for parameter documentation
         processing_results = {
@@ -775,24 +815,27 @@ def process_image_deskew_visualization(
             "output_files": output_files,
         }
 
-        # Save parameter documentation
+        # Save parameter documentation (skip if --no-params flag is set)
         if command_args is None:
             command_args = {}
 
         param_file = None
-        try:
-            param_file = save_step_parameters(
-                step_name="deskew",
-                config_obj=config,
-                command_args=command_args,
-                processing_results=processing_results,
-                output_dir=(
-                    output_dir if not use_organized_output else output_dir.parent
-                ),
-                config_source=config_source,
-            )
-        except Exception as param_error:
-            print(f"  WARNING: Could not save parameter file: {param_error}")
+        if not command_args.get("no_params", False):
+            try:
+                param_file = save_step_parameters(
+                    step_name="deskew",
+                    config_obj=config,
+                    command_args=command_args,
+                    processing_results=processing_results,
+                    output_dir=(
+                        output_dir if not use_organized_output else output_dir.parent
+                    ),
+                    config_source=config_source,
+                )
+            except Exception as param_error:
+                print(f"  WARNING: Could not save parameter file: {param_error}")
+        else:
+            print(f"  Skipping parameter documentation (--no-params flag set)")
 
         # Include parameter file in organized output if using organized structure
         if use_organized_output and param_file:
@@ -854,6 +897,16 @@ def main():
         "--save-intermediates",
         action="store_true",
         help="Save all intermediate processing steps (grayscale, edges, raw lines, filtered lines)",
+    )
+    parser.add_argument(
+        "--fast-mode",
+        action="store_true",
+        help="Fast processing mode - minimal visualizations for pipeline use",
+    )
+    parser.add_argument(
+        "--no-params",
+        action="store_true",
+        help="Skip parameter documentation saving (prevents hanging in pipeline mode)",
     )
 
     # Config file options
@@ -937,6 +990,7 @@ def main():
         "config_file": str(args.config_file) if args.config_file else None,
         "stage": args.stage,
         "save_intermediates": args.save_intermediates,
+        "no_params": args.no_params,
     }
 
     # Determine config source
@@ -988,11 +1042,15 @@ def main():
     # Process all images
     results = []
     for i, image_path in enumerate(image_paths, 1):
-        print(f"[{i}/{len(image_paths)}] Processing: {image_path.name}")
+        print(f"\n[{i}/{len(image_paths)}] Starting: {image_path.name}")
         result = process_image_deskew_visualization(
             image_path, config, output_dir, use_organized, command_args, config_source
         )
         results.append(result)
+        if result["success"]:
+            print(f"[{i}/{len(image_paths)}] SUCCESS: {image_path.name}")
+        else:
+            print(f"[{i}/{len(image_paths)}] FAILED: {image_path.name}")
 
     # Summary
     successful_results = [r for r in results if r["success"]]
@@ -1045,6 +1103,25 @@ def main():
     # Save summary (only for flat structure, organized structure handles this automatically)
     if not use_organized:
         summary_file = output_dir / "deskew_visualization_summary.json"
+        
+        # Create lightweight summary to prevent huge JSON files
+        lightweight_results = []
+        for result in results:
+            if result["success"] and "skew_info" in result:
+                lightweight_result = {
+                    "image_name": result["image_name"],
+                    "success": result["success"],
+                    "skew_info": create_lightweight_summary(result["skew_info"]),
+                    # Exclude output_files and other heavy data
+                }
+            else:
+                lightweight_result = {
+                    "image_name": result["image_name"],
+                    "success": result["success"],
+                    "error": result.get("error", "Unknown error"),
+                }
+            lightweight_results.append(lightweight_result)
+        
         summary_data = {
             "timestamp": __import__("time").strftime("%Y-%m-%d %H:%M:%S"),
             "config_parameters": {
@@ -1052,7 +1129,7 @@ def main():
                 "angle_step": config.angle_step,
                 "min_angle_correction": config.min_angle_correction,
             },
-            "results": results,
+            "results": lightweight_results,
         }
 
         with open(summary_file, "w") as f:

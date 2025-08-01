@@ -1,257 +1,294 @@
-# OCR Pipeline Tools
+# Tools Directory
 
-Comprehensive visualization and parameter tuning tools for optimizing OCR pipeline performance on your specific document types.
+A comprehensive suite of parameter tuning, visualization, and analysis tools for the OCR Table Extraction Pipeline. These tools help optimize pipeline performance for your specific document types and provide detailed insights into processing results.
 
 ## Quick Start
 
-### Visualization (Debugging & Analysis)
-```bash
-# Complete pipeline analysis
-python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
+### Interactive Guided Tuning (Recommended)
 
-# Individual step analysis
-python tools/visualize_deskew.py image.jpg
-python tools/visualize_page_split.py image.jpg
-python tools/visualize_roi.py image.jpg
-```
-
-### Parameter Tuning (Optimization)
 ```bash
-# Interactive guided tuning
+# Start the interactive tuning process
 python tools/quick_start_tuning.py
-
-# Manual step-by-step tuning
-python tools/setup_tuning.py                 # One-time setup
-python tools/tune_page_splitting.py          # Stage 1
-python tools/tune_deskewing.py               # Stage 2  
-python tools/tune_roi_detection.py           # Stage 3
-python tools/tune_line_detection.py          # Stage 4
-python tools/run_tuned_pipeline.py input/    # Final test
 ```
 
-### Results Management
+This script guides you through the complete parameter optimization process with prompts and assistance at each stage.
+
+### Manual Step-by-Step Tuning
+
+For more control over the tuning process:
+
 ```bash
-python tools/check_results.py list           # View recent runs
-python tools/check_results.py latest deskew --view  # Open HTML report
-python tools/compare_results.py              # Compare parameter sets
+# 1. Initial setup (one-time)
+python tools/setup_tuning.py
+
+# 2. Tune each stage individually
+python tools/tune_page_splitting.py      # Stage 1: Page separation
+python tools/tune_deskewing.py           # Stage 2: Rotation correction
+python tools/tune_roi_detection.py       # Stage 3: Content area detection
+python tools/tune_line_detection.py      # Stage 4: Table line detection
+
+# 3. Test optimized parameters
+python tools/run_tuned_pipeline.py data/input/ --verbose
 ```
 
 ## Visualization Tools
 
-### Individual Step Analysis
+### Complete Analysis Suite
 
-| Script | Purpose | Key Parameters |
-|--------|---------|----------------|
-| `run_visualizations.py all --pipeline` | Complete workflow analysis | `--save-intermediates` |
-| `visualize_deskew.py` | Skew detection/correction | `--angle-range`, `--angle-step` |
-| `visualize_page_split.py` | Two-page document splitting | `--gutter-start`, `--gutter-end` |
-| `visualize_roi.py` | Region of interest detection | `--gabor-threshold`, `--cut-strength` |
-| `visualize_table_lines.py` | Table line detection | `--min-line-length`, `--kernel-h-size` |
-| `visualize_table_crop.py` | Final table cropping | `--crop-padding` |
-
-### Basic Usage Examples
 ```bash
-# Test different page splitting parameters
+# Run all visualizations for comprehensive analysis
+python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
+
+# Run specific visualization categories
+python tools/run_visualizations.py preprocessing image.jpg
+python tools/run_visualizations.py detection image.jpg
+python tools/run_visualizations.py extraction image.jpg
+```
+
+### Individual Visualization Scripts
+
+#### Page Splitting Analysis
+```bash
+# Analyze gutter detection and page separation
 python tools/visualize_page_split.py image.jpg --gutter-start 0.35 --gutter-end 0.65
+python tools/visualize_page_split.py image.jpg --show-histogram --save-debug
+```
 
-# Analyze deskewing with custom angle range
-python tools/visualize_deskew.py image.jpg --angle-range 30 --angle-step 1.0
+#### Deskewing Analysis
+```bash
+# Analyze rotation detection and correction
+python tools/visualize_deskew.py image.jpg --angle-range 30
+python tools/visualize_deskew.py image.jpg --method histogram --save-intermediates
+python tools/visualize_deskew.py image.jpg --show-line-detection
+```
 
-# ROI detection with debug output
-python tools/visualize_roi.py image.jpg --gabor-threshold 150 --save-debug
+#### ROI Detection Visualization
+```bash
+# Analyze region of interest detection
+python tools/visualize_roi.py image.jpg --method gabor --threshold 150
+python tools/visualize_roi.py image.jpg --method canny_sobel --save-debug
+python tools/visualize_roi.py image.jpg --show-projections
+```
 
-# Batch visualization
-python tools/run_visualizations.py deskew page-split roi image.jpg
+#### Table Line Detection
+```bash
+# Analyze table structure detection
+python tools/visualize_table_lines.py image.jpg --min-line-length 40
+python tools/visualize_table_lines.py image.jpg --method probabilistic --save-debug
+python tools/visualize_table_lines.py image.jpg --show-preprocessing
+```
+
+#### Table Cropping Visualization
+```bash
+# Analyze final table extraction
+python tools/visualize_table_crop.py image.jpg --margin 10
+python tools/visualize_table_crop.py image.jpg --show-boundaries
 ```
 
 ## Parameter Tuning Tools
 
-### Core Tuning Scripts
+### Page Splitting Optimization
+Tests different gutter detection parameters for double-page document separation:
 
-| Script | Stage | Parameters Tested | Output Directory |
-|--------|-------|------------------|------------------|
-| `tune_page_splitting.py` | 1 | Gutter search range | `01_split_pages/` |
-| `tune_deskewing.py` | 2 | Angle detection | `02_deskewed/` |
-| `tune_roi_detection.py` | 3 | Edge detection & cropping | `03_roi_detection/` |
-| `tune_line_detection.py` | 4 | Line detection sensitivity | `04_line_detection/` |
-
-### Support Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `setup_tuning.py` | Initialize directory structure and test setup |
-| `quick_start_tuning.py` | Interactive guided tuning process |
-| `run_tuned_pipeline.py` | Test optimized parameters on new images |
-| `compare_results.py` | Compare different parameter combinations |
-
-### Tuning Workflow
-
-1. **Setup** (one-time): `python tools/setup_tuning.py`
-2. **Stage 1 - Page Splitting**: `python tools/tune_page_splitting.py`
-   - Review results in `data/output/tuning/01_split_pages/`
-   - Copy best results to `02_deskewed_input/`
-3. **Stage 2 - Deskewing**: `python tools/tune_deskewing.py`
-   - Review results in `data/output/tuning/02_deskewed/`
-   - Manually copy best results to `03_roi_input/`
-4. **Stage 3 - ROI Detection**: `python tools/tune_roi_detection.py`
-   - Review results in `data/output/tuning/03_roi_detection/`
-   - Manually copy best results to `04_line_input/`
-5. **Stage 4 - Line Detection**: `python tools/tune_line_detection.py`
-   - Review results in `data/output/tuning/04_line_detection/`
-   - Note optimal parameters
-6. **Final Test**: Update parameters in `run_tuned_pipeline.py` and test
-
-> **📖 Detailed Guide**: See `TUNING_GUIDE.md` for comprehensive parameter tuning instructions.
-
-## Management Commands
-
-### Results Browser
 ```bash
-python tools/check_results.py list                    # List all recent runs
-python tools/check_results.py show 0                  # Show details for run #0  
-python tools/check_results.py view 0                  # Open HTML viewer
-python tools/check_results.py compare deskew          # Compare deskew runs
-python tools/check_results.py cleanup --keep 5        # Keep only latest 5 runs
+python tools/tune_page_splitting.py
 ```
 
-### Batch Operations  
+**Key Parameters:**
+- `gutter_search_start`: Start of gutter search range (0.35-0.45)
+- `gutter_search_end`: End of gutter search range (0.55-0.65)
+- `min_gutter_width`: Minimum gutter width threshold
+
+### Deskewing Optimization
+Optimizes rotation correction parameters:
+
 ```bash
-python tools/run_visualizations.py --list             # List available scripts
-python tools/run_visualizations.py all image.jpg      # Run all visualizations
-python tools/run_visualizations.py deskew roi image.jpg \
-  --deskew-args --angle-range 30 \
-  --roi-args --gabor-threshold 150
+python tools/tune_deskewing.py
 ```
 
-## Parameter Reference
+**Key Parameters:**
+- `angle_range`: Maximum rotation angle to test (5-20°)
+- `angle_step`: Angle increment precision (0.1-0.5°)
+- `min_angle_correction`: Minimum angle threshold for correction
 
-### Key Parameters by Stage
+### ROI Detection Optimization
+Tunes content area detection algorithms:
 
-**Page Splitting**
-- `--gutter-start 0.3-0.5` - Where to start looking for page boundary
-- `--gutter-end 0.5-0.7` - Where to stop looking for page boundary
-- `--min-gutter-width 20-100` - Minimum gap width (pixels)
+```bash
+python tools/tune_roi_detection.py
+```
 
-**Deskewing**  
-- `--angle-range 5-30` - Maximum rotation to detect (degrees)
-- `--angle-step 0.1-1.0` - Detection precision (degrees)
-- `--min-angle-correction 0.1-2.0` - Minimum angle to trigger rotation
+**Key Parameters:**
+- `method`: Detection algorithm (`gabor`, `canny_sobel`, `adaptive_threshold`)
+- `gabor_binary_threshold`: Gabor filter threshold (90-180)
+- `roi_min_cut_strength`: Minimum boundary strength (10-30)
 
-**ROI Detection**
-- `--gabor-threshold 90-180` - Edge detection sensitivity
-- `--cut-strength 5.0-30.0` - Content boundary detection strength
-- `--gabor-kernel-size 21-51` - Edge filter size
+### Line Detection Optimization
+Optimizes table structure detection:
 
-**Line Detection**
-- `--min-line-length 20-80` - Minimum line length (pixels)
-- `--max-line-gap 5-25` - Maximum gap to bridge in broken lines
-- `--kernel-h-size 20-80` - Horizontal morphology kernel size
+```bash
+python tools/tune_line_detection.py
+```
 
-### Interpreting Results
+**Key Parameters:**
+- `min_line_length`: Minimum line length to detect (20-80 pixels)
+- `max_line_gap`: Maximum gap to bridge in lines (5-25 pixels)
+- `line_detection_method`: Algorithm choice (`hough`, `probabilistic`)
 
-**✅ Good Results**
-- **Page Split**: Clean boundary, equal page widths, no text cutting
-- **Deskew**: Horizontal text lines, reasonable rotation angle
-- **ROI**: Precise content focus, appropriate margin removal
-- **Lines**: Clear table grid detection, minimal noise
+## Results Management Tools
 
-**❌ Needs Adjustment**
-- **Split Issues**: Adjust gutter search range or width threshold
-- **Deskew Issues**: Modify angle range or correction threshold  
-- **ROI Issues**: Adjust threshold or cut strength parameters
-- **Line Issues**: Change line length or morphology parameters
+### Results Analysis
+```bash
+# List all available results
+python tools/check_results.py list
+
+# View specific results
+python tools/check_results.py view latest
+python tools/check_results.py view "2024-01-15_14:30:45"
+
+# Clean up old results
+python tools/check_results.py cleanup --older-than 7d
+```
+
+### Results Comparison
+```bash
+# Compare different parameter sets
+python tools/compare_results.py
+
+# Compare specific runs
+python tools/compare_results.py --run1 "2024-01-15_14:30:45" --run2 "2024-01-15_15:45:22"
+
+# Generate comparison report
+python tools/compare_results.py --export-report comparison_report.json
+```
+
+## Configuration Management
+
+### Test Configuration
+```bash
+# Validate configuration files
+python tools/test_config_loading.py
+
+# Test custom configurations
+python tools/test_config_loading.py --config configs/my_custom_config.json
+```
+
+### Tuned Pipeline Execution
+```bash
+# Run pipeline with optimized parameters
+python tools/run_tuned_pipeline.py data/input/ --verbose
+
+# Use specific tuned configuration
+python tools/run_tuned_pipeline.py data/input/ --config tuned_params.json
+```
+
+## Tool Categories
+
+### Setup and Initialization
+- `setup_tuning.py` - One-time setup for parameter tuning
+- `setup_tuning_windows.py` - Windows-specific setup script
+
+### Parameter Optimization
+- `tune_page_splitting.py` - Page separation parameter tuning
+- `tune_deskewing.py` - Rotation correction optimization
+- `tune_roi_detection.py` - Content area detection tuning
+- `tune_line_detection.py` - Table line detection optimization
+
+### Visualization and Analysis
+- `run_visualizations.py` - Master visualization runner
+- `visualize_page_split.py` - Page splitting analysis
+- `visualize_deskew.py` - Deskewing analysis
+- `visualize_roi.py` - ROI detection visualization
+- `visualize_table_lines.py` - Table line detection analysis
+- `visualize_table_crop.py` - Final table extraction visualization
+
+### Results Management
+- `check_results.py` - Results exploration and cleanup
+- `compare_results.py` - Parameter comparison and analysis
+- `output_manager.py` - Output directory management utilities
+
+### Pipeline Execution
+- `quick_start_tuning.py` - Interactive guided tuning
+- `run_tuned_pipeline.py` - Execute pipeline with optimized parameters
+- `test_config_loading.py` - Configuration validation
+
+## Best Practices
+
+### Parameter Tuning Workflow
+
+1. **Start with representative test images** (6 diverse samples)
+2. **Use interactive tuning** for first-time users
+3. **Tune stages sequentially** - each stage depends on previous ones
+4. **Visually inspect results** at each parameter setting
+5. **Document successful parameter combinations** for future use
+
+### Visualization Strategy
+
+1. **Use complete analysis suite** for comprehensive understanding
+2. **Focus on problem areas** with individual visualization tools
+3. **Save intermediate results** when debugging issues
+4. **Compare different parameter sets** side-by-side
+
+### Performance Optimization
+
+1. **Test on small sample sets** before processing large datasets
+2. **Use debug mode selectively** - generates large files
+3. **Clean up tuning outputs regularly** to manage disk space
+4. **Document optimal parameters** for different document types
+
+## Common Use Cases
+
+### New Document Type
+```bash
+# Complete parameter optimization for new document type
+python tools/quick_start_tuning.py
+python tools/run_visualizations.py all --pipeline representative_image.jpg
+```
+
+### Troubleshooting Poor Results
+```bash
+# Analyze each stage individually
+python tools/visualize_page_split.py problematic_image.jpg --save-debug
+python tools/visualize_deskew.py problematic_image.jpg --show-line-detection
+python tools/visualize_roi.py problematic_image.jpg --method gabor --show-projections
+```
+
+### Performance Comparison
+```bash
+# Compare different parameter sets
+python tools/tune_roi_detection.py  # Try different ROI methods
+python tools/compare_results.py     # Compare results quantitatively
+```
+
+### Batch Processing Preparation
+```bash
+# Optimize on test set, then process full dataset
+python tools/run_tuned_pipeline.py data/input/test_images/ --verbose
+python tools/run_tuned_pipeline.py data/input/raw_images/ --config optimized_params.json
+```
 
 ## Output Organization
 
-### Visualization Outputs (Default: Organized Structure)
-```
-visualization_outputs/
-├── deskew_20240726_143022/
-│   ├── images/           # Visual outputs
-│   ├── analysis/         # JSON metrics  
-│   ├── comparisons/      # Overlay images
-│   └── results.html      # Summary report
-└── page_split_20240726_143105/
-    └── ...
-```
+All tools organize outputs in structured directories:
 
-### Tuning Outputs
 ```
-data/output/tuning/
-├── 01_split_pages/
-│   ├── start0.4_end0.6_width50/     # Parameter combinations
-│   └── parameter_test_summary.txt
-├── 02_deskewed/ 
-├── 03_roi_detection/
-└── 04_line_detection/
+data/output/
+├── tuning/                    # Parameter optimization results
+│   ├── 01_split_pages/       # Page splitting tests
+│   ├── 02_deskewed/          # Deskewing tests
+│   ├── 03_roi_detection/     # ROI detection tests
+│   └── 04_line_detection/    # Line detection tests
+├── visualization/             # Visualization outputs
+│   └── pipeline_YYYYMMDD_HHMMSS/
+└── comparison/               # Results comparison data
 ```
 
-## Advanced Usage
+## Integration with Main Pipeline
 
-### Configuration Files
-```bash
-# Create parameter config
-echo '{
-  "gutter_search_start": 0.35,
-  "enable_roi_detection": true,
-  "gabor_binary_threshold": 150,
-  "min_line_length": 80
-}' > config.json
+The tools directory integrates seamlessly with the main pipeline:
 
-# Use with pipeline (note: config files not yet supported with run_visualizations.py)
-python tools/run_visualizations.py all --pipeline image.jpg
-```
+- **Parameter files** generated by tuning tools are compatible with main pipeline configs
+- **Visualization outputs** help validate main pipeline results
+- **Optimized parameters** can be directly used in production processing
 
-### Batch Processing
-```bash
-# Test multiple images
-python tools/run_visualizations.py all --pipeline input/*.jpg --save-intermediates
-
-# Parameter sensitivity testing
-for t in 100 120 140 160; do
-  python tools/visualize_roi.py image.jpg --gabor-threshold $t --output-dir "test_$t"
-done
-```
-
-## Troubleshooting
-
-**Setup Issues**
-- Ensure test images exist in `data/input/test_images/`
-- Check that output directories have write permissions
-- Verify OpenCV and dependencies are installed
-
-**Poor Results**
-- Use higher resolution images (300+ DPI recommended)
-- Ensure good contrast between text and background
-- Try preprocessing for noisy or low-quality documents
-
-**Performance Issues**
-- Start with smaller test sets before scaling up
-- Use `--verbose` flag to identify bottlenecks
-- Consider resizing very large images for tuning
-
-**Memory Issues**
-- Process images individually before batch operations
-- Clean up intermediate results if disk space is limited
-- Use `--save-intermediates` selectively
-
-## Workflow Recommendations
-
-### For New Document Types
-1. **Quick Assessment**: `python tools/run_visualizations.py all --pipeline sample.jpg --save-intermediates`
-2. **Identify Problems**: Review comparison images to find issues
-3. **Systematic Tuning**: Use `python tools/quick_start_tuning.py` for guided optimization
-4. **Validation**: Test optimized parameters on larger dataset with `run_tuned_pipeline.py`
-
-### For Production Use  
-1. **Document Parameters**: Save optimal settings in configuration files
-2. **Version Control**: Track parameter changes over time
-3. **Monitoring**: Regularly validate performance on new document batches
-4. **Re-tuning**: Re-evaluate parameters as document types evolve
-
----
-
-**📖 Additional Resources**
-- `TUNING_GUIDE.md` - Comprehensive parameter tuning guide
-- `tuning_progress.md` - Progress tracking template
-- Individual script help: `python tools/[script_name].py --help`
+For detailed pipeline usage, see the main project [README.md](../README.md) and [docs/CLAUDE.md](../docs/CLAUDE.md).

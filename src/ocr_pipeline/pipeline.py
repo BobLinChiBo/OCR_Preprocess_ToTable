@@ -63,7 +63,25 @@ class OCRPipeline:
 
             # Detect table lines
             h_lines, v_lines = utils.detect_table_lines(
-                processing_image, self.config.min_line_length, self.config.max_line_gap
+                processing_image,
+                min_line_length=self.config.min_line_length,
+                max_line_gap=self.config.max_line_gap,
+                hough_threshold=self.config.hough_threshold,
+                horizontal_kernel_ratio=getattr(self.config, 'horizontal_kernel_ratio', 30),
+                vertical_kernel_ratio=getattr(self.config, 'vertical_kernel_ratio', 30),
+                h_erode_iterations=getattr(self.config, 'h_erode_iterations', 1),
+                h_dilate_iterations=getattr(self.config, 'h_dilate_iterations', 1),
+                v_erode_iterations=getattr(self.config, 'v_erode_iterations', 1),
+                v_dilate_iterations=getattr(self.config, 'v_dilate_iterations', 1),
+                min_table_coverage=getattr(self.config, 'min_table_coverage', 0.15),
+                max_parallel_distance=getattr(self.config, 'max_parallel_distance', 12),
+                angle_tolerance=getattr(self.config, 'angle_tolerance', 5.0),
+                h_length_filter_ratio=getattr(self.config, 'h_length_filter_ratio', 0.6),
+                v_length_filter_ratio=getattr(self.config, 'v_length_filter_ratio', 0.6),
+                line_merge_distance_h=getattr(self.config, 'line_merge_distance_h', 15),
+                line_merge_distance_v=getattr(self.config, 'line_merge_distance_v', 15),
+                line_extension_tolerance=getattr(self.config, 'line_extension_tolerance', 20),
+                max_merge_iterations=getattr(self.config, 'max_merge_iterations', 3)
             )
 
             # Crop to table region
@@ -213,8 +231,24 @@ class TwoStageOCRPipeline:
                     # Table line detection
                     h_lines, v_lines = utils.detect_table_lines(
                         processing_image,
-                        self.stage1_config.min_line_length,
-                        self.stage1_config.max_line_gap,
+                        min_line_length=self.stage1_config.min_line_length,
+                        max_line_gap=self.stage1_config.max_line_gap,
+                        hough_threshold=self.stage1_config.hough_threshold,
+                        horizontal_kernel_ratio=getattr(self.stage1_config, 'horizontal_kernel_ratio', 30),
+                        vertical_kernel_ratio=getattr(self.stage1_config, 'vertical_kernel_ratio', 30),
+                        h_erode_iterations=getattr(self.stage1_config, 'h_erode_iterations', 1),
+                        h_dilate_iterations=getattr(self.stage1_config, 'h_dilate_iterations', 1),
+                        v_erode_iterations=getattr(self.stage1_config, 'v_erode_iterations', 1),
+                        v_dilate_iterations=getattr(self.stage1_config, 'v_dilate_iterations', 1),
+                        min_table_coverage=getattr(self.stage1_config, 'min_table_coverage', 0.15),
+                        max_parallel_distance=getattr(self.stage1_config, 'max_parallel_distance', 12),
+                        angle_tolerance=getattr(self.stage1_config, 'angle_tolerance', 5.0),
+                        h_length_filter_ratio=getattr(self.stage1_config, 'h_length_filter_ratio', 0.6),
+                        v_length_filter_ratio=getattr(self.stage1_config, 'v_length_filter_ratio', 0.6),
+                        line_merge_distance_h=getattr(self.stage1_config, 'line_merge_distance_h', 15),
+                        line_merge_distance_v=getattr(self.stage1_config, 'line_merge_distance_v', 15),
+                        line_extension_tolerance=getattr(self.stage1_config, 'line_extension_tolerance', 20),
+                        max_merge_iterations=getattr(self.stage1_config, 'max_merge_iterations', 3)
                     )
 
                     # TODO: Save line detection visualization
@@ -315,8 +349,24 @@ class TwoStageOCRPipeline:
                 # Refined line detection with tighter parameters
                 h_lines, v_lines = utils.detect_table_lines(
                     refined_deskewed,
-                    self.stage2_config.min_line_length,
-                    self.stage2_config.max_line_gap,
+                    min_line_length=self.stage2_config.min_line_length,
+                    max_line_gap=self.stage2_config.max_line_gap,
+                    hough_threshold=self.stage2_config.hough_threshold,
+                    horizontal_kernel_ratio=getattr(self.stage2_config, 'horizontal_kernel_ratio', 30),
+                    vertical_kernel_ratio=getattr(self.stage2_config, 'vertical_kernel_ratio', 30),
+                    h_erode_iterations=getattr(self.stage2_config, 'h_erode_iterations', 1),
+                    h_dilate_iterations=getattr(self.stage2_config, 'h_dilate_iterations', 1),
+                    v_erode_iterations=getattr(self.stage2_config, 'v_erode_iterations', 1),
+                    v_dilate_iterations=getattr(self.stage2_config, 'v_dilate_iterations', 1),
+                    min_table_coverage=getattr(self.stage2_config, 'min_table_coverage', 0.3),
+                    max_parallel_distance=getattr(self.stage2_config, 'max_parallel_distance', 10),
+                    angle_tolerance=getattr(self.stage2_config, 'angle_tolerance', 5.0),
+                    h_length_filter_ratio=getattr(self.stage2_config, 'h_length_filter_ratio', 0.6),
+                    v_length_filter_ratio=getattr(self.stage2_config, 'v_length_filter_ratio', 0.6),
+                    line_merge_distance_h=getattr(self.stage2_config, 'line_merge_distance_h', 15),
+                    line_merge_distance_v=getattr(self.stage2_config, 'line_merge_distance_v', 15),
+                    line_extension_tolerance=getattr(self.stage2_config, 'line_extension_tolerance', 20),
+                    max_merge_iterations=getattr(self.stage2_config, 'max_merge_iterations', 3)
                 )
 
                 # TODO: Save refined line detection

@@ -995,6 +995,23 @@ def process_image_visualization(
             v_plot_path = output_dir / f"{image_path.stem}_vertical_projection.jpg"
             cv2.imwrite(str(v_plot_path), vertical_plot)
             projection_files["vertical_projection"] = str(v_plot_path)
+            
+            # Save vertical projection data as JSON
+            v_data_path = output_dir / f"{image_path.stem}_vertical_projection_data.json"
+            vertical_data = {
+                "projection": vertical_info["projection"].tolist(),
+                "roi_left": roi_coords["roi_left"],
+                "roi_right": roi_coords["roi_right"],
+                "left_cut_applied": vertical_info.get("left_cut_applied", False),
+                "right_cut_applied": vertical_info.get("right_cut_applied", False),
+                "left_cut_strength": vertical_info.get("left_cut_strength", 0),
+                "right_cut_strength": vertical_info.get("right_cut_strength", 0),
+                "image_height": image.shape[0],
+                "image_width": image.shape[1]
+            }
+            with open(v_data_path, 'w') as f:
+                json.dump(vertical_data, f, indent=2)
+            projection_files["vertical_projection_data"] = str(v_data_path)
 
         if horizontal_info:
             horizontal_plot = create_horizontal_projection_plot(
@@ -1003,6 +1020,23 @@ def process_image_visualization(
             h_plot_path = output_dir / f"{image_path.stem}_horizontal_projection.jpg"
             cv2.imwrite(str(h_plot_path), horizontal_plot)
             projection_files["horizontal_projection"] = str(h_plot_path)
+            
+            # Save horizontal projection data as JSON
+            h_data_path = output_dir / f"{image_path.stem}_horizontal_projection_data.json"
+            horizontal_data = {
+                "projection": horizontal_info["projection"].tolist(),
+                "roi_top": roi_coords["roi_top"],
+                "roi_bottom": roi_coords["roi_bottom"],
+                "top_cut_applied": horizontal_info.get("top_cut_applied", False),
+                "bottom_cut_applied": horizontal_info.get("bottom_cut_applied", False),
+                "top_cut_strength": horizontal_info.get("top_cut_strength", 0),
+                "bottom_cut_strength": horizontal_info.get("bottom_cut_strength", 0),
+                "image_height": image.shape[0],
+                "image_width": image.shape[1]
+            }
+            with open(h_data_path, 'w') as f:
+                json.dump(horizontal_data, f, indent=2)
+            projection_files["horizontal_projection_data"] = str(h_data_path)
 
         # Save outputs
         base_name = image_path.stem
@@ -1013,6 +1047,14 @@ def process_image_visualization(
         cv2.imwrite(str(output_dir / f"{base_name}_roi_overlay.jpg"), roi_overlay)
         cv2.imwrite(str(output_dir / f"{base_name}_roi_cropped.jpg"), cropped_roi)
         cv2.imwrite(str(output_dir / f"{base_name}_comparison.jpg"), comparison)
+
+        # Create processed_images subdirectory for pipeline use
+        processed_dir = output_dir / "processed_images"
+        processed_dir.mkdir(exist_ok=True)
+        
+        # Copy main output images to processed_images (for pipeline stages)
+        # Only copy the essential images that subsequent stages should process
+        cv2.imwrite(str(processed_dir / f"{base_name}_roi_cropped.jpg"), cropped_roi)
 
         # Save debug images if requested
         debug_files = {}

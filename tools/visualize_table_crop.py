@@ -34,14 +34,18 @@ from output_manager import (
 
 def analyze_table_crop_detailed(
     image: np.ndarray,
-    min_line_length: int = 100,
-    max_line_gap: int = 10,
+    min_line_length: int = 400,
+    max_line_gap: int = 30,
+    hough_threshold: int = 300,
     crop_padding: int = 10,
 ) -> Dict[str, Any]:
     """Enhanced table cropping analysis with detailed boundary detection."""
     # First detect lines using shared function
     h_lines, v_lines = detect_table_lines(
-        image, min_line_length=min_line_length, max_line_gap=max_line_gap
+        image, 
+        min_line_length=min_line_length, 
+        max_line_gap=max_line_gap,
+        hough_threshold=hough_threshold
     )
 
     # Then crop using shared function

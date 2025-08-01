@@ -37,9 +37,10 @@ def test_line_detection_parameters():
     input_dir = Path("data/output/tuning/04_line_input")
     output_base = Path("data/output/tuning/04_line_detection")
 
-    # Parameter ranges to test
-    min_line_lengths = [20, 30, 40, 50, 60, 80]
-    max_line_gaps = [5, 10, 15, 20, 25]
+    # Parameter ranges to test (updated for text-aware method)
+    min_line_lengths = [200, 300, 400, 500, 600]
+    max_line_gaps = [15, 20, 30, 40, 50]
+    hough_thresholds = [150, 200, 250, 300, 350]
 
     print("[CONFIG] LINE DETECTION PARAMETER TUNING")
     print("=" * 50)
@@ -74,22 +75,23 @@ def test_line_detection_parameters():
     output_base.mkdir(parents=True, exist_ok=True)
 
     # Create parameter combinations
-    param_combinations = list(itertools.product(min_line_lengths, max_line_gaps))
+    param_combinations = list(itertools.product(min_line_lengths, max_line_gaps, hough_thresholds))
 
     print(f"Testing {len(param_combinations)} parameter combinations:")
-    print("Parameters: min_line_length, max_line_gap")
+    print("Parameters: min_line_length, max_line_gap, hough_threshold")
 
     results_summary = []
 
     # Test each parameter combination
-    for i, (min_line_length, max_line_gap) in enumerate(param_combinations, 1):
-        param_name = f"minlen{min_line_length}_maxgap{max_line_gap}"
+    for i, (min_line_length, max_line_gap, hough_threshold) in enumerate(param_combinations, 1):
+        param_name = f"minlen{min_line_length}_maxgap{max_line_gap}_hough{hough_threshold}"
         param_dir = output_base / param_name
         param_dir.mkdir(exist_ok=True)
 
         print(f"\n[{i}/{len(param_combinations)}] Testing: {param_name}")
         print(f"  min_line_length: {min_line_length}px")
         print(f"  max_line_gap: {max_line_gap}px")
+        print(f"  hough_threshold: {hough_threshold}")
 
         line_log = []  # Track line detection results
 
@@ -104,6 +106,7 @@ def test_line_detection_parameters():
                     image,
                     min_line_length=min_line_length,
                     max_line_gap=max_line_gap,
+                    hough_threshold=hough_threshold,
                     return_analysis=True,
                 )
 

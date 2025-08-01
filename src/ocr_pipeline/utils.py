@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -119,6 +120,7 @@ def deskew_image(
     angle_range: int = 15,
     angle_step: float = 0.5,
     min_angle_correction: float = 0.5,
+    return_analysis_data: bool = False,
 ) -> tuple:
     """Deskew image using optimized coarse-to-fine histogram variance optimization.
 
@@ -137,8 +139,9 @@ def deskew_image(
         angle_range: Maximum rotation angle in degrees (±)
         angle_step: Step size for fine search in degrees
         min_angle_correction: Minimum angle threshold to apply correction
+        return_analysis_data: If True, return additional analysis data for visualization
     Returns:
-        tuple: (deskewed_image, detected_angle)
+        tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
     """
     # Convert to binary for optimal histogram analysis
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
@@ -219,6 +222,29 @@ def deskew_image(
 
     # Apply rotation only if significant
     if abs(best_angle) < min_angle_correction:
+        if return_analysis_data:
+            # Create analysis data even when no rotation is applied
+            all_angles = list(coarse_angles[:len(coarse_scores)]) + list(fine_angles)
+            all_scores = coarse_scores + fine_scores
+            analysis_data = {
+                "has_lines": True,
+                "rotation_angle": 0.0,
+                "angles": all_angles,
+                "scores": all_scores,
+                "coarse_angles": list(coarse_angles[:len(coarse_scores)]),
+                "coarse_scores": coarse_scores,
+                "fine_angles": list(fine_angles),
+                "fine_scores": fine_scores,
+                "best_score": max(all_scores) if all_scores else 0,
+                "confidence": 1.0,
+                "will_rotate": False,
+                "method": "histogram_variance",
+                "gray": gray,
+                "binary": binary,
+                "line_count": len(all_angles),
+                "angle_std": 0.0,
+            }
+            return image, 0.0, analysis_data
         return image, 0.0
 
     # Apply optimal rotation to original color image with high quality interpolation
@@ -232,6 +258,37 @@ def deskew_image(
         flags=cv2.INTER_CUBIC,  # High quality for final result
         borderMode=cv2.BORDER_REPLICATE,
     )
+    
+    if return_analysis_data:
+        # Create comprehensive analysis data for visualization
+        all_angles = list(coarse_angles[:len(coarse_scores)]) + list(fine_angles)
+        all_scores = coarse_scores + fine_scores
+        
+        # Calculate confidence based on score distribution
+        score_std = np.std(all_scores)
+        best_score = max(all_scores) if all_scores else 0
+        confidence = min(1.0, best_score / (np.mean(all_scores) + score_std + 1e-6))
+        
+        analysis_data = {
+            "has_lines": True,
+            "rotation_angle": best_angle,
+            "angles": all_angles,
+            "scores": all_scores,
+            "coarse_angles": list(coarse_angles[:len(coarse_scores)]),
+            "coarse_scores": coarse_scores,
+            "fine_angles": list(fine_angles),
+            "fine_scores": fine_scores,
+            "best_score": best_score,
+            "confidence": confidence,
+            "angle_std": score_std,
+            "will_rotate": True,
+            "method": "histogram_variance",
+            "gray": gray,
+            "binary": binary,
+            "line_count": len(all_angles),
+        }
+        return deskewed, best_angle, analysis_data
+    
     return deskewed, best_angle
 
 
@@ -452,45 +509,55 @@ def find_vertical_cuts(
     min_cut_strength: float = 10.0,
     min_confidence_threshold: float = 5.0,
 ) -> Tuple[int, int, Dict]:
-    """Find vertical cuts in the binary mask using sliding window approach."""
+    """Find vertical cuts in the binary mask using optimized vectorized sliding window approach."""
     height, width = binary_mask.shape
     vertical_projection = np.sum(binary_mask // 255, axis=0)
 
     window_size = max(width // window_size_divisor, min_window_size)
 
-    # Find left cut (search only in leftmost 30%)
+    # Find left cut (search only in leftmost 30%) - OPTIMIZED VECTORIZED VERSION
     left_search_end = int(width * 0.3)
     max_drop_left = 0
     cut_x_left = 0
-    for i in range(window_size, left_search_end):
-        drop = (
-            abs(
-                float(vertical_projection[i])
-                - float(vertical_projection[i - window_size])
-            )
-            if i - window_size > 0
-            else 0
-        )
-        if drop > max_drop_left:
-            max_drop_left = drop
-            cut_x_left = i
+    
+    if left_search_end > window_size:
+        # Create search range exactly matching original: range(window_size, left_search_end)
+        search_indices = np.arange(window_size, left_search_end)
+        # Apply original bounds check: if i - window_size > 0 (always true since i >= window_size)
+        left_values = vertical_projection[search_indices].astype(float)
+        left_prev_values = vertical_projection[search_indices - window_size].astype(float)
+        left_drops = np.abs(left_values - left_prev_values)
+        
+        # Find maximum drop position exactly as original
+        if len(left_drops) > 0:
+            max_drop_idx = np.argmax(left_drops)
+            max_drop_left = float(left_drops[max_drop_idx])
+            cut_x_left = int(search_indices[max_drop_idx])
 
-    # Find right cut (search only in rightmost 30%)
+    # Find right cut (search only in rightmost 30%) - OPTIMIZED VECTORIZED VERSION  
     right_search_end = int(width * 0.7)
     max_drop_right = 0
     cut_x_right = width
-    for i in range(width - window_size, right_search_end, -1):
-        drop = (
-            abs(
-                float(vertical_projection[i])
-                - float(vertical_projection[i + window_size])
-            )
-            if i + window_size < width
-            else 0
-        )
-        if drop > max_drop_right:
-            max_drop_right = drop
-            cut_x_right = i
+    
+    # Create search range exactly matching original: range(width - window_size, right_search_end, -1)
+    right_search_start = width - window_size
+    if right_search_start >= right_search_end:
+        search_indices = np.arange(right_search_start, right_search_end - 1, -1)  # -1 to match range behavior
+        
+        # Apply original bounds check: if i + window_size < width
+        valid_mask = search_indices + window_size < width
+        search_indices = search_indices[valid_mask]
+        
+        if len(search_indices) > 0:
+            # Vectorized calculation matching original logic
+            right_values = vertical_projection[search_indices].astype(float)
+            right_next_values = vertical_projection[search_indices + window_size].astype(float)
+            right_drops = np.abs(right_values - right_next_values)
+            
+            # Find maximum drop position exactly as original
+            max_drop_idx = np.argmax(right_drops)
+            max_drop_right = float(right_drops[max_drop_idx])
+            cut_x_right = int(search_indices[max_drop_idx])
 
     # Evaluate whether cuts should be applied
     apply_left_cut = (
@@ -561,45 +628,55 @@ def find_horizontal_cuts(
     min_cut_strength: float = 10.0,
     min_confidence_threshold: float = 5.0,
 ) -> Tuple[int, int, Dict]:
-    """Find horizontal cuts in the binary mask using sliding window approach."""
+    """Find horizontal cuts in the binary mask using optimized vectorized sliding window approach."""
     height, width = binary_mask.shape
     horizontal_projection = np.sum(binary_mask // 255, axis=1)
 
     window_size = max(height // window_size_divisor, min_window_size)
 
-    # Find top cut (search only in topmost 30%)
+    # Find top cut (search only in topmost 30%) - OPTIMIZED VECTORIZED VERSION
     top_search_end = int(height * 0.3)
     max_drop_top = 0
     cut_y_top = 0
-    for i in range(window_size, top_search_end):
-        drop = (
-            abs(
-                float(horizontal_projection[i])
-                - float(horizontal_projection[i - window_size])
-            )
-            if i - window_size > 0
-            else 0
-        )
-        if drop > max_drop_top:
-            max_drop_top = drop
-            cut_y_top = i
+    
+    if top_search_end > window_size:
+        # Create search range exactly matching original: range(window_size, top_search_end)
+        search_indices = np.arange(window_size, top_search_end)
+        # Apply original bounds check: if i - window_size > 0 (always true since i >= window_size)
+        top_values = horizontal_projection[search_indices].astype(float)
+        top_prev_values = horizontal_projection[search_indices - window_size].astype(float)
+        top_drops = np.abs(top_values - top_prev_values)
+        
+        # Find maximum drop position exactly as original
+        if len(top_drops) > 0:
+            max_drop_idx = np.argmax(top_drops)
+            max_drop_top = float(top_drops[max_drop_idx])
+            cut_y_top = int(search_indices[max_drop_idx])
 
-    # Find bottom cut (search only in bottommost 30%)
+    # Find bottom cut (search only in bottommost 30%) - OPTIMIZED VECTORIZED VERSION
     bottom_search_end = int(height * 0.7)
     max_drop_bottom = 0
     cut_y_bottom = height
-    for i in range(height - window_size, bottom_search_end, -1):
-        drop = (
-            abs(
-                float(horizontal_projection[i])
-                - float(horizontal_projection[i + window_size])
-            )
-            if i + window_size < height
-            else 0
-        )
-        if drop > max_drop_bottom:
-            max_drop_bottom = drop
-            cut_y_bottom = i
+    
+    # Create search range exactly matching original: range(height - window_size, bottom_search_end, -1)
+    bottom_search_start = height - window_size
+    if bottom_search_start >= bottom_search_end:
+        search_indices = np.arange(bottom_search_start, bottom_search_end - 1, -1)  # -1 to match range behavior
+        
+        # Apply original bounds check: if i + window_size < height
+        valid_mask = search_indices + window_size < height
+        search_indices = search_indices[valid_mask]
+        
+        if len(search_indices) > 0:
+            # Vectorized calculation matching original logic
+            bottom_values = horizontal_projection[search_indices].astype(float)
+            bottom_next_values = horizontal_projection[search_indices + window_size].astype(float)
+            bottom_drops = np.abs(bottom_values - bottom_next_values)
+            
+            # Find maximum drop position exactly as original
+            max_drop_idx = np.argmax(bottom_drops)
+            max_drop_bottom = float(bottom_drops[max_drop_idx])
+            cut_y_bottom = int(search_indices[max_drop_idx])
 
     # Evaluate whether cuts should be applied
     apply_top_cut = (
@@ -659,6 +736,37 @@ def find_horizontal_cuts(
         )
 
 
+@lru_cache(maxsize=16)
+def _get_cached_gabor_kernels(
+    kernel_size: int, sigma: float, lambda_val: float, gamma: float
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Create and cache Gabor kernels for vertical and horizontal orientations.
+    
+    Caching prevents expensive kernel recreation for repeated operations.
+    Cache size of 16 handles multiple parameter combinations efficiently.
+    """
+    # Create Gabor kernels for vertical and horizontal orientations only
+    vertical_kernel = cv2.getGaborKernel(
+        (kernel_size, kernel_size),
+        sigma,
+        0.0,  # 0° (vertical)
+        lambda_val,
+        gamma,
+        0,
+        ktype=cv2.CV_32F,
+    )
+    horizontal_kernel = cv2.getGaborKernel(
+        (kernel_size, kernel_size),
+        sigma,
+        float(np.pi / 2),  # 90° (horizontal)
+        lambda_val,
+        gamma,
+        0,
+        ktype=cv2.CV_32F,
+    )
+    return vertical_kernel, horizontal_kernel
+
+
 def detect_roi_gabor(
     image: np.ndarray,
     kernel_size: int = 31,
@@ -667,30 +775,22 @@ def detect_roi_gabor(
     gamma: float = 0.5,
     binary_threshold: int = 127,
 ) -> np.ndarray:
-    """Apply Gabor filters to detect edge structures."""
+    """Apply Gabor filters to detect edge structures with optimized kernel caching."""
     gray_img = (
         cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     )
 
-    # Create Gabor kernels for vertical and horizontal orientations only
-    kernels = []
-    for theta in [0, np.pi / 2]:  # 0° (vertical), 90° (horizontal)
-        kernel = cv2.getGaborKernel(
-            (kernel_size, kernel_size),
-            sigma,
-            float(theta),
-            lambda_val,
-            gamma,
-            0,
-            ktype=cv2.CV_32F,
-        )
-        kernels.append(kernel)
+    # Get cached Gabor kernels (avoids expensive recreation)
+    vertical_kernel, horizontal_kernel = _get_cached_gabor_kernels(
+        kernel_size, sigma, lambda_val, gamma
+    )
 
-    # Apply all kernels and combine responses
-    combined_response = np.zeros_like(gray_img, dtype=np.float32)
-    for kernel in kernels:
-        filtered_img = cv2.filter2D(gray_img, cv2.CV_8UC3, kernel)
-        combined_response += filtered_img.astype(np.float32)
+    # Apply kernels and combine responses (optimized memory allocation)
+    vertical_response = cv2.filter2D(gray_img, cv2.CV_32F, vertical_kernel)
+    horizontal_response = cv2.filter2D(gray_img, cv2.CV_32F, horizontal_kernel)
+    
+    # Combine responses efficiently
+    combined_response = vertical_response + horizontal_response
 
     # Normalize and threshold
     gabor_response_map = cv2.normalize(

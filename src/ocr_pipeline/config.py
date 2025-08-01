@@ -26,8 +26,26 @@ class Config:
     min_angle_correction: float = 0.1
 
     # Line detection
-    min_line_length: int = 100
-    max_line_gap: int = 10
+    min_line_length: int = 50
+    max_line_gap: int = 40
+    hough_threshold: int = 40
+    horizontal_kernel_ratio: int = 30
+    vertical_kernel_ratio: int = 20
+    h_erode_iterations: int = 1
+    h_dilate_iterations: int = 1
+    v_erode_iterations: int = 1
+    v_dilate_iterations: int = 1
+    min_table_coverage: float = 0.10
+    max_parallel_distance: int = 12
+    angle_tolerance: float = 5.0
+    h_length_filter_ratio: float = 0.5
+    v_length_filter_ratio: float = 0.4
+
+    # Line merging parameters
+    line_merge_distance_h: int = 15
+    line_merge_distance_v: int = 15
+    line_extension_tolerance: int = 20
+    max_merge_iterations: int = 3
 
     # ROI detection (edge detection preprocessing)
     # CONSERVATIVE SETTINGS for 65-95% area ratio preservation
@@ -117,8 +135,9 @@ class Config:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def from_json(cls, json_path: Path):
+    def from_json(cls, json_path):
         """Load configuration from JSON file."""
+        json_path = Path(json_path)  # Convert string to Path if needed
         if not json_path.exists():
             raise FileNotFoundError(f"Config file not found: {json_path}")
 
@@ -141,6 +160,11 @@ class Config:
                 if key.endswith("_dir") and isinstance(value, str):
                     value = Path(value)
                 filtered_config[key] = value
+            elif key == "line_detection" and isinstance(value, dict):
+                # Handle nested line_detection parameters
+                for line_key, line_value in value.items():
+                    if line_key in field_names:
+                        filtered_config[line_key] = line_value
 
         return cls(**filtered_config)
 
@@ -218,6 +242,7 @@ class Stage1Config(Config):
                     "min_gutter_width": page_split.get("min_gutter_width"),
                 }
             )
+            del config_dict["page_splitting"]
 
         if "deskewing" in config_dict:
             deskew = config_dict["deskewing"]
@@ -228,6 +253,7 @@ class Stage1Config(Config):
                     "min_angle_correction": deskew.get("min_angle_correction"),
                 }
             )
+            del config_dict["deskewing"]
 
         if "line_detection" in config_dict:
             line_det = config_dict["line_detection"]
@@ -235,8 +261,25 @@ class Stage1Config(Config):
                 {
                     "min_line_length": line_det.get("min_line_length"),
                     "max_line_gap": line_det.get("max_line_gap"),
+                    "hough_threshold": line_det.get("hough_threshold"),
+                    "horizontal_kernel_ratio": line_det.get("horizontal_kernel_ratio"),
+                    "vertical_kernel_ratio": line_det.get("vertical_kernel_ratio"),
+                    "h_erode_iterations": line_det.get("h_erode_iterations"),
+                    "h_dilate_iterations": line_det.get("h_dilate_iterations"),
+                    "v_erode_iterations": line_det.get("v_erode_iterations"),
+                    "v_dilate_iterations": line_det.get("v_dilate_iterations"),
+                    "min_table_coverage": line_det.get("min_table_coverage"),
+                    "max_parallel_distance": line_det.get("max_parallel_distance"),
+                    "angle_tolerance": line_det.get("angle_tolerance"),
+                    "h_length_filter_ratio": line_det.get("h_length_filter_ratio"),
+                    "v_length_filter_ratio": line_det.get("v_length_filter_ratio"),
+                    "line_merge_distance_h": line_det.get("line_merge_distance_h"),
+                    "line_merge_distance_v": line_det.get("line_merge_distance_v"),
+                    "line_extension_tolerance": line_det.get("line_extension_tolerance"),
+                    "max_merge_iterations": line_det.get("max_merge_iterations"),
                 }
             )
+            del config_dict["line_detection"]
 
         if "roi_detection" in config_dict:
             roi = config_dict["roi_detection"]
@@ -258,6 +301,7 @@ class Stage1Config(Config):
                     ),
                 }
             )
+            del config_dict["roi_detection"]
 
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
@@ -265,6 +309,11 @@ class Stage1Config(Config):
             config_dict["roi_margins_page_1"] = margins.get("page_1")
             config_dict["roi_margins_page_2"] = margins.get("page_2")
             config_dict["roi_margins_default"] = margins.get("default")
+            del config_dict["roi_margins"]
+        
+        # Remove any unrecognized sections
+        if "table_fitting" in config_dict:
+            del config_dict["table_fitting"]
 
         return cls(**config_dict)
 
@@ -283,8 +332,26 @@ class Stage2Config(Config):
     min_angle_correction: float = 0.2
 
     # Stage 2 line detection - more precise
-    min_line_length: int = 30
-    max_line_gap: int = 5
+    min_line_length: int = 50
+    max_line_gap: int = 30
+    hough_threshold: int = 40
+    horizontal_kernel_ratio: int = 30
+    vertical_kernel_ratio: int = 20
+    h_erode_iterations: int = 1
+    h_dilate_iterations: int = 1
+    v_erode_iterations: int = 1
+    v_dilate_iterations: int = 1
+    min_table_coverage: float = 0.2
+    max_parallel_distance: int = 10
+    angle_tolerance: float = 5.0
+    h_length_filter_ratio: float = 0.5
+    v_length_filter_ratio: float = 0.4
+
+    # Line merging parameters
+    line_merge_distance_h: int = 15
+    line_merge_distance_v: int = 15
+    line_extension_tolerance: int = 20
+    max_merge_iterations: int = 3
 
     # Stage 2 ROI margins (minimal, already cropped)
     roi_margins_page_1: Optional[dict] = None
@@ -334,6 +401,7 @@ class Stage2Config(Config):
                     "min_angle_correction": deskew.get("min_angle_correction"),
                 }
             )
+            del config_dict["deskewing"]
 
         if "line_detection" in config_dict:
             line_det = config_dict["line_detection"]
@@ -341,14 +409,32 @@ class Stage2Config(Config):
                 {
                     "min_line_length": line_det.get("min_line_length"),
                     "max_line_gap": line_det.get("max_line_gap"),
+                    "hough_threshold": line_det.get("hough_threshold"),
+                    "horizontal_kernel_ratio": line_det.get("horizontal_kernel_ratio"),
+                    "vertical_kernel_ratio": line_det.get("vertical_kernel_ratio"),
+                    "h_erode_iterations": line_det.get("h_erode_iterations"),
+                    "h_dilate_iterations": line_det.get("h_dilate_iterations"),
+                    "v_erode_iterations": line_det.get("v_erode_iterations"),
+                    "v_dilate_iterations": line_det.get("v_dilate_iterations"),
+                    "min_table_coverage": line_det.get("min_table_coverage"),
+                    "max_parallel_distance": line_det.get("max_parallel_distance"),
+                    "angle_tolerance": line_det.get("angle_tolerance"),
+                    "h_length_filter_ratio": line_det.get("h_length_filter_ratio"),
+                    "v_length_filter_ratio": line_det.get("v_length_filter_ratio"),
+                    "line_merge_distance_h": line_det.get("line_merge_distance_h"),
+                    "line_merge_distance_v": line_det.get("line_merge_distance_v"),
+                    "line_extension_tolerance": line_det.get("line_extension_tolerance"),
+                    "max_merge_iterations": line_det.get("max_merge_iterations"),
                 }
             )
+            del config_dict["line_detection"]
 
         if "roi_detection" in config_dict:
             roi = config_dict["roi_detection"]
             config_dict.update(
                 {"enable_roi_detection": roi.get("enable_roi_detection")}
             )
+            del config_dict["roi_detection"]
 
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
@@ -356,6 +442,11 @@ class Stage2Config(Config):
             config_dict["roi_margins_page_1"] = margins.get("page_1")
             config_dict["roi_margins_page_2"] = margins.get("page_2")
             config_dict["roi_margins_default"] = margins.get("default")
+            del config_dict["roi_margins"]
+        
+        # Remove any unrecognized sections
+        if "table_fitting" in config_dict:
+            del config_dict["table_fitting"]
 
         return cls(**config_dict)
 

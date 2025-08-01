@@ -52,20 +52,30 @@ def load_config_from_file(config_path: Path = None, stage: int = 1):
 
 def detect_table_lines_detailed(
     image: np.ndarray,
-    min_line_length: int = 40,
-    max_line_gap: int = 15,
-    kernel_h_size: int = 40,
-    kernel_v_size: int = 40,
-    hough_threshold: int = 50,
+    config,
+    hough_threshold: int = 60,
 ) -> Dict[str, Any]:
     """Enhanced table line detection with detailed analysis."""
     _, _, analysis = ocr_utils.detect_table_lines(
         image,
-        min_line_length=min_line_length,
-        max_line_gap=max_line_gap,
-        kernel_h_size=kernel_h_size,
-        kernel_v_size=kernel_v_size,
+        min_line_length=config.min_line_length,
+        max_line_gap=config.max_line_gap,
         hough_threshold=hough_threshold,
+        horizontal_kernel_ratio=getattr(config, 'horizontal_kernel_ratio', 30),
+        vertical_kernel_ratio=getattr(config, 'vertical_kernel_ratio', 30),
+        h_erode_iterations=getattr(config, 'h_erode_iterations', 1),
+        h_dilate_iterations=getattr(config, 'h_dilate_iterations', 1),
+        v_erode_iterations=getattr(config, 'v_erode_iterations', 1),
+        v_dilate_iterations=getattr(config, 'v_dilate_iterations', 1),
+        min_table_coverage=getattr(config, 'min_table_coverage', 0.15),
+        max_parallel_distance=getattr(config, 'max_parallel_distance', 12),
+        angle_tolerance=getattr(config, 'angle_tolerance', 5.0),
+        h_length_filter_ratio=getattr(config, 'h_length_filter_ratio', 0.6),
+        v_length_filter_ratio=getattr(config, 'v_length_filter_ratio', 0.6),
+        line_merge_distance_h=getattr(config, 'line_merge_distance_h', 15),
+        line_merge_distance_v=getattr(config, 'line_merge_distance_v', 15),
+        line_extension_tolerance=getattr(config, 'line_extension_tolerance', 20),
+        max_merge_iterations=getattr(config, 'max_merge_iterations', 3),
         return_analysis=True,
     )
     return analysis
@@ -85,8 +95,8 @@ def draw_table_lines_overlay(
     for x1, y1, x2, y2 in line_info["v_lines"]:
         cv2.line(overlay, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
-    # Draw potential table boundary
-    if line_info["h_bounds"] and line_info["v_bounds"]:
+    # Draw potential table boundary (if available)
+    if line_info.get("h_bounds") and line_info.get("v_bounds"):
         h_min, h_max = line_info["h_bounds"]
         v_min, v_max = line_info["v_bounds"]
         cv2.rectangle(overlay, (v_min, h_min), (v_max, h_max), (0, 255, 0), 3)
@@ -136,36 +146,110 @@ def draw_table_lines_overlay(
     return overlay
 
 
-def create_morphological_visualization(line_info: Dict[str, Any]) -> np.ndarray:
-    """Create visualization of morphological operations."""
-    h_morph = line_info["horizontal_morph"]
-    v_morph = line_info["vertical_morph"]
-
-    # Normalize for better visualization
-    h_morph_norm = cv2.normalize(h_morph, None, 0, 255, cv2.NORM_MINMAX)
-    v_morph_norm = cv2.normalize(v_morph, None, 0, 255, cv2.NORM_MINMAX)
-
-    # Convert to color for combination
-    h_colored = cv2.applyColorMap(h_morph_norm, cv2.COLORMAP_HOT)
-    v_colored = cv2.applyColorMap(v_morph_norm, cv2.COLORMAP_WINTER)
-
-    # Combine horizontally
-    combined = np.hstack([h_colored, v_colored])
-
-    # Add labels
+def draw_step_lines_overlay(
+    image: np.ndarray, step_info: Dict[str, Any], step_name: str
+) -> np.ndarray:
+    """Draw overlay showing detected lines for a specific filtering step."""
+    overlay = image.copy()
+    
+    # Draw horizontal lines in red
+    for x1, y1, x2, y2 in step_info["h_lines"]:
+        cv2.line(overlay, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    
+    # Draw vertical lines in blue
+    for x1, y1, x2, y2 in step_info["v_lines"]:
+        cv2.line(overlay, (x1, y1), (x2, y2), (255, 0, 0), 2)
+    
+    # Add step info text
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(combined, "Horizontal Lines", (10, 30), font, 0.8, (255, 255, 255), 2)
-    cv2.putText(
-        combined,
-        "Vertical Lines",
-        (h_colored.shape[1] + 10, 30),
-        font,
-        0.8,
-        (255, 255, 255),
-        2,
-    )
+    font_scale = 0.7
+    thickness = 2
+    
+    text_lines = [
+        f"Step: {step_name}",
+        step_info["description"],
+        f"H lines: {step_info['h_count']}, V lines: {step_info['v_count']}",
+        f"Total: {step_info['total_count']} lines"
+    ]
+    
+    # Draw text background
+    text_y_start = 30
+    for i, line in enumerate(text_lines):
+        text_size = cv2.getTextSize(line, font, font_scale, thickness)[0]
+        cv2.rectangle(
+            overlay,
+            (10, text_y_start + i * 35 - 25),
+            (20 + text_size[0], text_y_start + i * 35 + 10),
+            (0, 0, 0),
+            -1,
+        )
+    
+    # Draw text
+    for i, line in enumerate(text_lines):
+        color = (255, 255, 255)
+        cv2.putText(
+            overlay,
+            line,
+            (15, text_y_start + i * 35),
+            font,
+            font_scale,
+            color,
+            thickness,
+        )
+    
+    return overlay
 
-    return combined
+
+def create_filtering_steps_visualization(
+    image: np.ndarray, line_info: Dict[str, Any]
+) -> Dict[str, np.ndarray]:
+    """Create visualizations for each filtering step."""
+    step_images = {}
+    
+    if "intermediate_steps" not in line_info:
+        return step_images
+    
+    for step_key, step_data in line_info["intermediate_steps"].items():
+        step_name = step_key.replace("step", "Step ").replace("_", " ").title()
+        step_overlay = draw_step_lines_overlay(image, step_data, step_name)
+        step_images[step_key] = step_overlay
+    
+    return step_images
+
+
+def create_morphological_visualization(line_info: Dict[str, Any]) -> np.ndarray:
+    """Create visualization of preprocessing operations."""
+    # Show edge detection and filtering statistics
+    if "preprocessing" in line_info:
+        # Create visualization showing method info
+        vis_height, vis_width = 300, 600
+        combined = np.ones((vis_height, vis_width, 3), dtype=np.uint8) * 50
+        
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        text_lines = [
+            "Table Line Detection",
+            "Method: Edge Detection + Filtering",
+            f"Edge pixels: {line_info['preprocessing'].get('edge_pixels', 'N/A')}",
+            f"Edge density: {line_info['preprocessing'].get('edge_density', 0):.3f}",
+            f"Blur applied: {line_info['preprocessing'].get('blur_applied', False)}",
+            f"Initial lines: {line_info['filtering_stats'].get('initial_lines', 0)}",
+            f"After filtering: {line_info['filtering_stats'].get('after_dedup', 0)}"
+        ]
+        
+        for i, line in enumerate(text_lines):
+            y_pos = 50 + i * 35
+            color = (255, 255, 255) if i == 0 else (200, 200, 200)
+            thickness = 2 if i == 0 else 1
+            cv2.putText(combined, line, (20, y_pos), font, 0.7, color, thickness)
+        
+        return combined
+    else:
+        # Fallback: create simple info display
+        vis_height, vis_width = 300, 600
+        combined = np.ones((vis_height, vis_width, 3), dtype=np.uint8) * 50
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(combined, "Table Line Detection", (150, 150), font, 1.0, (255, 255, 255), 2)
+        return combined
 
 
 def create_line_statistics_plot(line_info: Dict[str, Any]) -> np.ndarray:
@@ -335,11 +419,10 @@ def process_image_table_lines_visualization(
     image_path: Path,
     config,
     output_dir: Path,
-    kernel_h_size: int = 40,
-    kernel_v_size: int = 40,
-    hough_threshold: int = 50,
+    hough_threshold: int = 300,
     command_args: Dict[str, Any] = None,
     config_source: str = "default",
+    show_filtering_steps: bool = False,
 ) -> Dict[str, Any]:
     """Process a single image and create table lines visualization."""
     print(f"Processing: {image_path.name}")
@@ -351,10 +434,7 @@ def process_image_table_lines_visualization(
         # Detect table lines with detailed analysis
         line_info = detect_table_lines_detailed(
             image,
-            config.min_line_length,
-            config.max_line_gap,
-            kernel_h_size,
-            kernel_v_size,
+            config,
             hough_threshold,
         )
 
@@ -362,6 +442,11 @@ def process_image_table_lines_visualization(
         overlay = draw_table_lines_overlay(image, line_info)
         morph_vis = create_morphological_visualization(line_info)
         stats_plot = create_line_statistics_plot(line_info)
+
+        # Create step-by-step visualizations if requested
+        step_images = {}
+        if show_filtering_steps:
+            step_images = create_filtering_steps_visualization(image, line_info)
 
         # Create comparison
         comparison = create_table_lines_comparison(
@@ -385,6 +470,22 @@ def process_image_table_lines_visualization(
         cv2.imwrite(output_files["morphology"], morph_vis)
         cv2.imwrite(output_files["statistics"], stats_plot)
         cv2.imwrite(output_files["comparison"], comparison)
+        
+        # Save step-by-step images if generated
+        if step_images:
+            for step_key, step_image in step_images.items():
+                step_filename = f"{base_name}_{step_key}.jpg"
+                step_path = output_dir / step_filename
+                cv2.imwrite(str(step_path), step_image)
+                output_files[step_key] = str(step_path)
+        
+        # Create processed_images subdirectory for pipeline use
+        processed_dir = output_dir / "processed_images"
+        processed_dir.mkdir(exist_ok=True)
+        
+        # Copy main output images to processed_images (for pipeline stages)
+        # Only copy the essential images that subsequent stages should process
+        cv2.imwrite(str(processed_dir / f"{base_name}_table_lines.jpg"), overlay)
 
         # Save analysis data
         analysis_file = output_dir / f"{base_name}_table_lines_analysis.json"
@@ -397,9 +498,22 @@ def process_image_table_lines_visualization(
             "config_used": {
                 "min_line_length": config.min_line_length,
                 "max_line_gap": config.max_line_gap,
-                "kernel_h_size": kernel_h_size,
-                "kernel_v_size": kernel_v_size,
                 "hough_threshold": hough_threshold,
+                "horizontal_kernel_ratio": getattr(config, 'horizontal_kernel_ratio', 30),
+                "vertical_kernel_ratio": getattr(config, 'vertical_kernel_ratio', 30),
+                "min_table_coverage": getattr(config, 'min_table_coverage', 0.15),
+                "max_parallel_distance": getattr(config, 'max_parallel_distance', 12),
+                "angle_tolerance": getattr(config, 'angle_tolerance', 5.0),
+                "h_length_filter_ratio": getattr(config, 'h_length_filter_ratio', 0.6),
+                "v_length_filter_ratio": getattr(config, 'v_length_filter_ratio', 0.6),
+                "h_erode_iterations": getattr(config, 'h_erode_iterations', 1),
+                "h_dilate_iterations": getattr(config, 'h_dilate_iterations', 1),
+                "v_erode_iterations": getattr(config, 'v_erode_iterations', 1),
+                "v_dilate_iterations": getattr(config, 'v_dilate_iterations', 1),
+                "line_merge_distance_h": getattr(config, 'line_merge_distance_h', 15),
+                "line_merge_distance_v": getattr(config, 'line_merge_distance_v', 15),
+                "line_extension_tolerance": getattr(config, 'line_extension_tolerance', 20),
+                "max_merge_iterations": getattr(config, 'max_merge_iterations', 3),
             },
         }
 
@@ -472,9 +586,30 @@ def main():
         help="Process all images in input/test_images directory",
     )
     parser.add_argument(
+        "--input-dir",
+        type=str,
+        default=None,
+        help="Custom input directory (overrides --test-images)",
+    )
+    parser.add_argument(
         "--output-dir",
         default="data/output/visualization/table_lines",
         help="Output directory for visualizations",
+    )
+    parser.add_argument(
+        "--save-debug",
+        action="store_true",
+        help="Save debug images showing line detection steps",
+    )
+    parser.add_argument(
+        "--show-filtering-steps",
+        action="store_true",
+        help="Generate step-by-step filtering visualization images",
+    )
+    parser.add_argument(
+        "--no-filtering-steps",
+        action="store_true",
+        help="Disable step-by-step filtering visualization (default: enabled)",
     )
 
     # Config file options
@@ -503,25 +638,61 @@ def main():
         "--max-line-gap", type=int, default=None, help="Maximum gap in line detection"
     )
     parser.add_argument(
-        "--kernel-h-size",
-        type=int,
-        default=40,
-        help="Horizontal morphological kernel size",
+        "--hough-threshold", type=int, default=None, help="Hough transform threshold"
     )
     parser.add_argument(
-        "--kernel-v-size",
-        type=int,
-        default=40,
-        help="Vertical morphological kernel size",
+        "--horizontal-kernel-ratio", type=int, default=None, help="Horizontal kernel ratio (width = image_width // ratio)"
     )
     parser.add_argument(
-        "--hough-threshold", type=int, default=50, help="Hough transform threshold"
+        "--vertical-kernel-ratio", type=int, default=None, help="Vertical kernel ratio (height = image_height // ratio)"
+    )
+    parser.add_argument(
+        "--h-length-filter-ratio", type=float, default=None, help="Remove horizontal lines shorter than this ratio of the longest horizontal line"
+    )
+    parser.add_argument(
+        "--v-length-filter-ratio", type=float, default=None, help="Remove vertical lines shorter than this ratio of the longest vertical line"
+    )
+    parser.add_argument(
+        "--h-erode-iterations", type=int, default=None, help="Horizontal erosion iterations for morphological operations"
+    )
+    parser.add_argument(
+        "--h-dilate-iterations", type=int, default=None, help="Horizontal dilation iterations for morphological operations"
+    )
+    parser.add_argument(
+        "--v-erode-iterations", type=int, default=None, help="Vertical erosion iterations for morphological operations"
+    )
+    parser.add_argument(
+        "--v-dilate-iterations", type=int, default=None, help="Vertical dilation iterations for morphological operations"
+    )
+    parser.add_argument(
+        "--line-merge-distance-h", type=int, default=None, help="Maximum horizontal offset to merge horizontal lines (pixels)"
+    )
+    parser.add_argument(
+        "--line-merge-distance-v", type=int, default=None, help="Maximum vertical offset to merge vertical lines (pixels)"
+    )
+    parser.add_argument(
+        "--line-extension-tolerance", type=int, default=None, help="Maximum gap to extend lines for connection (pixels)"
+    )
+    parser.add_argument(
+        "--max-merge-iterations", type=int, default=None, help="Maximum number of iterative line merging passes"
     )
 
     args = parser.parse_args()
 
     # Determine which images to process
-    if args.test_images:
+    if args.input_dir:
+        print(f"Using custom input directory: {args.input_dir}")
+        input_dir = Path(args.input_dir)
+        if not input_dir.exists():
+            print(f"Error: Input directory {args.input_dir} does not exist!")
+            return
+        image_paths = []
+        for ext in ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]:
+            image_paths.extend(input_dir.glob(ext))
+        if not image_paths:
+            print(f"No images found in {args.input_dir}!")
+            return
+    elif args.test_images:
         print("Using batch mode: processing all images in input/test_images/")
         image_paths = get_test_images()
         if not image_paths:
@@ -543,31 +714,78 @@ def main():
 
     # Load configuration from JSON file
     config = load_config_from_file(args.config_file, args.stage)
+    
+    # Determine if filtering steps should be shown (default: True, unless disabled)
+    show_filtering_steps = args.show_filtering_steps or not args.no_filtering_steps
+    if not args.show_filtering_steps and not args.no_filtering_steps:
+        # Default behavior: show filtering steps
+        show_filtering_steps = True
 
+    # Standardized parameter precedence: CLI args > Config file > Hardcoded defaults
+    # Handle hough_threshold
+    if args.hough_threshold is not None:
+        hough_threshold = args.hough_threshold
+    else:
+        hough_threshold = getattr(config, 'hough_threshold', 60)
+    
+    # Apply all command line parameter overrides to config
+    cli_overrides = [
+        ('min_line_length', args.min_line_length),
+        ('max_line_gap', args.max_line_gap),
+        ('horizontal_kernel_ratio', args.horizontal_kernel_ratio),
+        ('vertical_kernel_ratio', args.vertical_kernel_ratio),
+        ('h_length_filter_ratio', args.h_length_filter_ratio),
+        ('v_length_filter_ratio', args.v_length_filter_ratio),
+        ('h_erode_iterations', args.h_erode_iterations),
+        ('h_dilate_iterations', args.h_dilate_iterations),
+        ('v_erode_iterations', args.v_erode_iterations),
+        ('v_dilate_iterations', args.v_dilate_iterations),
+        ('line_merge_distance_h', args.line_merge_distance_h),
+        ('line_merge_distance_v', args.line_merge_distance_v),
+        ('line_extension_tolerance', args.line_extension_tolerance),
+        ('max_merge_iterations', args.max_merge_iterations),
+    ]
+    
+    for param_name, param_value in cli_overrides:
+        if param_value is not None:
+            setattr(config, param_name, param_value)
+    
     # Collect command line arguments for parameter documentation
     command_args = {
         "min_line_length": args.min_line_length,
         "max_line_gap": args.max_line_gap,
-        "kernel_h_size": args.kernel_h_size,
-        "kernel_v_size": args.kernel_v_size,
         "hough_threshold": args.hough_threshold,
+        "horizontal_kernel_ratio": args.horizontal_kernel_ratio,
+        "vertical_kernel_ratio": args.vertical_kernel_ratio,
+        "h_length_filter_ratio": args.h_length_filter_ratio,
+        "v_length_filter_ratio": args.v_length_filter_ratio,
+        "h_erode_iterations": args.h_erode_iterations,
+        "h_dilate_iterations": args.h_dilate_iterations,
+        "v_erode_iterations": args.v_erode_iterations,
+        "v_dilate_iterations": args.v_dilate_iterations,
+        "line_merge_distance_h": args.line_merge_distance_h,
+        "line_merge_distance_v": args.line_merge_distance_v,
+        "line_extension_tolerance": args.line_extension_tolerance,
+        "max_merge_iterations": args.max_merge_iterations,
         "config_file": str(args.config_file) if args.config_file else None,
         "stage": args.stage,
-        "save_debug": False,
+        "save_debug": args.save_debug,
+        "show_filtering_steps": show_filtering_steps,
     }
 
     # Determine config source
     config_source = "default"
     if args.config_file and args.config_file.exists():
         config_source = "file"
-    if any(v is not None for v in [args.min_line_length, args.max_line_gap]):
+    cli_override_values = [args.min_line_length, args.max_line_gap, args.hough_threshold, 
+                          args.horizontal_kernel_ratio, args.vertical_kernel_ratio, 
+                          args.h_length_filter_ratio, args.v_length_filter_ratio,
+                          args.h_erode_iterations, args.h_dilate_iterations,
+                          args.v_erode_iterations, args.v_dilate_iterations,
+                          args.line_merge_distance_h, args.line_merge_distance_v,
+                          args.line_extension_tolerance, args.max_merge_iterations]
+    if any(v is not None for v in cli_override_values):
         config_source += "_with_overrides"
-
-    # Apply command line parameter overrides
-    if args.min_line_length is not None:
-        config.min_line_length = args.min_line_length
-    if args.max_line_gap is not None:
-        config.max_line_gap = args.max_line_gap
 
     config.verbose = False  # Keep visualization quiet
     output_dir = Path(args.output_dir)
@@ -578,9 +796,20 @@ def main():
     print("Parameters:")
     print(f"  - Min line length: {config.min_line_length}px")
     print(f"  - Max line gap: {config.max_line_gap}px")
-    print(f"  - H kernel size: {args.kernel_h_size}px")
-    print(f"  - V kernel size: {args.kernel_v_size}px")
-    print(f"  - Hough threshold: {args.hough_threshold}")
+    print(f"  - Hough threshold: {hough_threshold}")
+    print(f"  - Horizontal kernel ratio: {getattr(config, 'horizontal_kernel_ratio', 30)}")
+    print(f"  - Vertical kernel ratio: {getattr(config, 'vertical_kernel_ratio', 30)}")
+    print(f"  - Min table coverage: {getattr(config, 'min_table_coverage', 0.15)}")
+    print(f"  - H length filter ratio: {getattr(config, 'h_length_filter_ratio', 0.6)}")
+    print(f"  - V length filter ratio: {getattr(config, 'v_length_filter_ratio', 0.6)}")
+    print(f"  - H erode iterations: {getattr(config, 'h_erode_iterations', 1)}")
+    print(f"  - H dilate iterations: {getattr(config, 'h_dilate_iterations', 1)}")
+    print(f"  - V erode iterations: {getattr(config, 'v_erode_iterations', 1)}")
+    print(f"  - V dilate iterations: {getattr(config, 'v_dilate_iterations', 1)}")
+    print(f"  - H line merge distance: {getattr(config, 'line_merge_distance_h', 15)}px")
+    print(f"  - V line merge distance: {getattr(config, 'line_merge_distance_v', 15)}px")
+    print(f"  - Line extension tolerance: {getattr(config, 'line_extension_tolerance', 20)}px")
+    print(f"  - Max merge iterations: {getattr(config, 'max_merge_iterations', 3)}")
     print(f"Output directory: {output_dir}")
     print()
 
@@ -592,11 +821,10 @@ def main():
             image_path,
             config,
             output_dir,
-            args.kernel_h_size,
-            args.kernel_v_size,
-            args.hough_threshold,
+            hough_threshold,
             command_args,
             config_source,
+            show_filtering_steps,
         )
         results.append(result)
 
@@ -656,9 +884,22 @@ def main():
         "config_parameters": {
             "min_line_length": config.min_line_length,
             "max_line_gap": config.max_line_gap,
-            "kernel_h_size": args.kernel_h_size,
-            "kernel_v_size": args.kernel_v_size,
-            "hough_threshold": args.hough_threshold,
+            "hough_threshold": hough_threshold,
+            "horizontal_kernel_ratio": getattr(config, 'horizontal_kernel_ratio', 30),
+            "vertical_kernel_ratio": getattr(config, 'vertical_kernel_ratio', 30),
+            "min_table_coverage": getattr(config, 'min_table_coverage', 0.15),
+            "max_parallel_distance": getattr(config, 'max_parallel_distance', 12),
+            "angle_tolerance": getattr(config, 'angle_tolerance', 5.0),
+            "h_length_filter_ratio": getattr(config, 'h_length_filter_ratio', 0.6),
+            "v_length_filter_ratio": getattr(config, 'v_length_filter_ratio', 0.6),
+            "h_erode_iterations": getattr(config, 'h_erode_iterations', 1),
+            "h_dilate_iterations": getattr(config, 'h_dilate_iterations', 1),
+            "v_erode_iterations": getattr(config, 'v_erode_iterations', 1),
+            "v_dilate_iterations": getattr(config, 'v_dilate_iterations', 1),
+            "line_merge_distance_h": getattr(config, 'line_merge_distance_h', 15),
+            "line_merge_distance_v": getattr(config, 'line_merge_distance_v', 15),
+            "line_extension_tolerance": getattr(config, 'line_extension_tolerance', 20),
+            "max_merge_iterations": getattr(config, 'max_merge_iterations', 3),
         },
         "results": results,
     }
