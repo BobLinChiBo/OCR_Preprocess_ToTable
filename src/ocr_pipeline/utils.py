@@ -1,8 +1,8 @@
 """Simple utilities for OCR pipeline."""
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
-from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -224,14 +224,14 @@ def deskew_image(
     if abs(best_angle) < min_angle_correction:
         if return_analysis_data:
             # Create analysis data even when no rotation is applied
-            all_angles = list(coarse_angles[:len(coarse_scores)]) + list(fine_angles)
+            all_angles = list(coarse_angles[: len(coarse_scores)]) + list(fine_angles)
             all_scores = coarse_scores + fine_scores
             analysis_data = {
                 "has_lines": True,
                 "rotation_angle": 0.0,
                 "angles": all_angles,
                 "scores": all_scores,
-                "coarse_angles": list(coarse_angles[:len(coarse_scores)]),
+                "coarse_angles": list(coarse_angles[: len(coarse_scores)]),
                 "coarse_scores": coarse_scores,
                 "fine_angles": list(fine_angles),
                 "fine_scores": fine_scores,
@@ -258,23 +258,23 @@ def deskew_image(
         flags=cv2.INTER_CUBIC,  # High quality for final result
         borderMode=cv2.BORDER_REPLICATE,
     )
-    
+
     if return_analysis_data:
         # Create comprehensive analysis data for visualization
-        all_angles = list(coarse_angles[:len(coarse_scores)]) + list(fine_angles)
+        all_angles = list(coarse_angles[: len(coarse_scores)]) + list(fine_angles)
         all_scores = coarse_scores + fine_scores
-        
+
         # Calculate confidence based on score distribution
         score_std = np.std(all_scores)
         best_score = max(all_scores) if all_scores else 0
         confidence = min(1.0, best_score / (np.mean(all_scores) + score_std + 1e-6))
-        
+
         analysis_data = {
             "has_lines": True,
             "rotation_angle": best_angle,
             "angles": all_angles,
             "scores": all_scores,
-            "coarse_angles": list(coarse_angles[:len(coarse_scores)]),
+            "coarse_angles": list(coarse_angles[: len(coarse_scores)]),
             "coarse_scores": coarse_scores,
             "fine_angles": list(fine_angles),
             "fine_scores": fine_scores,
@@ -288,7 +288,7 @@ def deskew_image(
             "line_count": len(all_angles),
         }
         return deskewed, best_angle, analysis_data
-    
+
     return deskewed, best_angle
 
 
@@ -311,13 +311,13 @@ def visualize_detected_lines(
 
 def detect_table_lines(
     image: np.ndarray,
-    threshold: int = 40,                          # Binary threshold
-    horizontal_kernel_size: int = 10,             # Morphological kernel width
-    vertical_kernel_size: int = 10,               # Morphological kernel height
-    alignment_threshold: int = 3,                 # Clustering threshold for line alignment
-    pre_merge_length_ratio: float = 0.3,          # Min length ratio before merging (0 = no filter)
-    post_merge_length_ratio: float = 0.4,         # Min length ratio after merging
-    min_aspect_ratio: int = 5,                    # Min aspect ratio for line-like components
+    threshold: int = 40,  # Binary threshold
+    horizontal_kernel_size: int = 10,  # Morphological kernel width
+    vertical_kernel_size: int = 10,  # Morphological kernel height
+    alignment_threshold: int = 3,  # Clustering threshold for line alignment
+    pre_merge_length_ratio: float = 0.3,  # Min length ratio before merging (0 = no filter)
+    post_merge_length_ratio: float = 0.4,  # Min length ratio after merging
+    min_aspect_ratio: int = 5,  # Min aspect ratio for line-like components
     return_analysis: bool = False,
     # Keep old parameters for backwards compatibility
     hough_threshold: int = None,
@@ -328,12 +328,12 @@ def detect_table_lines(
     merge_iterations: int = None,
     length_filter_ratio_h: float = None,
     length_filter_ratio_v: float = None,
-    **kwargs
+    **kwargs,
 ) -> tuple:
     """Detect table lines using binary threshold and morphological operations.
-    
+
     New approach based on connected components analysis rather than edge detection.
-    
+
     Args:
         image: Input image (grayscale or BGR)
         threshold: Binary threshold value
@@ -344,43 +344,43 @@ def detect_table_lines(
         post_merge_length_ratio: Minimum length ratio after merging
         min_aspect_ratio: Minimum aspect ratio to consider component as line-like
         return_analysis: If True, returns additional statistics
-        
+
     Returns:
         tuple: (h_lines, v_lines) or (h_lines, v_lines, analysis) if return_analysis=True
     """
     # Convert to grayscale if needed
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     img_h, img_w = gray.shape
-    
+
     # Invert image (make dark lines white)
     gray_inv = cv2.bitwise_not(gray)
-    
+
     # Binary thresholding
     _, binary = cv2.threshold(gray_inv, threshold, 255, cv2.THRESH_BINARY)
-    
+
     # Morphological opening to extract lines
     kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_size))
     kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_size, 1))
     vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v, iterations=1)
     horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_h, iterations=1)
-    
+
     def extract_and_merge_lines(
         line_img,
         direction="vertical",
         alignment_thresh=3,
         min_length_ratio=0.3,
-        min_aspect=5
+        min_aspect=5,
     ):
         """Extract line segments using connected components and merge aligned segments."""
         img_h, img_w = line_img.shape[:2]
         num, labels, stats, _ = cv2.connectedComponentsWithStats(line_img, 8)
-        
+
         segments = []  # (x1, y1, x2, y2, true_center, label, score)
-        
+
         for lab in range(1, num):
             x, y, w, h, _ = stats[lab]
             x1, y1, x2, y2 = x, y, x + w, y + h
-            
+
             # Length and aspect ratio filtering
             if direction == "vertical":
                 if h < min_length_ratio * img_h:
@@ -394,10 +394,10 @@ def detect_table_lines(
                 aspect = w / max(h, 1)
                 if aspect < min_aspect:
                     continue
-            
+
             # Find true line center within component
             comp_mask = (labels == lab).astype(np.uint8)[y1:y2, x1:x2]
-            
+
             if direction == "vertical" and w > 3:
                 # For wide vertical components, find the densest column
                 col_sum = comp_mask.sum(axis=0)
@@ -414,14 +414,14 @@ def detect_table_lines(
                     center = (x1 + x2) // 2
                 else:
                     center = (y1 + y2) // 2
-            
+
             line_score = aspect  # Higher aspect ratio = better line
             segments.append((x1, y1, x2, y2, center, lab, line_score))
-        
+
         # Cluster by proximity
         segments.sort(key=lambda s: s[4])  # Sort by center coordinate
         clusters = []
-        
+
         for seg in segments:
             # Try to assign to existing cluster
             assigned = False
@@ -430,13 +430,15 @@ def detect_table_lines(
                     cluster["members"].append(seg)
                     # Update cluster center to weighted average
                     total_score = sum(s[6] for s in cluster["members"])
-                    cluster["center"] = sum(s[4] * s[6] for s in cluster["members"]) / total_score
+                    cluster["center"] = (
+                        sum(s[4] * s[6] for s in cluster["members"]) / total_score
+                    )
                     assigned = True
                     break
-            
+
             if not assigned:
                 clusters.append({"center": seg[4], "members": [seg]})
-        
+
         # Create one merged line per cluster
         merged = []
         for cluster in clusters:
@@ -453,54 +455,60 @@ def detect_table_lines(
                 x_max = max(s[2] for s in members)
                 y_center = int(cluster["center"])
                 merged.append((x_min, y_center, x_max, y_center))
-        
+
         return merged, segments
-    
+
     # Extract and merge lines
     merged_vertical, vertical_segments = extract_and_merge_lines(
         vertical_lines,
         "vertical",
         alignment_threshold,
         pre_merge_length_ratio,
-        min_aspect_ratio
+        min_aspect_ratio,
     )
-    
+
     merged_horizontal, horizontal_segments = extract_and_merge_lines(
         horizontal_lines,
         "horizontal",
         alignment_threshold,
         pre_merge_length_ratio,
-        min_aspect_ratio
+        min_aspect_ratio,
     )
-    
+
     # Post-merge length filtering
     v_lengths = [y2 - y1 for x1, y1, x2, y2 in merged_vertical]
     h_lengths = [x2 - x1 for x1, y1, x2, y2 in merged_horizontal]
-    
+
     v_thresh = post_merge_length_ratio * max(v_lengths) if v_lengths else 0
     h_thresh = post_merge_length_ratio * max(h_lengths) if h_lengths else 0
-    
+
     filtered_vertical = [
-        (x1, y1, x2, y2) for (x1, y1, x2, y2) in merged_vertical 
+        (x1, y1, x2, y2)
+        for (x1, y1, x2, y2) in merged_vertical
         if (y2 - y1) >= v_thresh
     ]
-    
+
     filtered_horizontal = [
-        (x1, y1, x2, y2) for (x1, y1, x2, y2) in merged_horizontal 
+        (x1, y1, x2, y2)
+        for (x1, y1, x2, y2) in merged_horizontal
         if (x2 - x1) >= h_thresh
     ]
-    
+
     # Convert to the expected format
     h_lines = filtered_horizontal
     v_lines = filtered_vertical
-    
+
     if not return_analysis:
         return h_lines, v_lines
-    
+
     # Calculate analysis if requested
-    h_line_lengths = [np.sqrt((x2-x1)**2 + (y2-y1)**2) for x1,y1,x2,y2 in h_lines]
-    v_line_lengths = [np.sqrt((x2-x1)**2 + (y2-y1)**2) for x1,y1,x2,y2 in v_lines]
-    
+    h_line_lengths = [
+        np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2) for x1, y1, x2, y2 in h_lines
+    ]
+    v_line_lengths = [
+        np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2) for x1, y1, x2, y2 in v_lines
+    ]
+
     analysis = {
         "h_lines_count": len(h_lines),
         "v_lines_count": len(v_lines),
@@ -509,11 +517,16 @@ def detect_table_lines(
         "avg_h_length": np.mean(h_line_lengths) if h_line_lengths else 0,
         "avg_v_length": np.mean(v_line_lengths) if v_line_lengths else 0,
         "threshold_used": threshold,
-        "total_segments_before_merge": len(vertical_segments) + len(horizontal_segments),
-        "vertical_clusters": len(set(s[4] for s in vertical_segments)) if vertical_segments else 0,
-        "horizontal_clusters": len(set(s[4] for s in horizontal_segments)) if horizontal_segments else 0,
+        "total_segments_before_merge": len(vertical_segments)
+        + len(horizontal_segments),
+        "vertical_clusters": (
+            len(set(s[4] for s in vertical_segments)) if vertical_segments else 0
+        ),
+        "horizontal_clusters": (
+            len(set(s[4] for s in horizontal_segments)) if horizontal_segments else 0
+        ),
     }
-    
+
     return h_lines, v_lines, analysis
 
 
@@ -708,11 +721,11 @@ def detect_curved_margins(
     black_threshold: int = 50,
     content_threshold: int = 200,
     morph_kernel_size: int = 25,
-    min_content_area_ratio: float = 0.01,
+    min_content_area_ratio: float = 0.1,
     return_debug_info: bool = False,
 ) -> tuple:
     """Detect curved margins and create content mask.
-    
+
     Args:
         image: Input image (BGR or grayscale)
         blur_kernel_size: Gaussian blur kernel size
@@ -721,7 +734,7 @@ def detect_curved_margins(
         morph_kernel_size: Morphological operation kernel size
         min_content_area_ratio: Minimum content area ratio to consider valid
         return_debug_info: If True, return debug information
-        
+
     Returns:
         tuple: (content_mask, debug_info) if return_debug_info else content_mask
     """
@@ -734,7 +747,9 @@ def detect_curved_margins(
     blurred = cv2.GaussianBlur(gray, (blur_kernel_size, blur_kernel_size), 0)
 
     # Step 2: Create mask of content regions (not very dark)
-    _, content_mask = cv2.threshold(blurred, content_threshold, 255, cv2.THRESH_BINARY_INV)
+    _, content_mask = cv2.threshold(
+        blurred, content_threshold, 255, cv2.THRESH_BINARY_INV
+    )
 
     # Step 3: Create mask of potential margins (very dark areas)
     _, margin_mask = cv2.threshold(blurred, black_threshold, 255, cv2.THRESH_BINARY_INV)
@@ -794,25 +809,25 @@ def detect_curved_margins(
 
 def find_largest_inscribed_rectangle(mask: np.ndarray) -> Tuple[int, int, int, int]:
     """Find the largest rectangle that fits entirely within the content mask.
-    
+
     Args:
         mask: Binary mask where 255 indicates valid content area
-        
+
     Returns:
         Tuple of (x, y, width, height) for the largest inscribed rectangle
     """
     height, width = mask.shape
-    
+
     # Convert mask to binary (0 or 1)
     binary_mask = (mask > 0).astype(np.uint8)
-    
+
     # Use dynamic programming approach for largest rectangle in histogram
     max_area = 0
     best_rect = (0, 0, 0, 0)
-    
+
     # Create histogram for each row
     histogram = np.zeros(width, dtype=int)
-    
+
     for row in range(height):
         # Update histogram
         for col in range(width):
@@ -820,56 +835,58 @@ def find_largest_inscribed_rectangle(mask: np.ndarray) -> Tuple[int, int, int, i
                 histogram[col] += 1
             else:
                 histogram[col] = 0
-        
+
         # Find largest rectangle in current histogram
         rect = _largest_rectangle_in_histogram(histogram, row)
         if rect[2] * rect[3] > max_area:  # width * height
             max_area = rect[2] * rect[3]
             best_rect = rect
-    
+
     return best_rect
 
 
-def _largest_rectangle_in_histogram(heights: np.ndarray, current_row: int) -> Tuple[int, int, int, int]:
+def _largest_rectangle_in_histogram(
+    heights: np.ndarray, current_row: int
+) -> Tuple[int, int, int, int]:
     """Find the largest rectangle in a histogram using stack-based approach.
-    
+
     Args:
         heights: Array of histogram heights
         current_row: Current row index (for calculating y coordinate)
-        
+
     Returns:
         Tuple of (x, y, width, height) for the largest rectangle
     """
     stack = []
     max_area = 0
     best_rect = (0, 0, 0, 0)
-    
+
     for i, h in enumerate(heights):
         while stack and heights[stack[-1]] > h:
             height = heights[stack.pop()]
             width = i if not stack else i - stack[-1] - 1
             area = height * width
-            
+
             if area > max_area:
                 max_area = area
                 left = 0 if not stack else stack[-1] + 1
                 y = current_row - height + 1
                 best_rect = (left, y, width, height)
-        
+
         stack.append(i)
-    
+
     # Process remaining bars in stack
     while stack:
         height = heights[stack.pop()]
         width = len(heights) if not stack else len(heights) - stack[-1] - 1
         area = height * width
-        
+
         if area > max_area:
             max_area = area
             left = 0 if not stack else stack[-1] + 1
             y = current_row - height + 1
             best_rect = (left, y, width, height)
-    
+
     return best_rect
 
 
@@ -884,10 +901,10 @@ def remove_margin_aggressive(
     return_analysis: bool = False,
 ) -> tuple:
     """Remove margins aggressively using largest inscribed rectangle approach.
-    
+
     This method finds the largest box that fits inside the image content,
     effectively cutting all margin parts even if it cuts some actual images.
-    
+
     Args:
         image: Input image (BGR or grayscale)
         blur_kernel_size: Gaussian blur kernel size
@@ -897,28 +914,155 @@ def remove_margin_aggressive(
         min_content_area_ratio: Minimum content area ratio to consider valid
         padding: Padding to subtract from the detected boundary (negative padding)
         return_analysis: If True, returns additional analysis information
-        
+
     Returns:
         np.ndarray or tuple: Cropped image, or (cropped_image, analysis) if return_analysis=True
     """
     # Detect content mask
     content_mask = detect_curved_margins(
-        image, blur_kernel_size, black_threshold, content_threshold,
-        morph_kernel_size, min_content_area_ratio
+        image,
+        blur_kernel_size,
+        black_threshold,
+        content_threshold,
+        morph_kernel_size,
+        min_content_area_ratio,
     )
-    
+
     # Find the largest inscribed rectangle
     x, y, w, h = find_largest_inscribed_rectangle(content_mask)
-    
+
     # Apply negative padding (shrink the rectangle to be more conservative)
     if padding > 0:
         x = x + padding
-        y = y + padding  
+        y = y + padding
         w = max(0, w - 2 * padding)
         h = max(0, h - 2 * padding)
+
+    # Crop the image
+    cropped = image[y : y + h, x : x + w]
+
+    if not return_analysis:
+        return cropped
+
+    # Calculate analysis
+    original_area = image.shape[0] * image.shape[1]
+    cropped_area = cropped.shape[0] * cropped.shape[1]
+
+    analysis = {
+        "original_shape": image.shape,
+        "cropped_shape": cropped.shape,
+        "crop_bounds": (x, y, w, h),
+        "area_retention": cropped_area / original_area if original_area > 0 else 0,
+        "content_mask": content_mask,
+        "method": "largest_inscribed_rectangle",
+    }
+
+    return cropped, analysis
+
+
+def remove_margin_bounding_box(
+    image: np.ndarray,
+    blur_kernel_size: int = 7,
+    black_threshold: int = 50,
+    content_threshold: int = 200,
+    morph_kernel_size: int = 25,
+    min_content_area_ratio: float = 0.01,
+    padding: int = 5,
+    expansion_factor: float = 0.0,
+    use_min_area_rect: bool = False,
+    return_analysis: bool = False,
+) -> tuple:
+    """Remove margins using simple bounding box approach.
+
+    This method finds the bounding box around all content regions,
+    which is much faster than finding the largest inscribed rectangle.
+
+    Args:
+        image: Input image (BGR or grayscale)
+        blur_kernel_size: Gaussian blur kernel size
+        black_threshold: Threshold for detecting very dark regions (margins)
+        content_threshold: Threshold for detecting content regions
+        morph_kernel_size: Morphological operation kernel size
+        min_content_area_ratio: Minimum content area ratio to consider valid
+        padding: Padding to add/subtract from the detected boundary
+        expansion_factor: Factor to expand the bounding box (0.1 = 10% expansion)
+        use_min_area_rect: If True, use minimum area rectangle (can be rotated)
+        return_analysis: If True, returns additional analysis information
+
+    Returns:
+        np.ndarray or tuple: Cropped image, or (cropped_image, analysis) if return_analysis=True
+    """
+    # Detect content mask
+    content_mask = detect_curved_margins(
+        image,
+        blur_kernel_size,
+        black_threshold,
+        content_threshold,
+        morph_kernel_size,
+        min_content_area_ratio,
+    )
+    
+    # Find contours in the content mask
+    contours, _ = cv2.findContours(
+        content_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    
+    if not contours:
+        # No content found, return original image
+        if return_analysis:
+            return image, {
+                "original_shape": image.shape,
+                "cropped_shape": image.shape,
+                "crop_bounds": (0, 0, image.shape[1], image.shape[0]),
+                "area_retention": 1.0,
+                "content_mask": content_mask,
+                "method": "bounding_box_no_content",
+            }
+        return image
+    
+    # Combine all contours to find overall bounding box
+    all_points = np.vstack(contours)
+    
+    if use_min_area_rect:
+        # Find minimum area rectangle (can be rotated)
+        rect = cv2.minAreaRect(all_points)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        
+        # Get axis-aligned bounding box of the rotated rectangle
+        x = np.min(box[:, 0])
+        y = np.min(box[:, 1])
+        w = np.max(box[:, 0]) - x
+        h = np.max(box[:, 1]) - y
+    else:
+        # Find axis-aligned bounding rectangle
+        x, y, w, h = cv2.boundingRect(all_points)
+    
+    # Apply expansion factor
+    if expansion_factor > 0:
+        center_x = x + w / 2
+        center_y = y + h / 2
+        new_w = w * (1 + expansion_factor)
+        new_h = h * (1 + expansion_factor)
+        x = int(center_x - new_w / 2)
+        y = int(center_y - new_h / 2)
+        w = int(new_w)
+        h = int(new_h)
+    
+    # Apply padding
+    x = max(0, x - padding)
+    y = max(0, y - padding)
+    w = min(image.shape[1] - x, w + 2 * padding)
+    h = min(image.shape[0] - y, h + 2 * padding)
+    
+    # Ensure we don't go out of bounds
+    x = max(0, min(x, image.shape[1] - 1))
+    y = max(0, min(y, image.shape[0] - 1))
+    w = max(1, min(w, image.shape[1] - x))
+    h = max(1, min(h, image.shape[0] - y))
     
     # Crop the image
-    cropped = image[y:y+h, x:x+w]
+    cropped = image[y : y + h, x : x + w]
     
     if not return_analysis:
         return cropped
@@ -933,7 +1077,9 @@ def remove_margin_aggressive(
         "crop_bounds": (x, y, w, h),
         "area_retention": cropped_area / original_area if original_area > 0 else 0,
         "content_mask": content_mask,
-        "method": "largest_inscribed_rectangle",
+        "method": "min_area_rect_bbox" if use_min_area_rect else "axis_aligned_bbox",
+        "expansion_factor": expansion_factor,
+        "num_contours": len(contours),
     }
     
     return cropped, analysis

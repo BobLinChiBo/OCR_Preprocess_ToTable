@@ -6,6 +6,14 @@ This script visualizes the deskewing process, helping you assess angle detection
 quality and adjust deskewing parameters.
 """
 
+import warnings
+warnings.warn(
+    "This script is deprecated and will be removed in a future version. "
+    "Please use visualize_deskew_v2.py or run_visualizations.py with --use-v2 flag.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -20,7 +28,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
+from src.ocr_pipeline.config import Config, Stage1Config, Stage2Config  # noqa: E402
 import src.ocr_pipeline.utils as ocr_utils  # noqa: E402
 from tools.output_manager import (  # noqa: E402
     get_default_output_manager,
@@ -61,7 +69,7 @@ def load_config_from_file(config_path: Path = None, stage: int = 1):
         else:
             return Stage1Config.from_json(config_path)
     else:
-        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        print(f"Warning: Config file {config_path} not found, using defaults")
         if stage == 2:
             return Stage2Config()
         else:

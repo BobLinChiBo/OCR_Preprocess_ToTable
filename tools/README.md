@@ -1,270 +1,164 @@
 # Tools Directory
 
-A comprehensive suite of parameter tuning, visualization, and analysis tools for the OCR Table Extraction Pipeline. These tools help optimize pipeline performance for your specific document types and provide detailed insights into processing results.
+Visualization and analysis tools for the OCR Table Extraction Pipeline. These tools help analyze pipeline performance and debug processing issues.
 
-## Quick Start
+## 🆕 Version 2 Architecture
 
-### Interactive Guided Tuning (Recommended)
+The visualization tools now use a new processor-based architecture (v2) that provides better maintainability and consistency. The v2 scripts centralize parameter handling and reduce code duplication.
 
-```bash
-# Start the interactive tuning process
-python tools/quick_start_tuning.py
-```
-
-This script guides you through the complete parameter optimization process with prompts and assistance at each stage.
-
-### Manual Step-by-Step Tuning
-
-For more control over the tuning process:
+### Using V2 Scripts
 
 ```bash
-# 1. Initial setup (one-time)
-python tools/setup_tuning.py
+# Use v2 scripts via run_visualizations.py
+python tools/run_visualizations.py all --test-images --use-v2
 
-# 2. Tune each stage individually
-python tools/tune_page_splitting.py      # Stage 1: Page separation
-python tools/tune_deskewing.py           # Stage 2: Rotation correction
-python tools/tune_roi_detection.py       # Stage 3: Content area detection
-python tools/tune_line_detection.py      # Stage 4: Table line detection
-
-# 3. Test optimized parameters
-python tools/run_tuned_pipeline.py data/input/ --verbose
+# Or call v2 scripts directly
+python tools/visualize_page_split_v2.py image.jpg
+python tools/visualize_margin_removal_v2.py image.jpg --compare
+python tools/visualize_deskew_v2.py image.jpg
+python tools/visualize_table_lines_v2.py image.jpg
+python tools/visualize_table_crop_v2.py image.jpg
 ```
 
-## Visualization Tools
+### Migration from V1 to V2
 
-### Complete Analysis Suite
+⚠️ **Deprecation Notice**: V1 scripts are deprecated and will be removed in a future version. Please migrate to v2 scripts.
 
+**Key differences in V2:**
+- Centralized parameter mapping in `processor_wrappers.py`
+- Unified configuration loading via `config_utils.py`
+- Better consistency across all visualization scripts
+- Reduced maintenance burden when utils.py changes
+
+**Migration examples:**
 ```bash
-# Run all visualizations for comprehensive analysis
-python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
+# Old (V1)
+python tools/visualize_margin_removal.py image.jpg
+python tools/visualize_margin_removal_fast.py image.jpg
+python tools/visualize_margin_removal_bbox.py image.jpg
 
-# Run specific visualization categories
-python tools/run_visualizations.py preprocessing image.jpg
-python tools/run_visualizations.py detection image.jpg
-python tools/run_visualizations.py extraction image.jpg
+# New (V2) - single script with method selection
+python tools/visualize_margin_removal_v2.py image.jpg --method aggressive
+python tools/visualize_margin_removal_v2.py image.jpg --method bounding_box --use-optimized
+python tools/visualize_margin_removal_v2.py image.jpg --compare  # Compare all methods
 ```
 
-### Individual Visualization Scripts
+## Available Tools
 
-#### Page Splitting Analysis
+### Visualization Suite
+
+#### Complete Analysis
+```bash
+# Run all visualizations for comprehensive analysis (V2 recommended)
+python tools/run_visualizations.py all --pipeline image.jpg --use-v2
+
+# Process test images with v2 scripts
+python tools/run_visualizations.py all --test-images --use-v2
+
+# Run pipeline mode with v2 scripts
+python tools/run_visualizations.py page-split margin-removal deskew table-lines table-crop --test-images --pipeline --use-v2
+```
+
+#### Individual Visualization Scripts
+
+**Page Splitting Analysis**
 ```bash
 # Analyze gutter detection and page separation
-python tools/visualize_page_split.py image.jpg --gutter-start 0.35 --gutter-end 0.65
-python tools/visualize_page_split.py image.jpg --show-histogram --save-debug
+python tools/visualize_page_split.py image.jpg
+python tools/visualize_page_split.py image.jpg --save-debug
 ```
 
-#### Deskewing Analysis
+**Deskewing Analysis**
 ```bash
 # Analyze rotation detection and correction
-python tools/visualize_deskew.py image.jpg --angle-range 30
-python tools/visualize_deskew.py image.jpg --method histogram --save-intermediates
-python tools/visualize_deskew.py image.jpg --show-line-detection
+python tools/visualize_deskew.py image.jpg
+python tools/visualize_deskew.py image.jpg --save-intermediates
 ```
 
-#### ROI Detection Visualization
+**ROI Detection Visualization**
 ```bash
-# Analyze region of interest detection
-python tools/visualize_roi.py image.jpg --method gabor --threshold 150
-python tools/visualize_roi.py image.jpg --method canny_sobel --save-debug
-python tools/visualize_roi.py image.jpg --show-projections
+# Analyze region of interest detection (margin removal)
+python tools/visualize_roi.py image.jpg
+python tools/visualize_roi.py image.jpg --save-debug
 ```
 
-#### Table Line Detection
+**Table Line Detection**
 ```bash
 # Analyze table structure detection
-python tools/visualize_table_lines.py image.jpg --min-line-length 40
-python tools/visualize_table_lines.py image.jpg --method probabilistic --save-debug
-python tools/visualize_table_lines.py image.jpg --show-preprocessing
+python tools/visualize_table_lines.py image.jpg
+python tools/visualize_table_lines.py image.jpg --save-debug
 ```
 
-#### Table Cropping Visualization
+**Table Cropping Visualization**
 ```bash
 # Analyze final table extraction
-python tools/visualize_table_crop.py image.jpg --margin 10
+python tools/visualize_table_crop.py image.jpg
 python tools/visualize_table_crop.py image.jpg --show-boundaries
 ```
 
-## Parameter Tuning Tools
+## Utilities
 
-### Page Splitting Optimization
-Tests different gutter detection parameters for double-page document separation:
-
-```bash
-python tools/tune_page_splitting.py
-```
-
-**Key Parameters:**
-- `gutter_search_start`: Start of gutter search range (0.35-0.45)
-- `gutter_search_end`: End of gutter search range (0.55-0.65)
-- `min_gutter_width`: Minimum gutter width threshold
-
-### Deskewing Optimization
-Optimizes rotation correction parameters:
-
-```bash
-python tools/tune_deskewing.py
-```
-
-**Key Parameters:**
-- `angle_range`: Maximum rotation angle to test (5-20°)
-- `angle_step`: Angle increment precision (0.1-0.5°)
-- `min_angle_correction`: Minimum angle threshold for correction
-
-### ROI Detection Optimization
-Tunes content area detection algorithms:
-
-```bash
-python tools/tune_roi_detection.py
-```
-
-**Key Parameters:**
-- `method`: Detection algorithm (`gabor`, `canny_sobel`, `adaptive_threshold`)
-- `gabor_binary_threshold`: Gabor filter threshold (90-180)
-- `roi_min_cut_strength`: Minimum boundary strength (10-30)
-
-### Line Detection Optimization
-Optimizes table structure detection:
-
-```bash
-python tools/tune_line_detection.py
-```
-
-**Key Parameters:**
-- `min_line_length`: Minimum line length to detect (20-80 pixels)
-- `max_line_gap`: Maximum gap to bridge in lines (5-25 pixels)
-- `line_detection_method`: Algorithm choice (`hough`, `probabilistic`)
-
-## Results Management Tools
-
-### Results Analysis
+### Results Management
 ```bash
 # List all available results
 python tools/check_results.py list
 
-# View specific results
-python tools/check_results.py view latest
-python tools/check_results.py view "2024-01-15_14:30:45"
-
 # Clean up old results
 python tools/check_results.py cleanup --older-than 7d
-```
 
-### Results Comparison
-```bash
-# Compare different parameter sets
-python tools/compare_results.py
-
-# Compare specific runs
-python tools/compare_results.py --run1 "2024-01-15_14:30:45" --run2 "2024-01-15_15:45:22"
-
-# Generate comparison report
-python tools/compare_results.py --export-report comparison_report.json
-```
-
-## Configuration Management
-
-### Test Configuration
-```bash
-# Validate configuration files
-python tools/test_config_loading.py
-
-# Test custom configurations
-python tools/test_config_loading.py --config configs/my_custom_config.json
-```
-
-### Tuned Pipeline Execution
-```bash
-# Run pipeline with optimized parameters
-python tools/run_tuned_pipeline.py data/input/ --verbose
-
-# Use specific tuned configuration
-python tools/run_tuned_pipeline.py data/input/ --config tuned_params.json
+# View specific results
+python tools/check_results.py view latest
 ```
 
 ## Tool Categories
 
-### Setup and Initialization
-- `setup_tuning.py` - One-time setup for parameter tuning
-- `setup_tuning_windows.py` - Windows-specific setup script
-
-### Parameter Optimization
-- `tune_page_splitting.py` - Page separation parameter tuning
-- `tune_deskewing.py` - Rotation correction optimization
-- `tune_roi_detection.py` - Content area detection tuning
-- `tune_line_detection.py` - Table line detection optimization
-
 ### Visualization and Analysis
-- `run_visualizations.py` - Master visualization runner
-- `visualize_page_split.py` - Page splitting analysis
-- `visualize_deskew.py` - Deskewing analysis
-- `visualize_roi.py` - ROI detection visualization
-- `visualize_table_lines.py` - Table line detection analysis
-- `visualize_table_crop.py` - Final table extraction visualization
+
+#### V2 Scripts (Recommended)
+- `run_visualizations.py --use-v2` - Master visualization runner with v2 architecture
+- `visualize_page_split_v2.py` - Page splitting with PageSplitProcessor
+- `visualize_margin_removal_v2.py` - Unified margin removal (all methods)
+- `visualize_deskew_v2.py` - Deskewing with DeskewProcessor
+- `visualize_table_lines_v2.py` - Table lines with TableLineProcessor
+- `visualize_table_crop_v2.py` - Table cropping with TableCropProcessor
+
+#### V1 Scripts (Deprecated)
+- `visualize_page_split.py` - ⚠️ Deprecated - use v2
+- `visualize_deskew.py` - ⚠️ Deprecated - use v2
+- `visualize_margin_removal.py` - ⚠️ Deprecated - use v2
+- `visualize_margin_removal_fast.py` - ⚠️ Deprecated - use v2 with --use-optimized
+- `visualize_margin_removal_bbox.py` - ⚠️ Deprecated - use v2 with --method bounding_box
+- `visualize_table_lines.py` - ⚠️ Deprecated - use v2
+- `visualize_table_crop.py` - ⚠️ Deprecated - use v2
 
 ### Results Management
-- `check_results.py` - Results exploration and cleanup
-- `compare_results.py` - Parameter comparison and analysis
+- `check_results.py` - Results exploration and cleanup utilities
 - `output_manager.py` - Output directory management utilities
 
-### Pipeline Execution
-- `quick_start_tuning.py` - Interactive guided tuning
-- `run_tuned_pipeline.py` - Execute pipeline with optimized parameters
-- `test_config_loading.py` - Configuration validation
+## Usage Patterns
 
-## Best Practices
-
-### Parameter Tuning Workflow
-
-1. **Start with representative test images** (6 diverse samples)
-2. **Use interactive tuning** for first-time users
-3. **Tune stages sequentially** - each stage depends on previous ones
-4. **Visually inspect results** at each parameter setting
-5. **Document successful parameter combinations** for future use
-
-### Visualization Strategy
-
-1. **Use complete analysis suite** for comprehensive understanding
-2. **Focus on problem areas** with individual visualization tools
-3. **Save intermediate results** when debugging issues
-4. **Compare different parameter sets** side-by-side
-
-### Performance Optimization
-
-1. **Test on small sample sets** before processing large datasets
-2. **Use debug mode selectively** - generates large files
-3. **Clean up tuning outputs regularly** to manage disk space
-4. **Document optimal parameters** for different document types
-
-## Common Use Cases
-
-### New Document Type
+### New Document Analysis
 ```bash
-# Complete parameter optimization for new document type
-python tools/quick_start_tuning.py
+# Complete analysis workflow for new document type
 python tools/run_visualizations.py all --pipeline representative_image.jpg
+python tools/visualize_page_split.py representative_image.jpg --save-debug
+python tools/visualize_deskew.py representative_image.jpg --save-intermediates
 ```
 
 ### Troubleshooting Poor Results
 ```bash
 # Analyze each stage individually
 python tools/visualize_page_split.py problematic_image.jpg --save-debug
-python tools/visualize_deskew.py problematic_image.jpg --show-line-detection
-python tools/visualize_roi.py problematic_image.jpg --method gabor --show-projections
+python tools/visualize_deskew.py problematic_image.jpg
+python tools/visualize_roi.py problematic_image.jpg
+python tools/visualize_table_lines.py problematic_image.jpg --save-debug
 ```
 
-### Performance Comparison
+### Batch Analysis
 ```bash
-# Compare different parameter sets
-python tools/tune_roi_detection.py  # Try different ROI methods
-python tools/compare_results.py     # Compare results quantitatively
-```
-
-### Batch Processing Preparation
-```bash
-# Optimize on test set, then process full dataset
-python tools/run_tuned_pipeline.py data/input/test_images/ --verbose
-python tools/run_tuned_pipeline.py data/input/raw_images/ --config optimized_params.json
+# Run visualizations on multiple representative images
+python tools/run_visualizations.py all --pipeline image1.jpg
+python tools/run_visualizations.py all --pipeline image2.jpg
 ```
 
 ## Output Organization
@@ -273,22 +167,65 @@ All tools organize outputs in structured directories:
 
 ```
 data/output/
-├── tuning/                    # Parameter optimization results
-│   ├── 01_split_pages/       # Page splitting tests
-│   ├── 02_deskewed/          # Deskewing tests
-│   ├── 03_roi_detection/     # ROI detection tests
-│   └── 04_line_detection/    # Line detection tests
 ├── visualization/             # Visualization outputs
-│   └── pipeline_YYYYMMDD_HHMMSS/
-└── comparison/               # Results comparison data
+│   ├── page_split/           # Page splitting analysis
+│   ├── deskew/               # Deskewing analysis  
+│   ├── roi/                  # ROI detection analysis
+│   ├── table_lines/          # Line detection analysis
+│   └── table_crop/           # Table cropping analysis
+└── debug/                    # Debug outputs when --save-debug used
 ```
 
 ## Integration with Main Pipeline
 
-The tools directory integrates seamlessly with the main pipeline:
+The visualization tools integrate seamlessly with the main pipeline:
 
-- **Parameter files** generated by tuning tools are compatible with main pipeline configs
-- **Visualization outputs** help validate main pipeline results
-- **Optimized parameters** can be directly used in production processing
+- **Parameter Analysis**: Visualizations help understand how current parameters affect processing
+- **Debugging**: Debug outputs help identify where processing issues occur
+- **Quality Assessment**: Visual outputs help assess pipeline performance on different document types
+
+## Best Practices
+
+### Visualization Strategy
+
+1. **Start with complete analysis** for comprehensive understanding
+2. **Focus on problem areas** with individual visualization tools
+3. **Save intermediate results** when debugging specific issues
+4. **Use representative samples** for document type analysis
+
+### Performance Optimization
+
+1. **Use selective visualization** - only run needed analysis tools
+2. **Use debug mode selectively** - generates large files
+3. **Clean up outputs regularly** to manage disk space
+4. **Process representative samples** before full datasets
+
+### Common Workflows
+
+**New Document Type Analysis:**
+```bash
+python tools/run_visualizations.py all --pipeline sample_image.jpg
+# Review outputs to understand document characteristics
+# Focus on problematic stages with individual tools
+```
+
+**Performance Debugging:**
+```bash
+python tools/visualize_page_split.py problem_image.jpg --save-debug
+python tools/visualize_deskew.py problem_image.jpg
+# Continue through pipeline stages as needed
+```
+
+**Results Management:**
+```bash
+python tools/check_results.py list
+python tools/check_results.py cleanup --older-than 3d
+```
+
+## Requirements
+
+- All visualization tools require the main pipeline dependencies
+- matplotlib and other visualization libraries (automatically installed with main requirements)
+- Sufficient disk space for debug outputs when using --save-debug options
 
 For detailed pipeline usage, see the main project [README.md](../README.md) and [docs/CLAUDE.md](../docs/CLAUDE.md).

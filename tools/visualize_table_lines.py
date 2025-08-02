@@ -6,6 +6,14 @@ This script visualizes the table line detection process, helping you assess
 morphological operations and line detection parameters.
 """
 
+import warnings
+warnings.warn(
+    "This script is deprecated and will be removed in a future version. "
+    "Please use visualize_table_lines_v2.py or run_visualizations.py with --use-v2 flag.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -19,7 +27,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
+from src.ocr_pipeline.config import Config, Stage1Config, Stage2Config  # noqa: E402
 import src.ocr_pipeline.utils as ocr_utils  # noqa: E402
 from output_manager import (
     get_test_images,
@@ -43,7 +51,7 @@ def load_config_from_file(config_path: Path = None, stage: int = 1):
         else:
             return Stage1Config.from_json(config_path)
     else:
-        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        print(f"Warning: Config file {config_path} not found, using defaults")
         if stage == 2:
             return Stage2Config()
         else:
@@ -56,10 +64,10 @@ def detect_table_lines_detailed(
     hough_threshold: int = 60,
 ) -> Dict[str, Any]:
     """Enhanced table line detection with detailed analysis."""
-    _, _, analysis = ocr_utils.detect_table_lines(
+    h_lines, v_lines, analysis = ocr_utils.detect_table_lines(
         image,
-        min_line_length=config.min_line_length,
-        max_line_gap=config.max_line_gap,
+        min_line_length=None,  # Let function calculate dynamically
+        max_line_gap=None,     # Let function calculate dynamically
         hough_threshold=hough_threshold,
         horizontal_kernel_ratio=getattr(config, 'horizontal_kernel_ratio', 30),
         vertical_kernel_ratio=getattr(config, 'vertical_kernel_ratio', 30),
@@ -78,6 +86,17 @@ def detect_table_lines_detailed(
         max_merge_iterations=getattr(config, 'max_merge_iterations', 3),
         return_analysis=True,
     )
+    # Add the lines to the analysis dict for easier access
+    analysis["h_lines"] = h_lines
+    analysis["v_lines"] = v_lines
+    # Add line counts with the expected names
+    analysis["h_line_count"] = analysis.get("h_lines_count", len(h_lines))
+    analysis["v_line_count"] = analysis.get("v_lines_count", len(v_lines))
+    # Add average lengths with the expected names
+    analysis["h_avg_length"] = analysis.get("avg_h_length", 0)
+    analysis["v_avg_length"] = analysis.get("avg_v_length", 0)
+    # Determine if table structure is detected
+    analysis["has_table_structure"] = len(h_lines) > 0 and len(v_lines) > 0
     return analysis
 
 
@@ -496,8 +515,8 @@ def process_image_table_lines_visualization(
                 if k not in ["horizontal_morph", "vertical_morph"]
             },
             "config_used": {
-                "min_line_length": config.min_line_length,
-                "max_line_gap": config.max_line_gap,
+                "min_line_length": None,  # Calculated dynamically
+                "max_line_gap": None,      # Calculated dynamically
                 "hough_threshold": hough_threshold,
                 "horizontal_kernel_ratio": getattr(config, 'horizontal_kernel_ratio', 30),
                 "vertical_kernel_ratio": getattr(config, 'vertical_kernel_ratio', 30),
@@ -794,8 +813,7 @@ def main():
     if args.test_images:
         print("Batch mode: Processing all images from test_images directory")
     print("Parameters:")
-    print(f"  - Min line length: {config.min_line_length}px")
-    print(f"  - Max line gap: {config.max_line_gap}px")
+    # Note: min_line_length and max_line_gap are calculated dynamically in detect_table_lines
     print(f"  - Hough threshold: {hough_threshold}")
     print(f"  - Horizontal kernel ratio: {getattr(config, 'horizontal_kernel_ratio', 30)}")
     print(f"  - Vertical kernel ratio: {getattr(config, 'vertical_kernel_ratio', 30)}")
@@ -882,8 +900,8 @@ def main():
     summary_data = {
         "timestamp": __import__("time").strftime("%Y-%m-%d %H:%M:%S"),
         "config_parameters": {
-            "min_line_length": config.min_line_length,
-            "max_line_gap": config.max_line_gap,
+            "min_line_length": getattr(config, 'min_line_length', 50),
+            "max_line_gap": getattr(config, 'max_line_gap', 10),
             "hough_threshold": hough_threshold,
             "horizontal_kernel_ratio": getattr(config, 'horizontal_kernel_ratio', 30),
             "vertical_kernel_ratio": getattr(config, 'vertical_kernel_ratio', 30),

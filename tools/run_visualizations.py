@@ -24,23 +24,36 @@ from output_manager import OutputManager  # noqa: E402
 class VisualizationRunner:
     """Manages running multiple visualization scripts."""
 
-    def __init__(self):
+    def __init__(self, use_v2=False):
         self.manager = OutputManager()
-        self.available_scripts = {
+        self.use_v2 = use_v2
+        
+        # V1 scripts (original)
+        self.available_scripts_v1 = {
             "page-split": {
                 "script": "visualize_page_split.py",
                 "description": "Page splitting visualization",
                 "default_args": [""],
             },
+            "margin-removal": {
+                "script": "visualize_margin_removal.py",
+                "description": "Margin removal visualization",
+                "default_args": ["--save-debug"],
+            },
+            "margin-removal-fast": {
+                "script": "visualize_margin_removal_fast.py",
+                "description": "Fast margin removal visualization (optimized)",
+                "default_args": ["--save-debug"],
+            },
+            "margin-removal-bbox": {
+                "script": "visualize_margin_removal_bbox.py",
+                "description": "Bounding box margin removal (fastest)",
+                "default_args": ["--save-debug"],
+            },
             "deskew": {
                 "script": "visualize_deskew.py",
                 "description": "Deskewing analysis and visualization",
                 "default_args": [],
-            },
-            "roi": {
-                "script": "visualize_roi.py",
-                "description": "Region of interest detection",
-                "default_args": ["--save-debug"],
             },
             "table-lines": {
                 "script": "visualize_table_lines.py",
@@ -50,9 +63,41 @@ class VisualizationRunner:
             "table-crop": {
                 "script": "visualize_table_crop.py",
                 "description": "Table cropping visualization",
-                "default_args": ["--save-debug"],
+                "default_args": [],
             },
         }
+        
+        # V2 scripts (new processor architecture)
+        self.available_scripts_v2 = {
+            "page-split": {
+                "script": "visualize_page_split_v2.py",
+                "description": "Page splitting visualization (v2)",
+                "default_args": [],
+            },
+            "margin-removal": {
+                "script": "visualize_margin_removal_v2.py",
+                "description": "Margin removal visualization (v2)",
+                "default_args": ["--save-debug"],
+            },
+            "deskew": {
+                "script": "visualize_deskew_v2.py",
+                "description": "Deskewing analysis and visualization (v2)",
+                "default_args": [],
+            },
+            "table-lines": {
+                "script": "visualize_table_lines_v2.py",
+                "description": "Table line detection visualization (v2)",
+                "default_args": ["--save-debug", "--show-filtering-steps"],
+            },
+            "table-crop": {
+                "script": "visualize_table_crop_v2.py",
+                "description": "Table cropping visualization (v2)",
+                "default_args": [],
+            },
+        }
+        
+        # Select which version to use
+        self.available_scripts = self.available_scripts_v2 if use_v2 else self.available_scripts_v1
 
     def run_single_script(
         self,
@@ -263,18 +308,29 @@ class VisualizationRunner:
                     print("Stage 1: Using individual image arguments")
                     extra_args = []
             else:
-                # Subsequent stages use previous stage's processed images
-                processed_input_dir = current_input_dir / "processed_images"
-                if processed_input_dir.exists():
+                # Special handling for table-crop which uses positional arguments
+                if script_name == "table-crop":
                     print(
-                        f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input"
+                        f"Stage {stage_num}: Using table detection results from {script_names[i-1]}"
                     )
-                    extra_args = ["--input-dir", str(processed_input_dir.resolve())]
+                    # Find all PNG files from table-lines output
+                    png_files = list(current_input_dir.glob("*.png"))
+                    extra_args = []
+                    for png_file in png_files:
+                        extra_args.append(str(png_file.resolve()))
                 else:
-                    print(
-                        f"Stage {stage_num}: Using all output from {script_names[i-1]} as input"
-                    )
-                    extra_args = ["--input-dir", str(current_input_dir.resolve())]
+                    # Subsequent stages use previous stage's processed images
+                    processed_input_dir = current_input_dir / "processed_images"
+                    if processed_input_dir.exists():
+                        print(
+                            f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input"
+                        )
+                        extra_args = ["--input-dir", str(processed_input_dir.resolve())]
+                    else:
+                        print(
+                            f"Stage {stage_num}: Using all output from {script_names[i-1]} as input"
+                        )
+                        extra_args = ["--input-dir", str(current_input_dir.resolve())]
 
             # Add output directory and any custom args (use absolute paths)
             extra_args.extend(["--output-dir", str(stage_dir.resolve())])
@@ -383,7 +439,7 @@ def parse_script_args_from_argv(argv: List[str]) -> Dict[str, List[str]]:
             # Collect arguments until next --flag or end
             while i < len(argv) and not (
                 argv[i].startswith("--")
-                and not argv[i].startswith("--roi-")
+                and not argv[i].startswith("--margin-removal-")
                 and not argv[i].startswith("--deskew-")
                 and not argv[i].startswith("--page-split-")
             ):
@@ -413,7 +469,7 @@ Examples:
   python run_visualizations.py deskew image1.jpg image2.jpg
 
   # Run multiple scripts
-  python run_visualizations.py deskew page-split roi image.jpg
+  python run_visualizations.py deskew page-split margin-removal image.jpg
 
   # Run with custom arguments per script
   python run_visualizations.py deskew page-split image.jpg \\
@@ -428,7 +484,7 @@ Examples:
   python run_visualizations.py all --test-images
 
   # Pipeline mode: each stage uses previous stage's output as input
-  python run_visualizations.py page-split deskew roi --test-images --pipeline
+  python run_visualizations.py page-split margin-removal deskew --test-images --pipeline
 
   # List available scripts
   python run_visualizations.py --list
@@ -460,6 +516,11 @@ Examples:
         action="store_true", 
         help="Disable step-by-step filtering visualization for table-lines (default: enabled)"
     )
+    parser.add_argument(
+        "--use-v2",
+        action="store_true",
+        help="Use v2 visualization scripts with new processor architecture"
+    )
 
     # Per-script arguments (parsed manually)
     parser.add_argument(
@@ -472,7 +533,7 @@ Examples:
         help="Arguments for page-split script",
     )
     parser.add_argument(
-        "--roi-args", nargs="*", dest="_ignore3", help="Arguments for roi script"
+        "--margin-removal-args", nargs="*", dest="_ignore3", help="Arguments for margin-removal script"
     )
     parser.add_argument(
         "--table-lines-args",
@@ -496,7 +557,7 @@ Examples:
     # Parse known args to handle script-specific arguments
     args, remaining = parser.parse_known_args()
 
-    runner = VisualizationRunner()
+    runner = VisualizationRunner(use_v2=args.use_v2)
 
     if args.list:
         runner.list_available_scripts()
@@ -520,6 +581,29 @@ Examples:
 
     if "all" in script_names:
         script_names = list(runner.available_scripts.keys())
+    
+    # For v2, handle margin-removal variants by mapping to single script
+    if args.use_v2:
+        # Map all margin-removal variants to the unified v2 script
+        mapped_names = []
+        for script in script_names:
+            if script in ["margin-removal-fast", "margin-removal-bbox"]:
+                # Map to base margin-removal, but preserve args
+                if "margin-removal" not in mapped_names:
+                    mapped_names.append("margin-removal")
+                # Transfer args from variant to base
+                if script in script_args:
+                    if "margin-removal" not in script_args:
+                        script_args["margin-removal"] = []
+                    script_args["margin-removal"].extend(script_args[script])
+                    # Add method selection based on variant
+                    if script == "margin-removal-fast":
+                        script_args["margin-removal"].append("--use-optimized")
+                    elif script == "margin-removal-bbox":
+                        script_args["margin-removal"].extend(["--method", "bounding_box"])
+            else:
+                mapped_names.append(script)
+        script_names = mapped_names
 
     if not script_names:
         print("No scripts specified. Use --list to see available scripts.")

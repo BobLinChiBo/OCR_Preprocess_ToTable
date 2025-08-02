@@ -378,7 +378,7 @@ def save_step_parameters(
         Path to the saved parameter file
     """
     parameters_dir = output_dir / "parameters"
-    parameters_dir.mkdir(exist_ok=True)
+    parameters_dir.mkdir(parents=True, exist_ok=True)
 
     # Extract configuration parameters
     if hasattr(config_obj, "__dict__"):
@@ -512,7 +512,7 @@ def create_parameter_comparison(param_files: List[Path], output_dir: Path) -> Pa
         Path to the comparison report
     """
     parameters_dir = output_dir / "parameters"
-    parameters_dir.mkdir(exist_ok=True)
+    parameters_dir.mkdir(parents=True, exist_ok=True)
 
     comparison_data = {
         "comparison_info": {

@@ -40,19 +40,11 @@ class OCRPipeline:
 
         # Process each page
         for i, page in enumerate([left_page, right_page], 1):
-            # Deskew
-            deskewed, _ = utils.deskew_image(
-                page,
-                self.config.angle_range,
-                self.config.angle_step,
-                self.config.min_angle_correction,
-            )
-
             # Margin removal (preprocessing step)
-            processing_image = deskewed
+            processing_image = page
             if self.config.enable_margin_removal:
                 processing_image = utils.remove_margin_aggressive(
-                    deskewed,
+                    page,
                     blur_kernel_size=self.config.blur_kernel_size,
                     black_threshold=self.config.black_threshold,
                     content_threshold=self.config.content_threshold,
@@ -62,11 +54,19 @@ class OCRPipeline:
                 )
 
                 if self.config.verbose:
-                    print(f"    Margin removed: {processing_image.shape} (from {deskewed.shape})")
+                    print(f"    Margin removed: {processing_image.shape} (from {page.shape})")
+
+            # Deskew
+            deskewed, _ = utils.deskew_image(
+                processing_image,
+                self.config.angle_range,
+                self.config.angle_step,
+                self.config.min_angle_correction,
+            )
 
             # Detect table lines
             h_lines, v_lines = utils.detect_table_lines(
-                processing_image,
+                deskewed,
                 threshold=self.config.threshold,
                 horizontal_kernel_size=self.config.horizontal_kernel_size,
                 vertical_kernel_size=self.config.vertical_kernel_size,
@@ -78,9 +78,9 @@ class OCRPipeline:
 
             # Crop to table region
             if h_lines and v_lines:
-                cropped = utils.crop_table_region(processing_image, h_lines, v_lines)
+                cropped = utils.crop_table_region(deskewed, h_lines, v_lines)
             else:
-                cropped = processing_image
+                cropped = deskewed
 
             # Save result
             output_name = f"{image_path.stem}_page_{i}.jpg"
@@ -188,24 +188,11 @@ class TwoStageOCRPipeline:
                 for i, page in enumerate([left_page, right_page], 1):
                     page_name = f"{image_path.stem}_page_{i}"
 
-                    # Deskew
-                    deskewed, _ = utils.deskew_image(
-                        page,
-                        self.stage1_config.angle_range,
-                        self.stage1_config.angle_step,
-                        self.stage1_config.min_angle_correction,
-                    )
-
-                    # Save deskewed image
-                    deskew_dir = self.stage1_config.output_dir / "02_deskewed"
-                    deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
-                    utils.save_image(deskewed, deskew_path)
-
                     # Margin removal
-                    processing_image = deskewed
+                    processing_image = page
                     if self.stage1_config.enable_margin_removal:
                         processing_image = utils.remove_margin_aggressive(
-                            deskewed,
+                            page,
                             blur_kernel_size=self.stage1_config.blur_kernel_size,
                             black_threshold=self.stage1_config.black_threshold,
                             content_threshold=self.stage1_config.content_threshold,
@@ -215,16 +202,29 @@ class TwoStageOCRPipeline:
                         )
 
                         # Save margin-removed image
-                        margin_dir = self.stage1_config.output_dir / "03_margin_removed"
+                        margin_dir = self.stage1_config.output_dir / "02_margin_removed"
                         margin_path = margin_dir / f"{page_name}_margin_removed.jpg"
                         utils.save_image(processing_image, margin_path)
 
                         if self.stage1_config.verbose:
-                            print(f"    Margin removed: {processing_image.shape} (from {deskewed.shape})")
+                            print(f"    Margin removed: {processing_image.shape} (from {page.shape})")
+
+                    # Deskew
+                    deskewed, _ = utils.deskew_image(
+                        processing_image,
+                        self.stage1_config.angle_range,
+                        self.stage1_config.angle_step,
+                        self.stage1_config.min_angle_correction,
+                    )
+
+                    # Save deskewed image
+                    deskew_dir = self.stage1_config.output_dir / "03_deskewed"
+                    deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
+                    utils.save_image(deskewed, deskew_path)
 
                     # Table line detection
                     h_lines, v_lines = utils.detect_table_lines(
-                        processing_image,
+                        deskewed,
                         threshold=self.stage1_config.threshold,
                         horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
                         vertical_kernel_size=self.stage1_config.vertical_kernel_size,
@@ -237,16 +237,16 @@ class TwoStageOCRPipeline:
                     # Save table line visualization
                     lines_dir = self.stage1_config.output_dir / "04_table_lines"
                     lines_path = lines_dir / f"{page_name}_table_lines.jpg"
-                    vis_image = utils.visualize_detected_lines(processing_image, h_lines, v_lines)
+                    vis_image = utils.visualize_detected_lines(deskewed, h_lines, v_lines)
                     utils.save_image(vis_image, lines_path)
 
                     # Final table cropping
                     if h_lines and v_lines:
                         cropped_table = utils.crop_table_region(
-                            processing_image, h_lines, v_lines
+                            deskewed, h_lines, v_lines
                         )
                     else:
-                        cropped_table = processing_image
+                        cropped_table = deskewed
 
                     # Save final cropped table for Stage 2
                     crop_dir = self.stage1_config.output_dir / "05_cropped_tables"
@@ -321,30 +321,9 @@ class TwoStageOCRPipeline:
                 deskew_path = deskew_dir / f"{base_name}_refined_deskewed.jpg"
                 utils.save_image(refined_deskewed, deskew_path)
 
-                # Optional additional margin removal for Stage 2
-                processing_image = refined_deskewed
-                if self.stage2_config.enable_margin_removal:
-                    processing_image = utils.remove_margin_aggressive(
-                        refined_deskewed,
-                        blur_kernel_size=self.stage2_config.blur_kernel_size,
-                        black_threshold=self.stage2_config.black_threshold,
-                        content_threshold=self.stage2_config.content_threshold,
-                        morph_kernel_size=self.stage2_config.morph_kernel_size,
-                        min_content_area_ratio=self.stage2_config.min_content_area_ratio,
-                        padding=self.stage2_config.margin_padding,
-                    )
-
-                    # Save margin-removed image
-                    margin_dir = self.stage2_config.output_dir / "02_margin_removed"
-                    margin_path = margin_dir / f"{base_name}_margin_removed.jpg"
-                    utils.save_image(processing_image, margin_path)
-
-                    if self.stage2_config.verbose:
-                        print(f"    Stage 2 margin removed: {processing_image.shape} (from {refined_deskewed.shape})")
-
                 # Refined line detection with tighter parameters
                 h_lines, v_lines = utils.detect_table_lines(
-                    processing_image,
+                    refined_deskewed,
                     threshold=self.stage2_config.threshold,
                     horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
                     vertical_kernel_size=self.stage2_config.vertical_kernel_size,
@@ -355,17 +334,17 @@ class TwoStageOCRPipeline:
                 )
 
                 # Save refined line detection visualization
-                lines_dir = self.stage2_config.output_dir / "03_table_lines"
+                lines_dir = self.stage2_config.output_dir / "02_table_lines"
                 lines_path = lines_dir / f"{base_name}_refined_table_lines.jpg"
-                vis_image = utils.visualize_detected_lines(processing_image, h_lines, v_lines)
+                vis_image = utils.visualize_detected_lines(refined_deskewed, h_lines, v_lines)
                 utils.save_image(vis_image, lines_path)
 
                 # Table fitting for publication-ready output
-                fitting_dir = self.stage2_config.output_dir / "04_fitted_tables"
+                fitting_dir = self.stage2_config.output_dir / "03_fitted_tables"
                 fitted_path = fitting_dir / f"{base_name}_fitted.jpg"
 
-                # Use the processed image (after margin removal if enabled) as the final result
-                utils.save_image(processing_image, fitted_path)
+                # Use the refined deskewed image as the final result
+                utils.save_image(refined_deskewed, fitted_path)
                 refined_tables.append(fitted_path)
 
                 if self.stage2_config.verbose:
@@ -378,7 +357,7 @@ class TwoStageOCRPipeline:
             print(
                 f"\n*** STAGE 2 COMPLETE: {len(refined_tables)} publication-ready tables ***"
             )
-            print(f"Final output: {self.stage2_config.output_dir / '04_fitted_tables'}")
+            print(f"Final output: {self.stage2_config.output_dir / '03_fitted_tables'}")
 
         return refined_tables
 
@@ -410,7 +389,7 @@ class TwoStageOCRPipeline:
         print("\n*** COMPLETE PIPELINE FINISHED! ***")
         print(f"   {len(stage2_outputs)} publication-ready tables generated")
         print(
-            f"   Check final results in: {self.stage2_config.output_dir / '04_fitted_tables'}"
+            f"   Check final results in: {self.stage2_config.output_dir / '03_fitted_tables'}"
         )
 
         return stage2_outputs

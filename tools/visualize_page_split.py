@@ -6,6 +6,14 @@ This script visualizes the two-page splitting process, helping you assess
 gutter detection quality and adjust splitting parameters.
 """
 
+import warnings
+warnings.warn(
+    "This script is deprecated and will be removed in a future version. "
+    "Please use visualize_page_split_v2.py or run_visualizations.py with --use-v2 flag.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -19,7 +27,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.config import Stage1Config, Stage2Config  # noqa: E402
+from src.ocr_pipeline.config import Config, Stage1Config, Stage2Config  # noqa: E402
 import src.ocr_pipeline.utils as ocr_utils  # noqa: E402
 from output_manager import (
     get_test_images,
@@ -43,7 +51,7 @@ def load_config_from_file(config_path: Path = None, stage: int = 1):
         else:
             return Stage1Config.from_json(config_path)
     else:
-        print(f"Warning: Config file {config_path} not found, using hardcoded defaults")
+        print(f"Warning: Config file {config_path} not found, using defaults")
         if stage == 2:
             return Stage2Config()
         else:

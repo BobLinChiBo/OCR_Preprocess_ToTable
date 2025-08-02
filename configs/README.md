@@ -1,27 +1,25 @@
 # Configuration Guide
 
-This directory contains default configuration files for the OCR pipeline stages.
+This directory contains default configuration files for the simplified OCR pipeline.
 
 ## Configuration Files
 
 ### stage1_default.json
 
-Default configuration for Stage 1 (Initial Processing). Key sections:
+Default configuration for Stage 1 (Initial Processing). Key parameters:
 
 - **page_splitting**: Controls how double-page scans are split
 - **deskewing**: Parameters for correcting image rotation
-- **line_detection**: Settings for detecting table lines
-- **roi_detection**: Region of Interest detection parameters
-- **roi_margins**: Page-specific margin settings
+- **margin_removal**: Settings for removing document margins and background
+- **line_detection**: Connected components method for table structure detection
 
 ### stage2_default.json
 
-Default configuration for Stage 2 (Refinement Processing). Key sections:
+Default configuration for Stage 2 (Refinement Processing). Key parameters:
 
-- **deskewing**: Fine-tuning rotation correction
-- **line_detection**: Precise line detection parameters
-- **roi_detection**: Disabled (images already cropped)
-- **table_fitting**: Parameters for final table structure fitting
+- **deskewing**: Fine-tuning rotation correction on cropped tables
+- **line_detection**: Refined parameters for precise table structure detection
+- **margin_removal**: Disabled (images already processed in Stage 1)
 
 ## Usage
 
@@ -30,16 +28,17 @@ Default configuration for Stage 2 (Refinement Processing). Key sections:
 ```python
 import json
 from pathlib import Path
-from src.ocr_pipeline.config import Stage1Config, Stage2Config
+from src.ocr_pipeline.config import Config
 
 # Load from JSON
 with open("configs/stage1_default.json") as f:
     config_data = json.load(f)
 
 # Create config object with overrides
-config = Stage1Config(
+config = Config(
     input_dir=Path(config_data["input_dir"]),
     verbose=config_data["verbose"],
+    threshold=config_data["threshold"]
     # ... other parameters
 )
 ```
@@ -50,11 +49,11 @@ config = Stage1Config(
 # Use default configurations
 python scripts/run_stage1.py data/input/ --verbose
 
-# Override specific parameters
-python scripts/run_stage1.py data/input/ --angle-range 15 --min-line-length 50
-
 # Custom output directory
 python scripts/run_stage1.py data/input/ -o custom_output/stage1/
+
+# With debug mode
+python scripts/run_stage1.py data/input/ --debug --verbose
 ```
 
 ## Configuration Parameters
@@ -67,43 +66,55 @@ python scripts/run_stage1.py data/input/ -o custom_output/stage1/
 - `verbose`: Enable detailed logging
 - `save_debug_images`: Save intermediate images for debugging
 
+### Page Splitting Parameters
+
+- `gutter_search_start`: Start position for gutter detection (0.0-1.0)
+- `gutter_search_end`: End position for gutter detection (0.0-1.0)
+- `min_gutter_width`: Minimum gutter width in pixels
+
 ### Deskewing Parameters
 
 - `angle_range`: Maximum angle range to search (degrees)
 - `angle_step`: Angle increment for search (degrees)
 - `min_angle_correction`: Minimum angle to apply correction (degrees)
 
+### Margin Removal Parameters
+
+- `enable_margin_removal`: Enable margin removal preprocessing
+- `black_threshold`: Threshold for identifying background pixels
+- `content_threshold`: Threshold for identifying content pixels
+- `morph_kernel_size`: Morphological operation kernel size
+
 ### Line Detection Parameters
 
-- `min_line_length`: Minimum line length to detect (pixels)
-- `max_line_gap`: Maximum gap to bridge in lines (pixels)
-
-### ROI Detection Parameters
-
-- `enable_roi_detection`: Enable region of interest detection
-- `gabor_*`: Gabor filter parameters for edge detection
-- `roi_*`: ROI boundary detection thresholds
+- `threshold`: Binary threshold for line detection
+- `horizontal_kernel_size`: Kernel size for horizontal line detection
+- `vertical_kernel_size`: Kernel size for vertical line detection
+- `alignment_threshold`: Maximum pixel deviation for line alignment
 
 ### Stage-Specific Differences
 
 **Stage 1 (Initial Processing)**:
-- More permissive line detection (longer gaps allowed)
-- ROI detection enabled for content area cropping
-- Generous margin settings for different page types
+- Full margin removal enabled for content area detection
+- Connected components method for robust line detection
+- Processing of raw scanned document images
 
 **Stage 2 (Refinement)**:
-- Stricter line detection (shorter gaps)
-- ROI detection disabled (images already cropped)
-- Minimal margins (images already processed)
-- Additional table fitting parameters
+- Margin removal disabled (images already processed)
+- Refined line detection parameters for cropped tables
+- Focus on precision over robustness
 
 ## Customization
 
 Create custom configuration files by copying and modifying the defaults:
 
 ```bash
-cp configs/stage1_default.json configs/my_stage1_config.json
-# Edit my_stage1_config.json as needed
+cp configs/stage1_default.json configs/my_custom_config.json
+# Edit my_custom_config.json as needed
 ```
 
-Then load your custom configuration in your processing scripts.
+Then use your custom configuration:
+
+```bash
+python scripts/run_stage1.py data/input/ --config configs/my_custom_config.json
+```

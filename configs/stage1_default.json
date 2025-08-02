@@ -29,7 +29,7 @@
     "black_threshold": 45,
     "content_threshold": 180,
     "morph_kernel_size": 30,
-    "min_content_area_ratio": 0.005,
+    "min_content_area_ratio": 0.1,
     "margin_padding": 10
   }
 }

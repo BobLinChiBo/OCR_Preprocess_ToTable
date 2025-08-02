@@ -6,6 +6,14 @@ This script visualizes the table cropping process, helping you assess
 the final cropping boundaries and region selection parameters.
 """
 
+import warnings
+warnings.warn(
+    "This script is deprecated and will be removed in a future version. "
+    "Please use visualize_table_crop_v2.py or run_visualizations.py with --use-v2 flag.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -19,7 +27,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.config import Config  # noqa: E402
+from src.ocr_pipeline.config import Config, Stage1Config, Stage2Config  # noqa: E402
 from src.ocr_pipeline.utils import (
     load_image,
     detect_table_lines,

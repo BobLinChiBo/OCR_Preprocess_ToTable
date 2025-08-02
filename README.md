@@ -1,16 +1,15 @@
 # OCR Table Extraction Pipeline
 
-A professional two-stage OCR pipeline for extracting tables from scanned document images with high accuracy. Uses advanced computer vision techniques for page splitting, deskewing, ROI detection, and table line detection.
+A professional two-stage OCR pipeline for extracting tables from scanned document images with high accuracy. Uses advanced computer vision techniques for page splitting, deskewing, margin removal, and table line detection.
 
 ## Features
 
 - **Two-Stage Processing**: Initial aggressive processing followed by precision refinement
 - **Automatic Page Splitting**: Intelligently separates double-page scanned documents
 - **Advanced Deskewing**: Corrects document rotation with sub-degree precision
-- **ROI Detection**: Multiple algorithms for content area identification
-- **Table Line Detection**: Robust detection of horizontal and vertical table structures
-- **Comprehensive Tuning Tools**: Interactive parameter optimization system
-- **Visualization Suite**: Complete analysis and debugging capabilities
+- **Smart Margin Removal**: Automatically removes document margins and background noise
+- **Table Line Detection**: Connected components method for robust table structure detection
+- **Visualization Tools**: Analysis and debugging capabilities for each processing stage
 - **Publication-Ready Output**: Final tables optimized for academic and professional use
 
 ## Quick Start
@@ -42,40 +41,39 @@ python scripts/run_stage1.py data/input/ --verbose
 python scripts/run_stage2.py --verbose
 ```
 
-### Interactive Parameter Tuning
+### Visualization and Analysis
 
-For best results, tune parameters on your specific document types:
+Analyze pipeline performance and debug issues:
 
 ```bash
-# Quick interactive tuning (recommended)
-python tools/quick_start_tuning.py
+# Complete pipeline analysis
+python tools/run_visualizations.py all --pipeline image.jpg
 
-# Manual step-by-step tuning
-python tools/setup_tuning.py
-python tools/tune_page_splitting.py
-python tools/tune_deskewing.py
-python tools/tune_roi_detection.py
-python tools/tune_line_detection.py
+# Individual step analysis
+python tools/visualize_page_split.py image.jpg
+python tools/visualize_deskew.py image.jpg
+python tools/visualize_roi.py image.jpg
+python tools/visualize_table_lines.py image.jpg
 ```
 
 ## Pipeline Overview
 
 ### Stage 1: Initial Processing
-Aggressive parameters for robust extraction from challenging scanned documents:
+Robust extraction from challenging scanned documents:
 
 1. **Page Splitting** - Separate double-page scans using gutter detection
-2. **Deskewing** - Correct rotation up to ±10° with 0.2° precision
-3. **ROI Detection** - Identify content areas using Gabor filters or edge detection
-4. **Line Detection** - Find table structures with permissive parameters
+2. **Deskewing** - Correct rotation with sub-degree precision
+3. **Margin Removal** - Remove document margins and background noise
+4. **Line Detection** - Find table structures using connected components method
 5. **Table Cropping** - Extract table regions for Stage 2
 
 **Output**: `data/output/stage1_initial_processing/05_cropped_tables/`
 
 ### Stage 2: Refinement Processing
-Precise parameters for publication-quality table extraction:
+Precise refinement for publication-quality table extraction:
 
 1. **Re-deskewing** - Fine-tune rotation on cropped tables
-2. **Refined Line Detection** - Precise detection with stricter parameters
+2. **Refined Line Detection** - Precise detection with optimized parameters
 3. **Table Reconstruction** - Advanced structure analysis
 4. **Table Fitting** - Final optimization for clean output
 
@@ -93,11 +91,10 @@ OCR_Preprocess_ToTable/
 │   ├── run_complete.py        # Two-stage pipeline
 │   ├── run_stage1.py          # Stage 1 only
 │   └── run_stage2.py          # Stage 2 only
-├── tools/                     # Parameter tuning and visualization
-│   ├── quick_start_tuning.py  # Interactive tuning guide
-│   ├── tune_*.py             # Individual parameter tuning
+├── tools/                     # Visualization and analysis tools
 │   ├── visualize_*.py        # Analysis and debugging tools
-│   └── run_visualizations.py # Complete visualization suite
+│   ├── run_visualizations.py # Complete visualization suite
+│   └── setup_tuning.py       # Setup utilities
 ├── configs/                   # Configuration files
 │   ├── stage1_default.json   # Stage 1 default parameters
 │   └── stage2_default.json   # Stage 2 default parameters
@@ -109,20 +106,14 @@ OCR_Preprocess_ToTable/
 
 ## Configuration
 
-The pipeline uses JSON configuration files with hierarchical parameter structures:
+The pipeline uses JSON configuration files with simplified parameter structures:
 
 ### Key Parameters
 
-- **Page Splitting**: `gutter_search_start` (0.35-0.45), `gutter_search_end` (0.55-0.65)
-- **Deskewing**: `angle_range` (5-20°), `min_angle_correction` (0.1-1.0°)
-- **ROI Detection**: `gabor_binary_threshold` (90-180), `roi_min_cut_strength` (10-30)
-- **Line Detection**: `min_line_length` (20-80), `max_line_gap` (5-25)
-
-### ROI Detection Methods
-
-- `gabor`: Gabor filter-based edge detection (default)
-- `canny_sobel`: Combined Canny and Sobel edge detection
-- `adaptive_threshold`: Adaptive thresholding with edge enhancement
+- **Page Splitting**: `gutter_search_start` (0.4), `gutter_search_end` (0.6)
+- **Deskewing**: `angle_range` (5°), `min_angle_correction` (0.1°)
+- **Margin Removal**: `black_threshold` (50), `content_threshold` (200)
+- **Line Detection**: `threshold` (40), `horizontal_kernel_size` (10), `vertical_kernel_size` (10)
 
 ## Advanced Usage
 
@@ -130,10 +121,10 @@ The pipeline uses JSON configuration files with hierarchical parameter structure
 
 ```bash
 # Use custom configuration files
-python scripts/run_complete.py data/input/ --stage1-config configs/my_stage1.json
+python scripts/run_complete.py data/input/ --config configs/my_config.json
 
-# Override specific parameters
-python scripts/run_complete.py data/input/ --s1-angle-range 15 --s1-min-line-length 50
+# Run with debug mode for detailed output
+python scripts/run_complete.py data/input/ --debug --verbose
 ```
 
 ### Visualization and Analysis
@@ -143,13 +134,12 @@ python scripts/run_complete.py data/input/ --s1-angle-range 15 --s1-min-line-len
 python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
 
 # Individual step analysis
-python tools/visualize_deskew.py image.jpg --angle-range 30
-python tools/visualize_roi.py image.jpg --gabor-threshold 150
-python tools/visualize_table_lines.py image.jpg --min-line-length 40
+python tools/visualize_deskew.py image.jpg
+python tools/visualize_roi.py image.jpg
+python tools/visualize_table_lines.py image.jpg
 
 # Results management
 python tools/check_results.py list
-python tools/compare_results.py
 ```
 
 ### Development
@@ -166,26 +156,26 @@ python -m mypy src/
 
 ## Best Practices
 
-1. **Always tune parameters** on representative test images before processing large datasets
+1. **Test on representative samples** before processing large datasets
 2. **Visually inspect** intermediate results at each stage
 3. **Use debug mode** (`--debug`) for troubleshooting
-4. **Start with test images** - process 6 representative samples first
+4. **Use visualization tools** to understand pipeline behavior
 5. **Check intermediate outputs** if final results are poor
 
 ## Troubleshooting
 
 ### Common Issues
 
-- **Poor page splitting**: Adjust gutter search parameters based on document layout
-- **Excessive rotation**: Increase `min_angle_correction` for more conservative deskewing
-- **Over-cropping**: Increase `roi_min_cut_strength` for less aggressive ROI detection
-- **Missing table lines**: Decrease `min_line_length` or increase `max_line_gap`
+- **Poor page splitting**: Adjust `gutter_search_start` and `gutter_search_end` based on document layout
+- **Excessive rotation**: Increase `min_angle_correction` for more conservative deskewing  
+- **Over-cropping**: Adjust `content_threshold` and `black_threshold` for margin removal
+- **Missing table lines**: Adjust `threshold` and kernel sizes for line detection
 
 ### Getting Help
 
 - Use `--verbose` flag for detailed processing information
 - Check `docs/CLAUDE.md` for comprehensive development guidance
-- Refer to `tools/README.md` for detailed tuning instructions
+- Refer to `tools/README.md` for visualization tool instructions
 - Examine intermediate outputs in debug mode
 
 ## Requirements
