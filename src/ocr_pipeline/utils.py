@@ -311,113 +311,209 @@ def visualize_detected_lines(
 
 def detect_table_lines(
     image: np.ndarray,
-    min_line_length: int = 100,
-    max_line_gap: int = 10,
-    kernel_h_size: int = 40,
-    kernel_v_size: int = 40,
-    hough_threshold: int = 50,
+    threshold: int = 40,                          # Binary threshold
+    horizontal_kernel_size: int = 10,             # Morphological kernel width
+    vertical_kernel_size: int = 10,               # Morphological kernel height
+    alignment_threshold: int = 3,                 # Clustering threshold for line alignment
+    pre_merge_length_ratio: float = 0.3,          # Min length ratio before merging (0 = no filter)
+    post_merge_length_ratio: float = 0.4,         # Min length ratio after merging
+    min_aspect_ratio: int = 5,                    # Min aspect ratio for line-like components
     return_analysis: bool = False,
+    # Keep old parameters for backwards compatibility
+    hough_threshold: int = None,
+    min_line_length: int = None,
+    max_line_gap: int = None,
+    merge_distance_h: int = None,
+    merge_distance_v: int = None,
+    merge_iterations: int = None,
+    length_filter_ratio_h: float = None,
+    length_filter_ratio_v: float = None,
+    **kwargs
 ) -> tuple:
-    """Detect horizontal and vertical lines in image.
-
+    """Detect table lines using binary threshold and morphological operations.
+    
+    New approach based on connected components analysis rather than edge detection.
+    
     Args:
-        image: Input image
-        min_line_length: Minimum line length for detection
-        max_line_gap: Maximum gap in line segments
+        image: Input image (grayscale or BGR)
+        threshold: Binary threshold value
+        horizontal_kernel_size: Width of morphological kernel for horizontal lines
+        vertical_kernel_size: Height of morphological kernel for vertical lines
+        alignment_threshold: Maximum distance for clustering aligned line segments
+        pre_merge_length_ratio: Minimum length ratio before merging (0 = no filtering)
+        post_merge_length_ratio: Minimum length ratio after merging
+        min_aspect_ratio: Minimum aspect ratio to consider component as line-like
         return_analysis: If True, returns additional statistics
-
+        
     Returns:
         tuple: (h_lines, v_lines) or (h_lines, v_lines, analysis) if return_analysis=True
     """
+    # Convert to grayscale if needed
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-
-    # Apply morphological operations to enhance lines
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_h_size, 1))
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_v_size))
-
-    # Detect horizontal lines
-    horizontal = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_h)
-    h_lines = cv2.HoughLinesP(
-        horizontal,
-        1,
-        np.pi / 180,
-        threshold=hough_threshold,
-        minLineLength=min_line_length,
-        maxLineGap=max_line_gap,
+    img_h, img_w = gray.shape
+    
+    # Invert image (make dark lines white)
+    gray_inv = cv2.bitwise_not(gray)
+    
+    # Binary thresholding
+    _, binary = cv2.threshold(gray_inv, threshold, 255, cv2.THRESH_BINARY)
+    
+    # Morphological opening to extract lines
+    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_size))
+    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_size, 1))
+    vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v, iterations=1)
+    horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_h, iterations=1)
+    
+    def extract_and_merge_lines(
+        line_img,
+        direction="vertical",
+        alignment_thresh=3,
+        min_length_ratio=0.3,
+        min_aspect=5
+    ):
+        """Extract line segments using connected components and merge aligned segments."""
+        img_h, img_w = line_img.shape[:2]
+        num, labels, stats, _ = cv2.connectedComponentsWithStats(line_img, 8)
+        
+        segments = []  # (x1, y1, x2, y2, true_center, label, score)
+        
+        for lab in range(1, num):
+            x, y, w, h, _ = stats[lab]
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            
+            # Length and aspect ratio filtering
+            if direction == "vertical":
+                if h < min_length_ratio * img_h:
+                    continue
+                aspect = h / max(w, 1)
+                if aspect < min_aspect:
+                    continue
+            else:
+                if w < min_length_ratio * img_w:
+                    continue
+                aspect = w / max(h, 1)
+                if aspect < min_aspect:
+                    continue
+            
+            # Find true line center within component
+            comp_mask = (labels == lab).astype(np.uint8)[y1:y2, x1:x2]
+            
+            if direction == "vertical" and w > 3:
+                # For wide vertical components, find the densest column
+                col_sum = comp_mask.sum(axis=0)
+                best_cols = np.where(col_sum == col_sum.max())[0]
+                center = x1 + int(best_cols.mean())
+            elif direction == "horizontal" and h > 3:
+                # For tall horizontal components, find the densest row
+                row_sum = comp_mask.sum(axis=1)
+                best_rows = np.where(row_sum == row_sum.max())[0]
+                center = y1 + int(best_rows.mean())
+            else:
+                # Already thin, use bbox center
+                if direction == "vertical":
+                    center = (x1 + x2) // 2
+                else:
+                    center = (y1 + y2) // 2
+            
+            line_score = aspect  # Higher aspect ratio = better line
+            segments.append((x1, y1, x2, y2, center, lab, line_score))
+        
+        # Cluster by proximity
+        segments.sort(key=lambda s: s[4])  # Sort by center coordinate
+        clusters = []
+        
+        for seg in segments:
+            # Try to assign to existing cluster
+            assigned = False
+            for cluster in clusters:
+                if abs(seg[4] - cluster["center"]) <= alignment_thresh:
+                    cluster["members"].append(seg)
+                    # Update cluster center to weighted average
+                    total_score = sum(s[6] for s in cluster["members"])
+                    cluster["center"] = sum(s[4] * s[6] for s in cluster["members"]) / total_score
+                    assigned = True
+                    break
+            
+            if not assigned:
+                clusters.append({"center": seg[4], "members": [seg]})
+        
+        # Create one merged line per cluster
+        merged = []
+        for cluster in clusters:
+            members = cluster["members"]
+            if direction == "vertical":
+                # Merge vertical segments
+                y_min = min(s[1] for s in members)
+                y_max = max(s[3] for s in members)
+                x_center = int(cluster["center"])
+                merged.append((x_center, y_min, x_center, y_max))
+            else:
+                # Merge horizontal segments
+                x_min = min(s[0] for s in members)
+                x_max = max(s[2] for s in members)
+                y_center = int(cluster["center"])
+                merged.append((x_min, y_center, x_max, y_center))
+        
+        return merged, segments
+    
+    # Extract and merge lines
+    merged_vertical, vertical_segments = extract_and_merge_lines(
+        vertical_lines,
+        "vertical",
+        alignment_threshold,
+        pre_merge_length_ratio,
+        min_aspect_ratio
     )
-
-    # Detect vertical lines
-    vertical = cv2.morphologyEx(gray, cv2.MORPH_OPEN, kernel_v)
-    v_lines = cv2.HoughLinesP(
-        vertical,
-        1,
-        np.pi / 180,
-        threshold=hough_threshold,
-        minLineLength=min_line_length,
-        maxLineGap=max_line_gap,
+    
+    merged_horizontal, horizontal_segments = extract_and_merge_lines(
+        horizontal_lines,
+        "horizontal",
+        alignment_threshold,
+        pre_merge_length_ratio,
+        min_aspect_ratio
     )
-
-    # Convert to list of tuples
-    h_lines = [tuple(line[0]) for line in h_lines] if h_lines is not None else []
-    v_lines = [tuple(line[0]) for line in v_lines] if v_lines is not None else []
-
+    
+    # Post-merge length filtering
+    v_lengths = [y2 - y1 for x1, y1, x2, y2 in merged_vertical]
+    h_lengths = [x2 - x1 for x1, y1, x2, y2 in merged_horizontal]
+    
+    v_thresh = post_merge_length_ratio * max(v_lengths) if v_lengths else 0
+    h_thresh = post_merge_length_ratio * max(h_lengths) if h_lengths else 0
+    
+    filtered_vertical = [
+        (x1, y1, x2, y2) for (x1, y1, x2, y2) in merged_vertical 
+        if (y2 - y1) >= v_thresh
+    ]
+    
+    filtered_horizontal = [
+        (x1, y1, x2, y2) for (x1, y1, x2, y2) in merged_horizontal 
+        if (x2 - x1) >= h_thresh
+    ]
+    
+    # Convert to the expected format
+    h_lines = filtered_horizontal
+    v_lines = filtered_vertical
+    
     if not return_analysis:
         return h_lines, v_lines
-
-    # Calculate line statistics
-    h_line_lengths = []
-    v_line_lengths = []
-
-    for x1, y1, x2, y2 in h_lines:
-        length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        h_line_lengths.append(length)
-
-    for x1, y1, x2, y2 in v_lines:
-        length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        v_line_lengths.append(length)
-
-    # Find potential table boundaries
-    h_bounds = None
-    v_bounds = None
-
-    if h_lines:
-        h_y_coords = []
-        for x1, y1, x2, y2 in h_lines:
-            h_y_coords.extend([y1, y2])
-        h_bounds = (min(h_y_coords), max(h_y_coords))
-
-    if v_lines:
-        v_x_coords = []
-        for x1, y1, x2, y2 in v_lines:
-            v_x_coords.extend([x1, x2])
-        v_bounds = (min(v_x_coords), max(v_x_coords))
-
+    
+    # Calculate analysis if requested
+    h_line_lengths = [np.sqrt((x2-x1)**2 + (y2-y1)**2) for x1,y1,x2,y2 in h_lines]
+    v_line_lengths = [np.sqrt((x2-x1)**2 + (y2-y1)**2) for x1,y1,x2,y2 in v_lines]
+    
     analysis = {
-        "horizontal_morph": horizontal,
-        "vertical_morph": vertical,
-        "h_lines": h_lines,
-        "v_lines": v_lines,
-        "h_line_count": len(h_lines),
-        "v_line_count": len(v_lines),
-        "total_lines": len(h_lines) + len(v_lines),
+        "h_lines_count": len(h_lines),
+        "v_lines_count": len(v_lines),
         "h_line_lengths": h_line_lengths,
         "v_line_lengths": v_line_lengths,
-        "h_avg_length": np.mean(h_line_lengths) if h_line_lengths else 0,
-        "v_avg_length": np.mean(v_line_lengths) if v_line_lengths else 0,
-        "h_max_length": max(h_line_lengths) if h_line_lengths else 0,
-        "v_max_length": max(v_line_lengths) if v_line_lengths else 0,
-        "h_bounds": h_bounds,
-        "v_bounds": v_bounds,
-        "has_table_structure": len(h_lines) > 0 and len(v_lines) > 0,
-        "config_used": {
-            "min_line_length": min_line_length,
-            "max_line_gap": max_line_gap,
-            "kernel_h_size": kernel_h_size,
-            "kernel_v_size": kernel_v_size,
-            "hough_threshold": hough_threshold,
-        },
+        "avg_h_length": np.mean(h_line_lengths) if h_line_lengths else 0,
+        "avg_v_length": np.mean(v_line_lengths) if v_line_lengths else 0,
+        "threshold_used": threshold,
+        "total_segments_before_merge": len(vertical_segments) + len(horizontal_segments),
+        "vertical_clusters": len(set(s[4] for s in vertical_segments)) if vertical_segments else 0,
+        "horizontal_clusters": len(set(s[4] for s in horizontal_segments)) if horizontal_segments else 0,
     }
-
+    
     return h_lines, v_lines, analysis
 
 
@@ -442,625 +538,402 @@ def crop_table_region(
     """
     if not h_lines or not v_lines:
         if return_analysis:
-            return image, {"error": "No lines detected", "boundaries": None}
+            return image, {"cropped": False, "reason": "No lines detected"}
         return image
 
-    height, width = image.shape[:2]
+    # Get table boundaries from lines
+    h_ys = [y for _, y, _, _ in h_lines] + [y for _, _, _, y in h_lines]
+    v_xs = [x for x, _, _, _ in v_lines] + [x for _, _, x, _ in v_lines]
 
-    # Find boundaries
-    min_x = min([min(x1, x2) for x1, y1, x2, y2 in v_lines])
-    max_x = max([max(x1, x2) for x1, y1, x2, y2 in v_lines])
-    min_y = min([min(y1, y2) for x1, y1, x2, y2 in h_lines])
-    max_y = max([max(y1, y2) for x1, y1, x2, y2 in h_lines])
-
-    # Add padding
-    padded_min_x = max(0, min_x - crop_padding)
-    padded_max_x = min(width, max_x + crop_padding)
-    padded_min_y = max(0, min_y - crop_padding)
-    padded_max_y = min(height, max_y + crop_padding)
+    min_x = max(0, min(v_xs) - crop_padding)
+    max_x = min(image.shape[1], max(v_xs) + crop_padding)
+    min_y = max(0, min(h_ys) - crop_padding)
+    max_y = min(image.shape[0], max(h_ys) + crop_padding)
 
     # Crop the image
-    cropped = image[padded_min_y:padded_max_y, padded_min_x:padded_max_x]
+    cropped = image[min_y:max_y, min_x:max_x]
 
     if not return_analysis:
         return cropped
 
-    # Calculate analysis information
-    original_area = width * height
-    table_area = (max_x - min_x) * (max_y - min_y)
-    cropped_area = (padded_max_x - padded_min_x) * (padded_max_y - padded_min_y)
-
     analysis = {
-        "original_dimensions": (width, height),
-        "table_boundaries": {
+        "cropped": True,
+        "original_shape": image.shape,
+        "cropped_shape": cropped.shape,
+        "boundaries": {
             "min_x": min_x,
             "max_x": max_x,
             "min_y": min_y,
             "max_y": max_y,
         },
-        "padded_boundaries": {
-            "min_x": padded_min_x,
-            "max_x": padded_max_x,
-            "min_y": padded_min_y,
-            "max_y": padded_max_y,
-        },
-        "cropped_dimensions": (
-            padded_max_x - padded_min_x,
-            padded_max_y - padded_min_y,
-        ),
-        "table_area": table_area,
-        "cropped_area": cropped_area,
-        "original_area": original_area,
-        "table_coverage": table_area / original_area if original_area > 0 else 0,
-        "crop_efficiency": table_area / cropped_area if cropped_area > 0 else 0,
-        "padding_used": crop_padding,
-        "h_line_count": len(h_lines),
-        "v_line_count": len(v_lines),
+        "table_width": max_x - min_x,
+        "table_height": max_y - min_y,
     }
 
     return cropped, analysis
 
 
-def find_vertical_cuts(
-    binary_mask: np.ndarray,
-    mode: str = "single_best",
-    window_size_divisor: int = 20,
-    min_window_size: int = 50,
-    min_cut_strength: float = 10.0,
-    min_confidence_threshold: float = 5.0,
-) -> Tuple[int, int, Dict]:
-    """Find vertical cuts in the binary mask using optimized vectorized sliding window approach."""
-    height, width = binary_mask.shape
-    vertical_projection = np.sum(binary_mask // 255, axis=0)
-
-    window_size = max(width // window_size_divisor, min_window_size)
-
-    # Find left cut (search only in leftmost 30%) - OPTIMIZED VECTORIZED VERSION
-    left_search_end = int(width * 0.3)
-    max_drop_left = 0
-    cut_x_left = 0
-    
-    if left_search_end > window_size:
-        # Create search range exactly matching original: range(window_size, left_search_end)
-        search_indices = np.arange(window_size, left_search_end)
-        # Apply original bounds check: if i - window_size > 0 (always true since i >= window_size)
-        left_values = vertical_projection[search_indices].astype(float)
-        left_prev_values = vertical_projection[search_indices - window_size].astype(float)
-        left_drops = np.abs(left_values - left_prev_values)
-        
-        # Find maximum drop position exactly as original
-        if len(left_drops) > 0:
-            max_drop_idx = np.argmax(left_drops)
-            max_drop_left = float(left_drops[max_drop_idx])
-            cut_x_left = int(search_indices[max_drop_idx])
-
-    # Find right cut (search only in rightmost 30%) - OPTIMIZED VECTORIZED VERSION  
-    right_search_end = int(width * 0.7)
-    max_drop_right = 0
-    cut_x_right = width
-    
-    # Create search range exactly matching original: range(width - window_size, right_search_end, -1)
-    right_search_start = width - window_size
-    if right_search_start >= right_search_end:
-        search_indices = np.arange(right_search_start, right_search_end - 1, -1)  # -1 to match range behavior
-        
-        # Apply original bounds check: if i + window_size < width
-        valid_mask = search_indices + window_size < width
-        search_indices = search_indices[valid_mask]
-        
-        if len(search_indices) > 0:
-            # Vectorized calculation matching original logic
-            right_values = vertical_projection[search_indices].astype(float)
-            right_next_values = vertical_projection[search_indices + window_size].astype(float)
-            right_drops = np.abs(right_values - right_next_values)
-            
-            # Find maximum drop position exactly as original
-            max_drop_idx = np.argmax(right_drops)
-            max_drop_right = float(right_drops[max_drop_idx])
-            cut_x_right = int(search_indices[max_drop_idx])
-
-    # Evaluate whether cuts should be applied
-    apply_left_cut = (
-        max_drop_left >= min_cut_strength and max_drop_left >= min_confidence_threshold
-    )
-    apply_right_cut = (
-        max_drop_right >= min_cut_strength
-        and max_drop_right >= min_confidence_threshold
-    )
-
-    # Decide what to return based on mode
-    if mode == "both_sides":
-        final_left = cut_x_left if apply_left_cut else 0
-        final_right = cut_x_right if apply_right_cut else width
-        return (
-            final_left,
-            final_right,
-            {
-                "projection": vertical_projection,
-                "left_cut_strength": max_drop_left,
-                "right_cut_strength": max_drop_right,
-                "left_cut_applied": apply_left_cut,
-                "right_cut_applied": apply_right_cut,
-            },
-        )
-
-    # For single_best mode, choose the stronger cut
-    left_density = np.sum(vertical_projection[:left_search_end]) // (
-        left_search_end - 0
-    )
-    right_density = np.sum(vertical_projection[right_search_end:]) // (
-        width - right_search_end
-    )
-
-    if right_density < left_density:
-        # Prefer right cut
-        final_right = cut_x_right if apply_right_cut else width
-        return (
-            0,
-            final_right,
-            {
-                "projection": vertical_projection,
-                "right_cut_strength": max_drop_right,
-                "right_cut_applied": apply_right_cut,
-                "cut_side": "right",
-            },
-        )
-    else:
-        # Prefer left cut
-        final_left = cut_x_left if apply_left_cut else 0
-        return (
-            final_left,
-            width,
-            {
-                "projection": vertical_projection,
-                "left_cut_strength": max_drop_left,
-                "left_cut_applied": apply_left_cut,
-                "cut_side": "left",
-            },
-        )
-
-
-def find_horizontal_cuts(
-    binary_mask: np.ndarray,
-    mode: str = "single_best",
-    window_size_divisor: int = 20,
-    min_window_size: int = 50,
-    min_cut_strength: float = 10.0,
-    min_confidence_threshold: float = 5.0,
-) -> Tuple[int, int, Dict]:
-    """Find horizontal cuts in the binary mask using optimized vectorized sliding window approach."""
-    height, width = binary_mask.shape
-    horizontal_projection = np.sum(binary_mask // 255, axis=1)
-
-    window_size = max(height // window_size_divisor, min_window_size)
-
-    # Find top cut (search only in topmost 30%) - OPTIMIZED VECTORIZED VERSION
-    top_search_end = int(height * 0.3)
-    max_drop_top = 0
-    cut_y_top = 0
-    
-    if top_search_end > window_size:
-        # Create search range exactly matching original: range(window_size, top_search_end)
-        search_indices = np.arange(window_size, top_search_end)
-        # Apply original bounds check: if i - window_size > 0 (always true since i >= window_size)
-        top_values = horizontal_projection[search_indices].astype(float)
-        top_prev_values = horizontal_projection[search_indices - window_size].astype(float)
-        top_drops = np.abs(top_values - top_prev_values)
-        
-        # Find maximum drop position exactly as original
-        if len(top_drops) > 0:
-            max_drop_idx = np.argmax(top_drops)
-            max_drop_top = float(top_drops[max_drop_idx])
-            cut_y_top = int(search_indices[max_drop_idx])
-
-    # Find bottom cut (search only in bottommost 30%) - OPTIMIZED VECTORIZED VERSION
-    bottom_search_end = int(height * 0.7)
-    max_drop_bottom = 0
-    cut_y_bottom = height
-    
-    # Create search range exactly matching original: range(height - window_size, bottom_search_end, -1)
-    bottom_search_start = height - window_size
-    if bottom_search_start >= bottom_search_end:
-        search_indices = np.arange(bottom_search_start, bottom_search_end - 1, -1)  # -1 to match range behavior
-        
-        # Apply original bounds check: if i + window_size < height
-        valid_mask = search_indices + window_size < height
-        search_indices = search_indices[valid_mask]
-        
-        if len(search_indices) > 0:
-            # Vectorized calculation matching original logic
-            bottom_values = horizontal_projection[search_indices].astype(float)
-            bottom_next_values = horizontal_projection[search_indices + window_size].astype(float)
-            bottom_drops = np.abs(bottom_values - bottom_next_values)
-            
-            # Find maximum drop position exactly as original
-            max_drop_idx = np.argmax(bottom_drops)
-            max_drop_bottom = float(bottom_drops[max_drop_idx])
-            cut_y_bottom = int(search_indices[max_drop_idx])
-
-    # Evaluate whether cuts should be applied
-    apply_top_cut = (
-        max_drop_top >= min_cut_strength and max_drop_top >= min_confidence_threshold
-    )
-    apply_bottom_cut = (
-        max_drop_bottom >= min_cut_strength
-        and max_drop_bottom >= min_confidence_threshold
-    )
-
-    if mode == "both_sides":
-        final_top = cut_y_top if apply_top_cut else 0
-        final_bottom = cut_y_bottom if apply_bottom_cut else height
-        return (
-            final_top,
-            final_bottom,
-            {
-                "projection": horizontal_projection,
-                "top_cut_strength": max_drop_top,
-                "bottom_cut_strength": max_drop_bottom,
-                "top_cut_applied": apply_top_cut,
-                "bottom_cut_applied": apply_bottom_cut,
-            },
-        )
-
-    # For single_best mode, choose the stronger cut
-    top_density = np.sum(horizontal_projection[:top_search_end]) // (top_search_end - 0)
-    bottom_density = np.sum(horizontal_projection[bottom_search_end:]) // (
-        height - bottom_search_end
-    )
-
-    if bottom_density < top_density:
-        # Prefer bottom cut
-        final_bottom = cut_y_bottom if apply_bottom_cut else height
-        return (
-            0,
-            final_bottom,
-            {
-                "projection": horizontal_projection,
-                "bottom_cut_strength": max_drop_bottom,
-                "bottom_cut_applied": apply_bottom_cut,
-                "cut_side": "bottom",
-            },
-        )
-    else:
-        # Prefer top cut
-        final_top = cut_y_top if apply_top_cut else 0
-        return (
-            final_top,
-            height,
-            {
-                "projection": horizontal_projection,
-                "top_cut_strength": max_drop_top,
-                "top_cut_applied": apply_top_cut,
-                "cut_side": "top",
-            },
-        )
-
-
-@lru_cache(maxsize=16)
-def _get_cached_gabor_kernels(
-    kernel_size: int, sigma: float, lambda_val: float, gamma: float
+def compute_roi_histogram_projection(
+    binary_image: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Create and cache Gabor kernels for vertical and horizontal orientations.
-    
-    Caching prevents expensive kernel recreation for repeated operations.
-    Cache size of 16 handles multiple parameter combinations efficiently.
+    """Compute horizontal and vertical histogram projections for ROI detection.
+
+    Args:
+        binary_image: Binary image (white text on black background)
+
+    Returns:
+        tuple: (horizontal_projection, vertical_projection)
     """
-    # Create Gabor kernels for vertical and horizontal orientations only
-    vertical_kernel = cv2.getGaborKernel(
-        (kernel_size, kernel_size),
-        sigma,
-        0.0,  # 0° (vertical)
-        lambda_val,
-        gamma,
-        0,
-        ktype=cv2.CV_32F,
-    )
-    horizontal_kernel = cv2.getGaborKernel(
-        (kernel_size, kernel_size),
-        sigma,
-        float(np.pi / 2),  # 90° (horizontal)
-        lambda_val,
-        gamma,
-        0,
-        ktype=cv2.CV_32F,
-    )
-    return vertical_kernel, horizontal_kernel
+    # Ensure binary image
+    if len(binary_image.shape) == 3:
+        binary_image = cv2.cvtColor(binary_image, cv2.COLOR_BGR2GRAY)
+
+    # Compute projections
+    horizontal_projection = np.sum(binary_image, axis=1)
+    vertical_projection = np.sum(binary_image, axis=0)
+
+    return horizontal_projection, vertical_projection
 
 
-def detect_roi_gabor(
+def find_content_boundaries(
+    projection: np.ndarray,
+    min_content_threshold: float = 0.01,
+    gap_threshold: int = 50,
+    edge_margin: float = 0.05,
+) -> Tuple[int, int]:
+    """Find content boundaries from histogram projection.
+
+    Args:
+        projection: 1D histogram projection
+        min_content_threshold: Minimum relative content to consider as valid
+        gap_threshold: Minimum gap size to consider as boundary
+        edge_margin: Margin from edges as fraction of total size
+
+    Returns:
+        tuple: (start_idx, end_idx)
+    """
+    max_val = np.max(projection)
+    if max_val == 0:
+        return 0, len(projection) - 1
+
+    # Threshold for content detection
+    threshold = max_val * min_content_threshold
+
+    # Find content regions
+    content_mask = projection > threshold
+    content_indices = np.where(content_mask)[0]
+
+    if len(content_indices) == 0:
+        return 0, len(projection) - 1
+
+    # Simple approach: find first and last content
+    start_idx = content_indices[0]
+    end_idx = content_indices[-1]
+
+    # Apply edge margin
+    margin = int(len(projection) * edge_margin)
+    start_idx = max(margin, start_idx)
+    end_idx = min(len(projection) - margin - 1, end_idx)
+
+    return start_idx, end_idx
+
+
+def detect_roi_simple(
     image: np.ndarray,
-    kernel_size: int = 31,
-    sigma: float = 4.0,
-    lambda_val: float = 10.0,
-    gamma: float = 0.5,
-    binary_threshold: int = 127,
-) -> np.ndarray:
-    """Apply Gabor filters to detect edge structures with optimized kernel caching."""
-    gray_img = (
-        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    )
-
-    # Get cached Gabor kernels (avoids expensive recreation)
-    vertical_kernel, horizontal_kernel = _get_cached_gabor_kernels(
-        kernel_size, sigma, lambda_val, gamma
-    )
-
-    # Apply kernels and combine responses (optimized memory allocation)
-    vertical_response = cv2.filter2D(gray_img, cv2.CV_32F, vertical_kernel)
-    horizontal_response = cv2.filter2D(gray_img, cv2.CV_32F, horizontal_kernel)
-    
-    # Combine responses efficiently
-    combined_response = vertical_response + horizontal_response
-
-    # Normalize and threshold
-    gabor_response_map = cv2.normalize(
-        combined_response, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
-    _, binary_mask = cv2.threshold(
-        gabor_response_map, binary_threshold, 255, cv2.THRESH_BINARY
-    )
-
-    return binary_mask
-
-
-def detect_roi_canny_sobel(
-    image: np.ndarray,
-    canny_low: int = 50,
-    canny_high: int = 150,
-    sobel_kernel_size: int = 3,
-    gaussian_blur_size: int = 5,
-    binary_threshold: int = 127,
-    morphology_kernel_size: int = 3,
-) -> np.ndarray:
-    """Apply Canny and Sobel edge detection to detect ROI structures.
-
-    This alternative method uses:
-    - Canny edge detection for precise edge localization
-    - Sobel operators for gradient-based edge detection
-    - Morphological operations for noise cleanup
-    - Combined response for robust edge detection
+    threshold_method: str = "otsu",
+    min_content_threshold: float = 0.01,
+    return_analysis: bool = False,
+) -> tuple:
+    """Simple ROI detection using histogram projections.
 
     Args:
         image: Input image
-        canny_low: Lower threshold for Canny edge detection
-        canny_high: Upper threshold for Canny edge detection
-        sobel_kernel_size: Kernel size for Sobel operators (3, 5, or 7)
-        gaussian_blur_size: Gaussian blur kernel size for preprocessing
-        binary_threshold: Final binary threshold for mask creation
-        morphology_kernel_size: Kernel size for morphological operations
+        threshold_method: Thresholding method ('otsu' or 'adaptive')
+        min_content_threshold: Minimum content threshold for boundary detection
+        return_analysis: If True, returns detailed analysis
 
     Returns:
-        Binary mask with detected edges
+        tuple: (x, y, w, h) or ((x, y, w, h), analysis) if return_analysis=True
     """
-    gray_img = (
-        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    )
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
-    # Preprocessing: Apply Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(gray_img, (gaussian_blur_size, gaussian_blur_size), 0)
-
-    # Method 1: Canny edge detection
-    canny_edges = cv2.Canny(blurred, canny_low, canny_high)
-
-    # Method 2: Sobel edge detection (horizontal and vertical)
-    sobel_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=sobel_kernel_size)
-    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=sobel_kernel_size)
-
-    # Combine Sobel responses using magnitude
-    sobel_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
-    sobel_magnitude = cv2.normalize(
-        sobel_magnitude, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
-
-    # Method 3: Laplacian edge detection for fine details
-    laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
-    laplacian = cv2.normalize(
-        np.abs(laplacian), None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
-
-    # Combine all edge detection methods
-    # Weight Canny higher for precise edges, Sobel for gradients, Laplacian for details
-    combined_edges = (
-        canny_edges.astype(np.float32) * 0.5  # 50% weight for Canny
-        + sobel_magnitude.astype(np.float32) * 0.35  # 35% weight for Sobel
-        + laplacian.astype(np.float32) * 0.15  # 15% weight for Laplacian
-    )
-
-    # Normalize combined response
-    combined_edges = cv2.normalize(
-        combined_edges, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
-
-    # Apply morphological operations to clean up noise and connect edges
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_RECT, (morphology_kernel_size, morphology_kernel_size)
-    )
-    combined_edges = cv2.morphologyEx(
-        combined_edges, cv2.MORPH_CLOSE, kernel
-    )  # Close gaps
-    combined_edges = cv2.morphologyEx(
-        combined_edges, cv2.MORPH_OPEN, kernel
-    )  # Remove noise
-
-    # Final binary threshold
-    _, binary_mask = cv2.threshold(
-        combined_edges, binary_threshold, 255, cv2.THRESH_BINARY
-    )
-
-    return binary_mask
-
-
-def detect_roi_adaptive_threshold(
-    image: np.ndarray,
-    adaptive_method: int = cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    threshold_type: int = cv2.THRESH_BINARY,
-    block_size: int = 11,
-    C: float = 2.0,
-    morphology_kernel_size: int = 3,
-    edge_enhancement: bool = True,
-) -> np.ndarray:
-    """Apply adaptive thresholding with edge enhancement for ROI detection.
-
-    This method uses:
-    - Adaptive thresholding to handle varying lighting conditions
-    - Optional edge enhancement using gradient information
-    - Morphological operations for structure cleanup
-
-    Args:
-        image: Input image
-        adaptive_method: Adaptive method (ADAPTIVE_THRESH_MEAN_C or ADAPTIVE_THRESH_GAUSSIAN_C)
-        threshold_type: Threshold type (THRESH_BINARY or THRESH_BINARY_INV)
-        block_size: Size of neighborhood area for threshold calculation (odd number)
-        C: Constant subtracted from the mean
-        morphology_kernel_size: Kernel size for morphological operations
-        edge_enhancement: Whether to enhance edges using gradient information
-
-    Returns:
-        Binary mask with detected structures
-    """
-    gray_img = (
-        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    )
-
-    # Apply adaptive thresholding
-    adaptive_thresh = cv2.adaptiveThreshold(
-        gray_img, 255, adaptive_method, threshold_type, block_size, C
-    )
-
-    if edge_enhancement:
-        # Enhance edges using gradient information
-        grad_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=3)
-        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        gradient_magnitude = cv2.normalize(
-            gradient_magnitude, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-        )
-
-        # Threshold gradient magnitude
-        _, gradient_mask = cv2.threshold(gradient_magnitude, 50, 255, cv2.THRESH_BINARY)
-
-        # Combine adaptive threshold with gradient edges
-        combined_mask = cv2.bitwise_or(adaptive_thresh, gradient_mask)
+    # Apply thresholding
+    if threshold_method == "otsu":
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     else:
-        combined_mask = adaptive_thresh
-
-    # Apply morphological operations to clean up
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_RECT, (morphology_kernel_size, morphology_kernel_size)
-    )
-    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
-    combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
-
-    return combined_mask
-
-
-def detect_roi_for_image(
-    image: np.ndarray, config, return_analysis: bool = False
-) -> Union[Dict, Tuple[Dict, Dict]]:
-    """Detect ROI for an image using configurable edge detection methods and sliding window analysis.
-
-    Args:
-        image: Input image
-        config: Configuration object with ROI parameters
-        return_analysis: If True, returns additional analysis information
-
-    Returns:
-        dict: ROI coordinates and optionally analysis information
-    """
-    # Apply edge detection based on configured method
-    method = getattr(config, "roi_detection_method", "gabor")
-
-    if method == "canny_sobel":
-        binary_mask = detect_roi_canny_sobel(
-            image,
-            canny_low=config.canny_low_threshold,
-            canny_high=config.canny_high_threshold,
-            sobel_kernel_size=config.sobel_kernel_size,
-            gaussian_blur_size=config.gaussian_blur_size,
-            binary_threshold=config.edge_binary_threshold,
-            morphology_kernel_size=config.morphology_kernel_size,
-        )
-    elif method == "adaptive_threshold":
-        # Convert adaptive method string to OpenCV constant
-        adaptive_method = (
-            cv2.ADAPTIVE_THRESH_MEAN_C
-            if config.adaptive_method == "mean"
-            else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
-        )
-        binary_mask = detect_roi_adaptive_threshold(
-            image,
-            adaptive_method=adaptive_method,
-            threshold_type=cv2.THRESH_BINARY,
-            block_size=config.adaptive_block_size,
-            C=config.adaptive_C,
-            morphology_kernel_size=config.morphology_kernel_size,
-            edge_enhancement=config.edge_enhancement,
-        )
-    else:  # Default to 'gabor'
-        binary_mask = detect_roi_gabor(
-            image,
-            config.gabor_kernel_size,
-            config.gabor_sigma,
-            config.gabor_lambda,
-            config.gabor_gamma,
-            config.gabor_binary_threshold,
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 21, 10
         )
 
-    # Find cuts
-    cut_x_left, cut_x_right, vertical_info = find_vertical_cuts(
-        binary_mask,
-        mode=config.roi_vertical_mode,
-        window_size_divisor=config.roi_window_size_divisor,
-        min_window_size=config.roi_min_window_size,
-        min_cut_strength=config.roi_min_cut_strength,
-        min_confidence_threshold=config.roi_min_confidence_threshold,
-    )
+    # Compute projections
+    h_proj, v_proj = compute_roi_histogram_projection(binary)
 
-    cut_y_top, cut_y_bottom, horizontal_info = find_horizontal_cuts(
-        binary_mask,
-        mode=config.roi_horizontal_mode,
-        window_size_divisor=config.roi_window_size_divisor,
-        min_window_size=config.roi_min_window_size,
-        min_cut_strength=config.roi_min_cut_strength,
-        min_confidence_threshold=config.roi_min_confidence_threshold,
-    )
+    # Find boundaries
+    y_start, y_end = find_content_boundaries(h_proj, min_content_threshold)
+    x_start, x_end = find_content_boundaries(v_proj, min_content_threshold)
 
-    roi_coords = {
-        "roi_left": int(cut_x_left),
-        "roi_right": int(cut_x_right),
-        "roi_top": int(cut_y_top),
-        "roi_bottom": int(cut_y_bottom),
-        "image_width": image.shape[1],
-        "image_height": image.shape[0],
-    }
+    # Calculate ROI
+    x, y = x_start, y_start
+    w = x_end - x_start + 1
+    h = y_end - y_start + 1
+
+    # Validate ROI
+    if w <= 0 or h <= 0:
+        x, y, w, h = 0, 0, image.shape[1], image.shape[0]
 
     if not return_analysis:
-        return roi_coords
-
-    # Calculate additional analysis
-    roi_width = cut_x_right - cut_x_left
-    roi_height = cut_y_bottom - cut_y_top
-    roi_area = roi_width * roi_height
-    total_area = image.shape[1] * image.shape[0]
+        return (x, y, w, h)
 
     analysis = {
-        "roi_width": roi_width,
-        "roi_height": roi_height,
-        "roi_area": roi_area,
-        "roi_area_percentage": (roi_area / total_area) * 100,
-        "vertical_info": vertical_info,
-        "horizontal_info": horizontal_info,
-        "binary_mask": binary_mask,
+        "threshold_method": threshold_method,
+        "horizontal_projection": h_proj,
+        "vertical_projection": v_proj,
+        "boundaries": {
+            "x_start": x_start,
+            "x_end": x_end,
+            "y_start": y_start,
+            "y_end": y_end,
+        },
+        "roi": (x, y, w, h),
+        "binary_image": binary,
     }
 
-    return roi_coords, analysis
+    return (x, y, w, h), analysis
 
 
-def crop_to_roi(image: np.ndarray, roi_coords: Dict) -> np.ndarray:
-    """Crop image to ROI coordinates."""
-    left = roi_coords["roi_left"]
-    right = roi_coords["roi_right"]
-    top = roi_coords["roi_top"]
-    bottom = roi_coords["roi_bottom"]
+def detect_curved_margins(
+    image: np.ndarray,
+    blur_kernel_size: int = 7,
+    black_threshold: int = 50,
+    content_threshold: int = 200,
+    morph_kernel_size: int = 25,
+    min_content_area_ratio: float = 0.01,
+    return_debug_info: bool = False,
+) -> tuple:
+    """Detect curved margins and create content mask.
+    
+    Args:
+        image: Input image (BGR or grayscale)
+        blur_kernel_size: Gaussian blur kernel size
+        black_threshold: Threshold for detecting very dark regions (margins)
+        content_threshold: Threshold for detecting content regions
+        morph_kernel_size: Morphological operation kernel size
+        min_content_area_ratio: Minimum content area ratio to consider valid
+        return_debug_info: If True, return debug information
+        
+    Returns:
+        tuple: (content_mask, debug_info) if return_debug_info else content_mask
+    """
+    # Convert to grayscale if needed
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    height, width = gray.shape
+    total_area = height * width
 
-    return image[top:bottom, left:right]
+    # Step 1: Apply Gaussian blur to reduce noise
+    blurred = cv2.GaussianBlur(gray, (blur_kernel_size, blur_kernel_size), 0)
+
+    # Step 2: Create mask of content regions (not very dark)
+    _, content_mask = cv2.threshold(blurred, content_threshold, 255, cv2.THRESH_BINARY_INV)
+
+    # Step 3: Create mask of potential margins (very dark areas)
+    _, margin_mask = cv2.threshold(blurred, black_threshold, 255, cv2.THRESH_BINARY_INV)
+
+    # Step 4: Apply morphological operations to connect content regions
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (morph_kernel_size, morph_kernel_size)
+    )
+    content_mask = cv2.morphologyEx(content_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    # Step 5: Find all content contours
+    contours, _ = cv2.findContours(
+        content_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    # Step 6: Filter contours by area and find the main content region
+    valid_contours = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > total_area * min_content_area_ratio:
+            valid_contours.append(contour)
+
+    # Step 7: Create final content mask
+    if valid_contours:
+        # If multiple valid contours, merge them
+        final_mask = np.zeros_like(gray)
+        cv2.drawContours(final_mask, valid_contours, -1, 255, -1)
+
+        # Optional: Fill any holes within the content region
+        kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        final_mask = cv2.morphologyEx(final_mask, cv2.MORPH_CLOSE, kernel_small)
+
+        debug_info = {
+            "gray": gray,
+            "blurred": blurred,
+            "initial_content_mask": content_mask,
+            "margin_mask": margin_mask,
+            "valid_contours": valid_contours,
+            "all_contours": contours,
+        }
+    else:
+        # No valid contours found, use the whole image
+        final_mask = np.ones_like(gray) * 255
+        debug_info = {
+            "gray": gray,
+            "blurred": blurred,
+            "initial_content_mask": content_mask,
+            "margin_mask": margin_mask,
+            "valid_contours": [],
+            "all_contours": contours,
+        }
+
+    if return_debug_info:
+        return final_mask, debug_info
+    return final_mask
+
+
+def find_largest_inscribed_rectangle(mask: np.ndarray) -> Tuple[int, int, int, int]:
+    """Find the largest rectangle that fits entirely within the content mask.
+    
+    Args:
+        mask: Binary mask where 255 indicates valid content area
+        
+    Returns:
+        Tuple of (x, y, width, height) for the largest inscribed rectangle
+    """
+    height, width = mask.shape
+    
+    # Convert mask to binary (0 or 1)
+    binary_mask = (mask > 0).astype(np.uint8)
+    
+    # Use dynamic programming approach for largest rectangle in histogram
+    max_area = 0
+    best_rect = (0, 0, 0, 0)
+    
+    # Create histogram for each row
+    histogram = np.zeros(width, dtype=int)
+    
+    for row in range(height):
+        # Update histogram
+        for col in range(width):
+            if binary_mask[row, col] == 1:
+                histogram[col] += 1
+            else:
+                histogram[col] = 0
+        
+        # Find largest rectangle in current histogram
+        rect = _largest_rectangle_in_histogram(histogram, row)
+        if rect[2] * rect[3] > max_area:  # width * height
+            max_area = rect[2] * rect[3]
+            best_rect = rect
+    
+    return best_rect
+
+
+def _largest_rectangle_in_histogram(heights: np.ndarray, current_row: int) -> Tuple[int, int, int, int]:
+    """Find the largest rectangle in a histogram using stack-based approach.
+    
+    Args:
+        heights: Array of histogram heights
+        current_row: Current row index (for calculating y coordinate)
+        
+    Returns:
+        Tuple of (x, y, width, height) for the largest rectangle
+    """
+    stack = []
+    max_area = 0
+    best_rect = (0, 0, 0, 0)
+    
+    for i, h in enumerate(heights):
+        while stack and heights[stack[-1]] > h:
+            height = heights[stack.pop()]
+            width = i if not stack else i - stack[-1] - 1
+            area = height * width
+            
+            if area > max_area:
+                max_area = area
+                left = 0 if not stack else stack[-1] + 1
+                y = current_row - height + 1
+                best_rect = (left, y, width, height)
+        
+        stack.append(i)
+    
+    # Process remaining bars in stack
+    while stack:
+        height = heights[stack.pop()]
+        width = len(heights) if not stack else len(heights) - stack[-1] - 1
+        area = height * width
+        
+        if area > max_area:
+            max_area = area
+            left = 0 if not stack else stack[-1] + 1
+            y = current_row - height + 1
+            best_rect = (left, y, width, height)
+    
+    return best_rect
+
+
+def remove_margin_aggressive(
+    image: np.ndarray,
+    blur_kernel_size: int = 7,
+    black_threshold: int = 50,
+    content_threshold: int = 200,
+    morph_kernel_size: int = 25,
+    min_content_area_ratio: float = 0.01,
+    padding: int = 5,
+    return_analysis: bool = False,
+) -> tuple:
+    """Remove margins aggressively using largest inscribed rectangle approach.
+    
+    This method finds the largest box that fits inside the image content,
+    effectively cutting all margin parts even if it cuts some actual images.
+    
+    Args:
+        image: Input image (BGR or grayscale)
+        blur_kernel_size: Gaussian blur kernel size
+        black_threshold: Threshold for detecting very dark regions (margins)
+        content_threshold: Threshold for detecting content regions
+        morph_kernel_size: Morphological operation kernel size
+        min_content_area_ratio: Minimum content area ratio to consider valid
+        padding: Padding to subtract from the detected boundary (negative padding)
+        return_analysis: If True, returns additional analysis information
+        
+    Returns:
+        np.ndarray or tuple: Cropped image, or (cropped_image, analysis) if return_analysis=True
+    """
+    # Detect content mask
+    content_mask = detect_curved_margins(
+        image, blur_kernel_size, black_threshold, content_threshold,
+        morph_kernel_size, min_content_area_ratio
+    )
+    
+    # Find the largest inscribed rectangle
+    x, y, w, h = find_largest_inscribed_rectangle(content_mask)
+    
+    # Apply negative padding (shrink the rectangle to be more conservative)
+    if padding > 0:
+        x = x + padding
+        y = y + padding  
+        w = max(0, w - 2 * padding)
+        h = max(0, h - 2 * padding)
+    
+    # Crop the image
+    cropped = image[y:y+h, x:x+w]
+    
+    if not return_analysis:
+        return cropped
+    
+    # Calculate analysis
+    original_area = image.shape[0] * image.shape[1]
+    cropped_area = cropped.shape[0] * cropped.shape[1]
+    
+    analysis = {
+        "original_shape": image.shape,
+        "cropped_shape": cropped.shape,
+        "crop_bounds": (x, y, w, h),
+        "area_retention": cropped_area / original_area if original_area > 0 else 0,
+        "content_mask": content_mask,
+        "method": "largest_inscribed_rectangle",
+    }
+    
+    return cropped, analysis

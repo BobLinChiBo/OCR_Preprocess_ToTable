@@ -25,65 +25,23 @@ class Config:
     angle_step: float = 0.1
     min_angle_correction: float = 0.1
 
-    # Line detection
-    min_line_length: int = 50
-    max_line_gap: int = 40
-    hough_threshold: int = 40
-    horizontal_kernel_ratio: int = 30
-    vertical_kernel_ratio: int = 20
-    h_erode_iterations: int = 1
-    h_dilate_iterations: int = 1
-    v_erode_iterations: int = 1
-    v_dilate_iterations: int = 1
-    min_table_coverage: float = 0.10
-    max_parallel_distance: int = 12
-    angle_tolerance: float = 5.0
-    h_length_filter_ratio: float = 0.5
-    v_length_filter_ratio: float = 0.4
+    # Table line detection (new connected components method)
+    threshold: int = 40
+    horizontal_kernel_size: int = 10
+    vertical_kernel_size: int = 10
+    alignment_threshold: int = 3
+    pre_merge_length_ratio: float = 0.3
+    post_merge_length_ratio: float = 0.4
+    min_aspect_ratio: int = 5
 
-    # Line merging parameters
-    line_merge_distance_h: int = 15
-    line_merge_distance_v: int = 15
-    line_extension_tolerance: int = 20
-    max_merge_iterations: int = 3
-
-    # ROI detection (edge detection preprocessing)
-    # CONSERVATIVE SETTINGS for 65-95% area ratio preservation
-    enable_roi_detection: bool = True
-    roi_detection_method: str = (
-        "gabor"  # 'gabor', 'canny_sobel', or 'adaptive_threshold'
-    )
-
-    # Gabor filter parameters (original method)
-    gabor_kernel_size: int = 31
-    gabor_sigma: float = 3.0
-    gabor_lambda: float = 8.0
-    gabor_gamma: float = 0.2
-    gabor_binary_threshold: int = 127
-
-    # Canny + Sobel edge detection parameters (new method)
-    canny_low_threshold: int = 50
-    canny_high_threshold: int = 150
-    sobel_kernel_size: int = 3
-    gaussian_blur_size: int = 5
-    edge_binary_threshold: int = 127
-    morphology_kernel_size: int = 3
-
-    # Adaptive threshold parameters (new method)
-    adaptive_method: str = "gaussian"  # 'mean' or 'gaussian'
-    adaptive_block_size: int = 11
-    adaptive_C: float = 2.0
-    edge_enhancement: bool = True
-
-    # ROI cut detection parameters (common to all methods)
-    roi_vertical_mode: str = "single_best"  # 'both_sides' or 'single_best'
-    roi_horizontal_mode: str = "both_sides"  # 'both_sides' or 'single_best'
-    roi_window_size_divisor: int = 20
-    roi_min_window_size: int = 10
-    roi_min_cut_strength: float = (
-        1000.0  # VERY HIGH = minimal cropping for 65-95% area ratio
-    )
-    roi_min_confidence_threshold: float = 50.0  # VERY HIGH = very conservative cropping
+    # Margin removal (replaces ROI detection)
+    enable_margin_removal: bool = True
+    blur_kernel_size: int = 7
+    black_threshold: int = 50
+    content_threshold: int = 200
+    morph_kernel_size: int = 25
+    min_content_area_ratio: float = 0.01
+    margin_padding: int = 5
 
     # Debug options
     save_debug_images: bool = False
@@ -119,14 +77,12 @@ class Config:
             raise ValueError(f"angle_range must be positive, got {self.angle_range}")
         if self.angle_step <= 0:
             raise ValueError(f"angle_step must be positive, got {self.angle_step}")
-        if self.min_line_length <= 0:
-            raise ValueError(
-                f"min_line_length must be positive, got {self.min_line_length}"
-            )
-        if self.max_line_gap < 0:
-            raise ValueError(
-                f"max_line_gap must be non-negative, got {self.max_line_gap}"
-            )
+        if self.threshold <= 0:
+            raise ValueError(f"threshold must be positive, got {self.threshold}")
+        if self.horizontal_kernel_size <= 0:
+            raise ValueError(f"horizontal_kernel_size must be positive, got {self.horizontal_kernel_size}")
+        if self.vertical_kernel_size <= 0:
+            raise ValueError(f"vertical_kernel_size must be positive, got {self.vertical_kernel_size}")
 
     def create_output_dirs(self) -> None:
         """Create output directories if they don't exist."""
@@ -181,36 +137,27 @@ class Stage1Config(Config):
     angle_step: float = 0.2
     min_angle_correction: float = 0.2
 
-    # Stage 1 line detection - more permissive
-    min_line_length: int = 40
-    max_line_gap: int = 15
+    # Stage 1 table line detection - more permissive
+    threshold: int = 35  # Lower threshold for more permissive detection
+    horizontal_kernel_size: int = 15  # Larger kernels for initial pass
+    vertical_kernel_size: int = 15
+    alignment_threshold: int = 5  # More permissive clustering
+    pre_merge_length_ratio: float = 0.2  # Lower ratio to catch more segments
+    post_merge_length_ratio: float = 0.3  # More permissive final filtering
+    min_aspect_ratio: int = 3  # Lower aspect ratio for initial detection
 
-    # Stage 1 ROI margins (more generous)
-    roi_margins_page_1: Optional[dict] = None
-    roi_margins_page_2: Optional[dict] = None
-    roi_margins_default: Optional[dict] = None
+    # Stage 1 margin removal - more aggressive
+    enable_margin_removal: bool = True
+    blur_kernel_size: int = 9
+    black_threshold: int = 45
+    content_threshold: int = 180
+    morph_kernel_size: int = 30
+    min_content_area_ratio: float = 0.005
+    margin_padding: int = 10
 
     def __post_init__(self) -> None:
         """Initialize Stage 1 specific settings."""
         super().__post_init__()
-
-        # Set default ROI margins for Stage 1
-        if self.roi_margins_page_1 is None:
-            self.roi_margins_page_1 = {
-                "top": 120,
-                "bottom": 120,
-                "left": 0,
-                "right": 100,
-            }
-        if self.roi_margins_page_2 is None:
-            self.roi_margins_page_2 = {
-                "top": 120,
-                "bottom": 120,
-                "left": 60,
-                "right": 5,
-            }
-        if self.roi_margins_default is None:
-            self.roi_margins_default = {"top": 60, "bottom": 60, "left": 5, "right": 5}
 
     def create_output_dirs(self) -> None:
         """Create Stage 1 specific output directories."""
@@ -220,9 +167,8 @@ class Stage1Config(Config):
         stage1_dirs = [
             "01_split_pages",
             "02_deskewed",
-            "02.5_edge_detection",
-            "03_line_detection",
-            "04_table_reconstruction",
+            "03_margin_removed",
+            "04_table_lines",
             "05_cropped_tables",
         ]
 
@@ -255,53 +201,35 @@ class Stage1Config(Config):
             )
             del config_dict["deskewing"]
 
-        if "line_detection" in config_dict:
-            line_det = config_dict["line_detection"]
+        if "table_line_detection" in config_dict:
+            line_det = config_dict["table_line_detection"]
             config_dict.update(
                 {
-                    "min_line_length": line_det.get("min_line_length"),
-                    "max_line_gap": line_det.get("max_line_gap"),
-                    "hough_threshold": line_det.get("hough_threshold"),
-                    "horizontal_kernel_ratio": line_det.get("horizontal_kernel_ratio"),
-                    "vertical_kernel_ratio": line_det.get("vertical_kernel_ratio"),
-                    "h_erode_iterations": line_det.get("h_erode_iterations"),
-                    "h_dilate_iterations": line_det.get("h_dilate_iterations"),
-                    "v_erode_iterations": line_det.get("v_erode_iterations"),
-                    "v_dilate_iterations": line_det.get("v_dilate_iterations"),
-                    "min_table_coverage": line_det.get("min_table_coverage"),
-                    "max_parallel_distance": line_det.get("max_parallel_distance"),
-                    "angle_tolerance": line_det.get("angle_tolerance"),
-                    "h_length_filter_ratio": line_det.get("h_length_filter_ratio"),
-                    "v_length_filter_ratio": line_det.get("v_length_filter_ratio"),
-                    "line_merge_distance_h": line_det.get("line_merge_distance_h"),
-                    "line_merge_distance_v": line_det.get("line_merge_distance_v"),
-                    "line_extension_tolerance": line_det.get("line_extension_tolerance"),
-                    "max_merge_iterations": line_det.get("max_merge_iterations"),
+                    "threshold": line_det.get("threshold"),
+                    "horizontal_kernel_size": line_det.get("horizontal_kernel_size"),
+                    "vertical_kernel_size": line_det.get("vertical_kernel_size"),
+                    "alignment_threshold": line_det.get("alignment_threshold"),
+                    "pre_merge_length_ratio": line_det.get("pre_merge_length_ratio"),
+                    "post_merge_length_ratio": line_det.get("post_merge_length_ratio"),
+                    "min_aspect_ratio": line_det.get("min_aspect_ratio"),
                 }
             )
-            del config_dict["line_detection"]
+            del config_dict["table_line_detection"]
 
-        if "roi_detection" in config_dict:
-            roi = config_dict["roi_detection"]
+        if "margin_removal" in config_dict:
+            margin = config_dict["margin_removal"]
             config_dict.update(
                 {
-                    "enable_roi_detection": roi.get("enable_roi_detection"),
-                    "gabor_kernel_size": roi.get("gabor_kernel_size"),
-                    "gabor_sigma": roi.get("gabor_sigma"),
-                    "gabor_lambda": roi.get("gabor_lambda"),
-                    "gabor_gamma": roi.get("gabor_gamma"),
-                    "gabor_binary_threshold": roi.get("gabor_binary_threshold"),
-                    "roi_vertical_mode": roi.get("roi_vertical_mode"),
-                    "roi_horizontal_mode": roi.get("roi_horizontal_mode"),
-                    "roi_window_size_divisor": roi.get("roi_window_size_divisor"),
-                    "roi_min_window_size": roi.get("roi_min_window_size"),
-                    "roi_min_cut_strength": roi.get("roi_min_cut_strength"),
-                    "roi_min_confidence_threshold": roi.get(
-                        "roi_min_confidence_threshold"
-                    ),
+                    "enable_margin_removal": margin.get("enable_margin_removal", True),
+                    "blur_kernel_size": margin.get("blur_kernel_size", 7),
+                    "black_threshold": margin.get("black_threshold", 50),
+                    "content_threshold": margin.get("content_threshold", 200),
+                    "morph_kernel_size": margin.get("morph_kernel_size", 25),
+                    "min_content_area_ratio": margin.get("min_content_area_ratio", 0.01),
+                    "margin_padding": margin.get("margin_padding", 5),
                 }
             )
-            del config_dict["roi_detection"]
+            del config_dict["margin_removal"]
 
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
@@ -331,47 +259,21 @@ class Stage2Config(Config):
     angle_step: float = 0.2
     min_angle_correction: float = 0.2
 
-    # Stage 2 line detection - more precise
-    min_line_length: int = 50
-    max_line_gap: int = 30
-    hough_threshold: int = 40
-    horizontal_kernel_ratio: int = 30
-    vertical_kernel_ratio: int = 20
-    h_erode_iterations: int = 1
-    h_dilate_iterations: int = 1
-    v_erode_iterations: int = 1
-    v_dilate_iterations: int = 1
-    min_table_coverage: float = 0.2
-    max_parallel_distance: int = 10
-    angle_tolerance: float = 5.0
-    h_length_filter_ratio: float = 0.5
-    v_length_filter_ratio: float = 0.4
+    # Stage 2 table line detection - more precise
+    threshold: int = 45  # Higher threshold for more precise detection
+    horizontal_kernel_size: int = 8  # Smaller kernels for refinement pass
+    vertical_kernel_size: int = 8
+    alignment_threshold: int = 2  # More strict clustering
+    pre_merge_length_ratio: float = 0.4  # Higher ratio for quality filtering
+    post_merge_length_ratio: float = 0.5  # More strict final filtering
+    min_aspect_ratio: int = 7  # Higher aspect ratio for refined detection
 
-    # Line merging parameters
-    line_merge_distance_h: int = 15
-    line_merge_distance_v: int = 15
-    line_extension_tolerance: int = 20
-    max_merge_iterations: int = 3
-
-    # Stage 2 ROI margins (minimal, already cropped)
-    roi_margins_page_1: Optional[dict] = None
-    roi_margins_page_2: Optional[dict] = None
-    roi_margins_default: Optional[dict] = None
-
-    # Disable ROI detection for Stage 2 (already cropped)
-    enable_roi_detection: bool = False
+    # Stage 2 margin removal - more conservative (minimal additional cropping)
+    enable_margin_removal: bool = False  # Usually disabled for Stage 2 (already cropped)
 
     def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
         super().__post_init__()
-
-        # Set minimal ROI margins for Stage 2 (images already cropped)
-        if self.roi_margins_page_1 is None:
-            self.roi_margins_page_1 = {"top": 0, "bottom": 0, "left": 0, "right": 0}
-        if self.roi_margins_page_2 is None:
-            self.roi_margins_page_2 = {"top": 0, "bottom": 0, "left": 0, "right": 0}
-        if self.roi_margins_default is None:
-            self.roi_margins_default = {"top": 0, "bottom": 0, "left": 0, "right": 0}
 
     def create_output_dirs(self) -> None:
         """Create Stage 2 specific output directories."""
@@ -380,8 +282,8 @@ class Stage2Config(Config):
         # Create Stage 2 subdirectories
         stage2_dirs = [
             "01_deskewed",
-            "02_line_detection",
-            "03_table_reconstruction",
+            "02_margin_removed",
+            "03_table_lines",
             "04_fitted_tables",
         ]
 
@@ -403,46 +305,35 @@ class Stage2Config(Config):
             )
             del config_dict["deskewing"]
 
-        if "line_detection" in config_dict:
-            line_det = config_dict["line_detection"]
+        if "table_line_detection" in config_dict:
+            line_det = config_dict["table_line_detection"]
             config_dict.update(
                 {
-                    "min_line_length": line_det.get("min_line_length"),
-                    "max_line_gap": line_det.get("max_line_gap"),
-                    "hough_threshold": line_det.get("hough_threshold"),
-                    "horizontal_kernel_ratio": line_det.get("horizontal_kernel_ratio"),
-                    "vertical_kernel_ratio": line_det.get("vertical_kernel_ratio"),
-                    "h_erode_iterations": line_det.get("h_erode_iterations"),
-                    "h_dilate_iterations": line_det.get("h_dilate_iterations"),
-                    "v_erode_iterations": line_det.get("v_erode_iterations"),
-                    "v_dilate_iterations": line_det.get("v_dilate_iterations"),
-                    "min_table_coverage": line_det.get("min_table_coverage"),
-                    "max_parallel_distance": line_det.get("max_parallel_distance"),
-                    "angle_tolerance": line_det.get("angle_tolerance"),
-                    "h_length_filter_ratio": line_det.get("h_length_filter_ratio"),
-                    "v_length_filter_ratio": line_det.get("v_length_filter_ratio"),
-                    "line_merge_distance_h": line_det.get("line_merge_distance_h"),
-                    "line_merge_distance_v": line_det.get("line_merge_distance_v"),
-                    "line_extension_tolerance": line_det.get("line_extension_tolerance"),
-                    "max_merge_iterations": line_det.get("max_merge_iterations"),
+                    "threshold": line_det.get("threshold"),
+                    "horizontal_kernel_size": line_det.get("horizontal_kernel_size"),
+                    "vertical_kernel_size": line_det.get("vertical_kernel_size"),
+                    "alignment_threshold": line_det.get("alignment_threshold"),
+                    "pre_merge_length_ratio": line_det.get("pre_merge_length_ratio"),
+                    "post_merge_length_ratio": line_det.get("post_merge_length_ratio"),
+                    "min_aspect_ratio": line_det.get("min_aspect_ratio"),
                 }
             )
-            del config_dict["line_detection"]
+            del config_dict["table_line_detection"]
 
-        if "roi_detection" in config_dict:
-            roi = config_dict["roi_detection"]
+        if "margin_removal" in config_dict:
+            margin = config_dict["margin_removal"]
             config_dict.update(
-                {"enable_roi_detection": roi.get("enable_roi_detection")}
+                {
+                    "enable_margin_removal": margin.get("enable_margin_removal", False),
+                    "blur_kernel_size": margin.get("blur_kernel_size", 7),
+                    "black_threshold": margin.get("black_threshold", 50),
+                    "content_threshold": margin.get("content_threshold", 200),
+                    "morph_kernel_size": margin.get("morph_kernel_size", 25),
+                    "min_content_area_ratio": margin.get("min_content_area_ratio", 0.01),
+                    "margin_padding": margin.get("margin_padding", 5),
+                }
             )
-            del config_dict["roi_detection"]
-
-        # Handle roi_margins specially
-        if "roi_margins" in config_dict:
-            margins = config_dict["roi_margins"]
-            config_dict["roi_margins_page_1"] = margins.get("page_1")
-            config_dict["roi_margins_page_2"] = margins.get("page_2")
-            config_dict["roi_margins_default"] = margins.get("default")
-            del config_dict["roi_margins"]
+            del config_dict["margin_removal"]
         
         # Remove any unrecognized sections
         if "table_fitting" in config_dict:

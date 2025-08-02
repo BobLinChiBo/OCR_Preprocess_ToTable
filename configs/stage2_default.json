@@ -9,53 +9,16 @@
     "angle_step": 0.2,
     "min_angle_correction": 0.2
   },
-  "roi_detection": {
-    "enable_roi_detection": false
+  "table_line_detection": {
+    "threshold": 45,
+    "horizontal_kernel_size": 8,
+    "vertical_kernel_size": 8,
+    "alignment_threshold": 2,
+    "pre_merge_length_ratio": 0.4,
+    "post_merge_length_ratio": 0.5,
+    "min_aspect_ratio": 7
   },
-  "roi_margins": {
-    "page_1": {
-      "top": 0,
-      "bottom": 0,
-      "left": 0,
-      "right": 0
-    },
-    "page_2": {
-      "top": 0,
-      "bottom": 0,
-      "left": 0,
-      "right": 0
-    },
-    "default": {
-      "top": 0,
-      "bottom": 0,
-      "left": 0,
-      "right": 0
-    }
-  },
-  "line_detection": {
-    "min_line_length": 50,
-    "max_line_gap": 30,
-    "hough_threshold": 40,
-    "horizontal_kernel_ratio": 30,
-    "vertical_kernel_ratio": 20,
-    "h_erode_iterations": 1,
-    "h_dilate_iterations": 1,
-    "v_erode_iterations": 1,
-    "v_dilate_iterations": 1,
-    "min_table_coverage": 0.2,
-    "max_parallel_distance": 10,
-    "angle_tolerance": 5.0,
-    "h_length_filter_ratio": 0.5,
-    "v_length_filter_ratio": 0.4,
-    "line_merge_distance_h": 15,
-    "line_merge_distance_v": 15,
-    "line_extension_tolerance": 20,
-    "max_merge_iterations": 3
-  },
-  "table_fitting": {
-    "tolerance": 15,
-    "coverage_threshold": 0.4,
-    "line_color": "blue",
-    "line_width": 2
+  "margin_removal": {
+    "enable_margin_removal": false
   }
 }

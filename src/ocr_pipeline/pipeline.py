@@ -48,40 +48,32 @@ class OCRPipeline:
                 self.config.min_angle_correction,
             )
 
-            # ROI detection (optional preprocessing step)
+            # Margin removal (preprocessing step)
             processing_image = deskewed
-            roi_coords = None
-            if self.config.enable_roi_detection:
-                roi_coords = utils.detect_roi_for_image(deskewed, self.config)
-                processing_image = utils.crop_to_roi(deskewed, roi_coords)
+            if self.config.enable_margin_removal:
+                processing_image = utils.remove_margin_aggressive(
+                    deskewed,
+                    blur_kernel_size=self.config.blur_kernel_size,
+                    black_threshold=self.config.black_threshold,
+                    content_threshold=self.config.content_threshold,
+                    morph_kernel_size=self.config.morph_kernel_size,
+                    min_content_area_ratio=self.config.min_content_area_ratio,
+                    padding=self.config.margin_padding,
+                )
 
                 if self.config.verbose:
-                    print(
-                        f"    ROI detected: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
-                        f"({roi_coords['roi_right']}, {roi_coords['roi_bottom']})"
-                    )
+                    print(f"    Margin removed: {processing_image.shape} (from {deskewed.shape})")
 
             # Detect table lines
             h_lines, v_lines = utils.detect_table_lines(
                 processing_image,
-                min_line_length=self.config.min_line_length,
-                max_line_gap=self.config.max_line_gap,
-                hough_threshold=self.config.hough_threshold,
-                horizontal_kernel_ratio=getattr(self.config, 'horizontal_kernel_ratio', 30),
-                vertical_kernel_ratio=getattr(self.config, 'vertical_kernel_ratio', 30),
-                h_erode_iterations=getattr(self.config, 'h_erode_iterations', 1),
-                h_dilate_iterations=getattr(self.config, 'h_dilate_iterations', 1),
-                v_erode_iterations=getattr(self.config, 'v_erode_iterations', 1),
-                v_dilate_iterations=getattr(self.config, 'v_dilate_iterations', 1),
-                min_table_coverage=getattr(self.config, 'min_table_coverage', 0.15),
-                max_parallel_distance=getattr(self.config, 'max_parallel_distance', 12),
-                angle_tolerance=getattr(self.config, 'angle_tolerance', 5.0),
-                h_length_filter_ratio=getattr(self.config, 'h_length_filter_ratio', 0.6),
-                v_length_filter_ratio=getattr(self.config, 'v_length_filter_ratio', 0.6),
-                line_merge_distance_h=getattr(self.config, 'line_merge_distance_h', 15),
-                line_merge_distance_v=getattr(self.config, 'line_merge_distance_v', 15),
-                line_extension_tolerance=getattr(self.config, 'line_extension_tolerance', 20),
-                max_merge_iterations=getattr(self.config, 'max_merge_iterations', 3)
+                threshold=self.config.threshold,
+                horizontal_kernel_size=self.config.horizontal_kernel_size,
+                vertical_kernel_size=self.config.vertical_kernel_size,
+                alignment_threshold=self.config.alignment_threshold,
+                pre_merge_length_ratio=self.config.pre_merge_length_ratio,
+                post_merge_length_ratio=self.config.post_merge_length_ratio,
+                min_aspect_ratio=self.config.min_aspect_ratio,
             )
 
             # Crop to table region
@@ -209,61 +201,44 @@ class TwoStageOCRPipeline:
                     deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
                     utils.save_image(deskewed, deskew_path)
 
-                    # ROI detection and cropping
+                    # Margin removal
                     processing_image = deskewed
-                    if self.stage1_config.enable_roi_detection:
-                        roi_coords = utils.detect_roi_for_image(
-                            deskewed, self.stage1_config
+                    if self.stage1_config.enable_margin_removal:
+                        processing_image = utils.remove_margin_aggressive(
+                            deskewed,
+                            blur_kernel_size=self.stage1_config.blur_kernel_size,
+                            black_threshold=self.stage1_config.black_threshold,
+                            content_threshold=self.stage1_config.content_threshold,
+                            morph_kernel_size=self.stage1_config.morph_kernel_size,
+                            min_content_area_ratio=self.stage1_config.min_content_area_ratio,
+                            padding=self.stage1_config.margin_padding,
                         )
-                        processing_image = utils.crop_to_roi(deskewed, roi_coords)
 
-                        # Save ROI cropped image
-                        roi_dir = self.stage1_config.output_dir / "02.5_edge_detection"
-                        roi_path = roi_dir / f"{page_name}_roi.jpg"
-                        utils.save_image(processing_image, roi_path)
+                        # Save margin-removed image
+                        margin_dir = self.stage1_config.output_dir / "03_margin_removed"
+                        margin_path = margin_dir / f"{page_name}_margin_removed.jpg"
+                        utils.save_image(processing_image, margin_path)
 
                         if self.stage1_config.verbose:
-                            print(
-                                f"    ROI: ({roi_coords['roi_left']}, {roi_coords['roi_top']}) to "
-                                f"({roi_coords['roi_right']}, {roi_coords['roi_bottom']})"
-                            )
+                            print(f"    Margin removed: {processing_image.shape} (from {deskewed.shape})")
 
                     # Table line detection
                     h_lines, v_lines = utils.detect_table_lines(
                         processing_image,
-                        min_line_length=self.stage1_config.min_line_length,
-                        max_line_gap=self.stage1_config.max_line_gap,
-                        hough_threshold=self.stage1_config.hough_threshold,
-                        horizontal_kernel_ratio=getattr(self.stage1_config, 'horizontal_kernel_ratio', 30),
-                        vertical_kernel_ratio=getattr(self.stage1_config, 'vertical_kernel_ratio', 30),
-                        h_erode_iterations=getattr(self.stage1_config, 'h_erode_iterations', 1),
-                        h_dilate_iterations=getattr(self.stage1_config, 'h_dilate_iterations', 1),
-                        v_erode_iterations=getattr(self.stage1_config, 'v_erode_iterations', 1),
-                        v_dilate_iterations=getattr(self.stage1_config, 'v_dilate_iterations', 1),
-                        min_table_coverage=getattr(self.stage1_config, 'min_table_coverage', 0.15),
-                        max_parallel_distance=getattr(self.stage1_config, 'max_parallel_distance', 12),
-                        angle_tolerance=getattr(self.stage1_config, 'angle_tolerance', 5.0),
-                        h_length_filter_ratio=getattr(self.stage1_config, 'h_length_filter_ratio', 0.6),
-                        v_length_filter_ratio=getattr(self.stage1_config, 'v_length_filter_ratio', 0.6),
-                        line_merge_distance_h=getattr(self.stage1_config, 'line_merge_distance_h', 15),
-                        line_merge_distance_v=getattr(self.stage1_config, 'line_merge_distance_v', 15),
-                        line_extension_tolerance=getattr(self.stage1_config, 'line_extension_tolerance', 20),
-                        max_merge_iterations=getattr(self.stage1_config, 'max_merge_iterations', 3)
+                        threshold=self.stage1_config.threshold,
+                        horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
+                        vertical_kernel_size=self.stage1_config.vertical_kernel_size,
+                        alignment_threshold=self.stage1_config.alignment_threshold,
+                        pre_merge_length_ratio=self.stage1_config.pre_merge_length_ratio,
+                        post_merge_length_ratio=self.stage1_config.post_merge_length_ratio,
+                        min_aspect_ratio=self.stage1_config.min_aspect_ratio,
                     )
 
-                    # TODO: Save line detection visualization
-                    # lines_dir = self.stage1_config.output_dir / "03_line_detection"
-                    # lines_path = lines_dir / f"{page_name}_lines.jpg"
-                    # TODO: Add visualization function for detected lines
-
-                    # TODO: Table reconstruction
-                    # reconstruction_dir = (
-                    #     self.stage1_config.output_dir / "04_table_reconstruction"
-                    # )
-                    # reconstruction_path = (
-                    #     reconstruction_dir / f"{page_name}_reconstructed.jpg"
-                    # )
-                    # TODO: Add table reconstruction function
+                    # Save table line visualization
+                    lines_dir = self.stage1_config.output_dir / "04_table_lines"
+                    lines_path = lines_dir / f"{page_name}_table_lines.jpg"
+                    vis_image = utils.visualize_detected_lines(processing_image, h_lines, v_lines)
+                    utils.save_image(vis_image, lines_path)
 
                     # Final table cropping
                     if h_lines and v_lines:
@@ -346,50 +321,51 @@ class TwoStageOCRPipeline:
                 deskew_path = deskew_dir / f"{base_name}_refined_deskewed.jpg"
                 utils.save_image(refined_deskewed, deskew_path)
 
+                # Optional additional margin removal for Stage 2
+                processing_image = refined_deskewed
+                if self.stage2_config.enable_margin_removal:
+                    processing_image = utils.remove_margin_aggressive(
+                        refined_deskewed,
+                        blur_kernel_size=self.stage2_config.blur_kernel_size,
+                        black_threshold=self.stage2_config.black_threshold,
+                        content_threshold=self.stage2_config.content_threshold,
+                        morph_kernel_size=self.stage2_config.morph_kernel_size,
+                        min_content_area_ratio=self.stage2_config.min_content_area_ratio,
+                        padding=self.stage2_config.margin_padding,
+                    )
+
+                    # Save margin-removed image
+                    margin_dir = self.stage2_config.output_dir / "02_margin_removed"
+                    margin_path = margin_dir / f"{base_name}_margin_removed.jpg"
+                    utils.save_image(processing_image, margin_path)
+
+                    if self.stage2_config.verbose:
+                        print(f"    Stage 2 margin removed: {processing_image.shape} (from {refined_deskewed.shape})")
+
                 # Refined line detection with tighter parameters
                 h_lines, v_lines = utils.detect_table_lines(
-                    refined_deskewed,
-                    min_line_length=self.stage2_config.min_line_length,
-                    max_line_gap=self.stage2_config.max_line_gap,
-                    hough_threshold=self.stage2_config.hough_threshold,
-                    horizontal_kernel_ratio=getattr(self.stage2_config, 'horizontal_kernel_ratio', 30),
-                    vertical_kernel_ratio=getattr(self.stage2_config, 'vertical_kernel_ratio', 30),
-                    h_erode_iterations=getattr(self.stage2_config, 'h_erode_iterations', 1),
-                    h_dilate_iterations=getattr(self.stage2_config, 'h_dilate_iterations', 1),
-                    v_erode_iterations=getattr(self.stage2_config, 'v_erode_iterations', 1),
-                    v_dilate_iterations=getattr(self.stage2_config, 'v_dilate_iterations', 1),
-                    min_table_coverage=getattr(self.stage2_config, 'min_table_coverage', 0.3),
-                    max_parallel_distance=getattr(self.stage2_config, 'max_parallel_distance', 10),
-                    angle_tolerance=getattr(self.stage2_config, 'angle_tolerance', 5.0),
-                    h_length_filter_ratio=getattr(self.stage2_config, 'h_length_filter_ratio', 0.6),
-                    v_length_filter_ratio=getattr(self.stage2_config, 'v_length_filter_ratio', 0.6),
-                    line_merge_distance_h=getattr(self.stage2_config, 'line_merge_distance_h', 15),
-                    line_merge_distance_v=getattr(self.stage2_config, 'line_merge_distance_v', 15),
-                    line_extension_tolerance=getattr(self.stage2_config, 'line_extension_tolerance', 20),
-                    max_merge_iterations=getattr(self.stage2_config, 'max_merge_iterations', 3)
+                    processing_image,
+                    threshold=self.stage2_config.threshold,
+                    horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
+                    vertical_kernel_size=self.stage2_config.vertical_kernel_size,
+                    alignment_threshold=self.stage2_config.alignment_threshold,
+                    pre_merge_length_ratio=self.stage2_config.pre_merge_length_ratio,
+                    post_merge_length_ratio=self.stage2_config.post_merge_length_ratio,
+                    min_aspect_ratio=self.stage2_config.min_aspect_ratio,
                 )
 
-                # TODO: Save refined line detection
-                # lines_dir = self.stage2_config.output_dir / "02_line_detection"
-                # lines_path = lines_dir / f"{base_name}_refined_lines.jpg"
-                # TODO: Add visualization function for detected lines
-
-                # TODO: Final table reconstruction
-                # reconstruction_dir = (
-                #     self.stage2_config.output_dir / "03_table_reconstruction"
-                # )
-                # reconstruction_path = (
-                #     reconstruction_dir / f"{base_name}_final_reconstructed.jpg"
-                # )
-                # TODO: Add final table reconstruction function
+                # Save refined line detection visualization
+                lines_dir = self.stage2_config.output_dir / "03_table_lines"
+                lines_path = lines_dir / f"{base_name}_refined_table_lines.jpg"
+                vis_image = utils.visualize_detected_lines(processing_image, h_lines, v_lines)
+                utils.save_image(vis_image, lines_path)
 
                 # Table fitting for publication-ready output
                 fitting_dir = self.stage2_config.output_dir / "04_fitted_tables"
                 fitted_path = fitting_dir / f"{base_name}_fitted.jpg"
 
-                # For now, use the refined deskewed as the final result
-                # TODO: Implement table fitting algorithm
-                utils.save_image(refined_deskewed, fitted_path)
+                # Use the processed image (after margin removal if enabled) as the final result
+                utils.save_image(processing_image, fitted_path)
                 refined_tables.append(fitted_path)
 
                 if self.stage2_config.verbose:
