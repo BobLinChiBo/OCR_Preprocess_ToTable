@@ -73,8 +73,10 @@ class OCRPipeline:
                 horizontal_kernel_size=self.config.horizontal_kernel_size,
                 vertical_kernel_size=self.config.vertical_kernel_size,
                 alignment_threshold=self.config.alignment_threshold,
-                pre_merge_length_ratio=self.config.pre_merge_length_ratio,
-                post_merge_length_ratio=self.config.post_merge_length_ratio,
+                h_min_length_image_ratio=self.config.h_min_length_image_ratio,
+                h_min_length_relative_ratio=self.config.h_min_length_relative_ratio,
+                v_min_length_image_ratio=self.config.v_min_length_image_ratio,
+                v_min_length_relative_ratio=self.config.v_min_length_relative_ratio,
                 min_aspect_ratio=self.config.min_aspect_ratio,
             )
 
@@ -236,8 +238,10 @@ class TwoStageOCRPipeline:
                         horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
                         vertical_kernel_size=self.stage1_config.vertical_kernel_size,
                         alignment_threshold=self.stage1_config.alignment_threshold,
-                        pre_merge_length_ratio=self.stage1_config.pre_merge_length_ratio,
-                        post_merge_length_ratio=self.stage1_config.post_merge_length_ratio,
+                        h_min_length_image_ratio=self.stage1_config.h_min_length_image_ratio,
+                        h_min_length_relative_ratio=self.stage1_config.h_min_length_relative_ratio,
+                        v_min_length_image_ratio=self.stage1_config.v_min_length_image_ratio,
+                        v_min_length_relative_ratio=self.stage1_config.v_min_length_relative_ratio,
                         min_aspect_ratio=self.stage1_config.min_aspect_ratio,
                     )
 
@@ -376,8 +380,10 @@ class TwoStageOCRPipeline:
                     horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
                     vertical_kernel_size=self.stage2_config.vertical_kernel_size,
                     alignment_threshold=self.stage2_config.alignment_threshold,
-                    pre_merge_length_ratio=self.stage2_config.pre_merge_length_ratio,
-                    post_merge_length_ratio=self.stage2_config.post_merge_length_ratio,
+                    h_min_length_image_ratio=self.stage2_config.h_min_length_image_ratio,
+                    h_min_length_relative_ratio=self.stage2_config.h_min_length_relative_ratio,
+                    v_min_length_image_ratio=self.stage2_config.v_min_length_image_ratio,
+                    v_min_length_relative_ratio=self.stage2_config.v_min_length_relative_ratio,
                     min_aspect_ratio=self.stage2_config.min_aspect_ratio,
                 )
 

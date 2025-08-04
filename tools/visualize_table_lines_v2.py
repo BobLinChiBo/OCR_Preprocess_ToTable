@@ -283,26 +283,6 @@ def main():
     add_config_arguments(parser, 'table_lines')
     add_processor_specific_arguments(parser, 'table_lines')
     
-    # Table line post-processing arguments
-    parser.add_argument(
-        "--max-h-length-ratio",
-        type=float,
-        default=1.0,
-        help="Maximum horizontal line length ratio (1.0 = disable filtering)",
-    )
-    parser.add_argument(
-        "--max-v-length-ratio",
-        type=float,
-        default=0.9,
-        help="Maximum vertical line length ratio (1.0 = disable filtering)",
-    )
-    parser.add_argument(
-        "--close-line-distance",
-        type=int,
-        default=20,
-        help="Distance for merging close parallel lines (0 = disable merging)",
-    )
-    
     args = parser.parse_args()
     
     # Handle show-filtering-steps
@@ -351,13 +331,6 @@ def main():
     
     # Get command arguments
     command_args = get_command_args_dict(args, 'table_lines')
-    
-    # Add new post-processing arguments
-    command_args.update({
-        'max_h_length_ratio': args.max_h_length_ratio,
-        'max_v_length_ratio': args.max_v_length_ratio,
-        'close_line_distance': args.close_line_distance,
-            })
     
     output_dir = Path(args.output_dir)
     

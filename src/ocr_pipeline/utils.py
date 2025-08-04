@@ -527,8 +527,12 @@ def detect_table_lines(
     horizontal_kernel_size: int = 8,  # Morphological kernel width
     vertical_kernel_size: int = 8,  # Morphological kernel height
     alignment_threshold: int = 3,  # Clustering threshold for line alignment
-    pre_merge_length_ratio: float = 0.3,  # Min length ratio before merging (0 = no filter)
-    post_merge_length_ratio: float = 0.5,  # Min length ratio after merging
+    # New separated parameters for horizontal lines
+    h_min_length_image_ratio: float = 0.3,  # Min horizontal length as ratio of image width
+    h_min_length_relative_ratio: float = 0.5,  # Min horizontal length relative to longest h-line
+    # New separated parameters for vertical lines
+    v_min_length_image_ratio: float = 0.3,  # Min vertical length as ratio of image height
+    v_min_length_relative_ratio: float = 0.5,  # Min vertical length relative to longest v-line
     min_aspect_ratio: int = 5,  # Min aspect ratio for line-like components
     # New post-processing parameters
     max_h_length_ratio: float = 1.0,  # Max horizontal line length ratio (1.0 = disable filtering)
@@ -556,8 +560,10 @@ def detect_table_lines(
         horizontal_kernel_size: Width of morphological kernel for horizontal lines
         vertical_kernel_size: Height of morphological kernel for vertical lines
         alignment_threshold: Maximum distance for clustering aligned line segments
-        pre_merge_length_ratio: Minimum length ratio before merging (0 = no filtering)
-        post_merge_length_ratio: Minimum length ratio after merging
+        h_min_length_image_ratio: Min horizontal length as ratio of image width
+        h_min_length_relative_ratio: Min horizontal length relative to longest h-line
+        v_min_length_image_ratio: Min vertical length as ratio of image height
+        v_min_length_relative_ratio: Min vertical length relative to longest v-line
         min_aspect_ratio: Minimum aspect ratio to consider component as line-like
         max_h_length_ratio: Maximum horizontal line length ratio (1.0 = disable filtering)
         max_v_length_ratio: Maximum vertical line length ratio (1.0 = disable filtering)
@@ -682,7 +688,7 @@ def detect_table_lines(
         vertical_lines,
         "vertical",
         alignment_threshold,
-        pre_merge_length_ratio,
+        v_min_length_image_ratio,
         min_aspect_ratio,
     )
 
@@ -690,7 +696,7 @@ def detect_table_lines(
         horizontal_lines,
         "horizontal",
         alignment_threshold,
-        pre_merge_length_ratio,
+        h_min_length_image_ratio,
         min_aspect_ratio,
     )
 
@@ -698,8 +704,8 @@ def detect_table_lines(
     v_lengths = [y2 - y1 for x1, y1, x2, y2 in merged_vertical]
     h_lengths = [x2 - x1 for x1, y1, x2, y2 in merged_horizontal]
 
-    v_thresh = post_merge_length_ratio * max(v_lengths) if v_lengths else 0
-    h_thresh = post_merge_length_ratio * max(h_lengths) if h_lengths else 0
+    v_thresh = v_min_length_relative_ratio * max(v_lengths) if v_lengths else 0
+    h_thresh = h_min_length_relative_ratio * max(h_lengths) if h_lengths else 0
 
     filtered_vertical = [
         (x1, y1, x2, y2)

@@ -240,26 +240,52 @@ Line detection uses a connected components method to identify table structure by
   - `8`: Permissive alignment
 - **Tuning**: Increase for hand-drawn or imperfect tables, decrease for precise tables
 
-### `pre_merge_length_ratio`
+### Horizontal Line Length Filtering
+
+#### `h_min_length_image_ratio`
 - **Type**: `float`
 - **Default**: `0.3`
 - **Range**: `0.1 - 0.8`
-- **Description**: Minimum length ratio for line segments before merging
+- **Description**: Minimum horizontal line length as ratio of image width
 - **Examples**:
-  - `0.2`: More permissive (includes shorter segments)
+  - `0.2`: More permissive (includes lines 20% of image width)
   - `0.3`: Standard threshold (default)
-  - `0.5`: More restrictive (only longer segments)
-- **Tuning**: Decrease to include more line fragments, increase for quality control
+  - `0.5`: More restrictive (only lines 50% of image width or longer)
+- **Tuning**: Decrease to include shorter horizontal segments, increase for quality control
 
-### `post_merge_length_ratio`
+#### `h_min_length_relative_ratio`
 - **Type**: `float`
 - **Default**: `0.4`
 - **Range**: `0.2 - 0.9`
-- **Description**: Minimum length ratio for final lines after merging
+- **Description**: Minimum horizontal line length relative to longest detected horizontal line
 - **Examples**:
-  - `0.3`: More permissive final filter
+  - `0.3`: More permissive (keeps lines 30% as long as the longest)
   - `0.4`: Standard threshold (default)
-  - `0.6`: More restrictive final filter
+  - `0.7`: More restrictive (only lines 70% as long as the longest)
+- **Tuning**: Decrease to keep more lines, increase for cleaner results
+
+### Vertical Line Length Filtering
+
+#### `v_min_length_image_ratio`
+- **Type**: `float`
+- **Default**: `0.3`
+- **Range**: `0.1 - 0.8`
+- **Description**: Minimum vertical line length as ratio of image height
+- **Examples**:
+  - `0.2`: More permissive (includes lines 20% of image height)
+  - `0.3`: Standard threshold (default)
+  - `0.5`: More restrictive (only lines 50% of image height or longer)
+- **Tuning**: Decrease to include shorter vertical segments, increase for quality control
+
+#### `v_min_length_relative_ratio`
+- **Type**: `float`
+- **Default**: `0.4`
+- **Range**: `0.2 - 0.9`
+- **Description**: Minimum vertical line length relative to longest detected vertical line
+- **Examples**:
+  - `0.3`: More permissive (keeps lines 30% as long as the longest)
+  - `0.4`: Standard threshold (default)
+  - `0.7`: More restrictive (only lines 70% as long as the longest)
 - **Tuning**: Decrease to keep more lines, increase for cleaner results
 
 ### `min_aspect_ratio`
@@ -317,8 +343,10 @@ Line detection uses a connected components method to identify table structure by
   "threshold": 25,
   "horizontal_kernel_size": 15,
   "vertical_kernel_size": 15,
-  "pre_merge_length_ratio": 0.2,
-  "post_merge_length_ratio": 0.3,
+  "h_min_length_image_ratio": 0.2,
+  "h_min_length_relative_ratio": 0.3,
+  "v_min_length_image_ratio": 0.2,
+  "v_min_length_relative_ratio": 0.3,
   "min_aspect_ratio": 3
 }
 ```
@@ -335,8 +363,10 @@ Line detection uses a connected components method to identify table structure by
   "threshold": 60,
   "horizontal_kernel_size": 8,
   "vertical_kernel_size": 8,
-  "pre_merge_length_ratio": 0.4,
-  "post_merge_length_ratio": 0.5,
+  "h_min_length_image_ratio": 0.4,
+  "h_min_length_relative_ratio": 0.5,
+  "v_min_length_image_ratio": 0.4,
+  "v_min_length_relative_ratio": 0.5,
   "min_aspect_ratio": 8
 }
 ```

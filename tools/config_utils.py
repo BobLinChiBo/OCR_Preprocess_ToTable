@@ -40,22 +40,21 @@ DEFAULT_PARAMS = {
         'canny_sigma': 2.0,
     },
     'table_lines': {
-        # Note: min_line_length, max_line_gap, and hough_threshold are handled specially
-        'horizontal_kernel_ratio': 30,
-        'vertical_kernel_ratio': 30,
-        'h_erode_iterations': 1,
-        'h_dilate_iterations': 1,
-        'v_erode_iterations': 1,
-        'v_dilate_iterations': 1,
-        'min_table_coverage': 0.15,
-        'max_parallel_distance': 12,
-        'angle_tolerance': 5.0,
-        'h_length_filter_ratio': 0.6,
-        'v_length_filter_ratio': 0.6,
-        'line_merge_distance_h': 15,
-        'line_merge_distance_v': 15,
-        'line_extension_tolerance': 20,
-        'max_merge_iterations': 3,
+        # Core parameters
+        'threshold': 40,
+        'horizontal_kernel_size': 10,
+        'vertical_kernel_size': 10,
+        'alignment_threshold': 3,
+        'min_aspect_ratio': 5,
+        # New H/V separated parameters
+        'h_min_length_image_ratio': 0.3,
+        'h_min_length_relative_ratio': 0.4,
+        'v_min_length_image_ratio': 0.3,
+        'v_min_length_relative_ratio': 0.4,
+        # Post-processing parameters
+        'max_h_length_ratio': 1.0,
+        'max_v_length_ratio': 1.0,
+        'close_line_distance': 45,
     },
     'table_crop': {
         'table_crop_margin': 10,
@@ -195,25 +194,7 @@ def add_processor_specific_arguments(parser: argparse.ArgumentParser, processor_
         parser: Argument parser
         processor_type: Type of processor
     """
-    if processor_type == 'table_lines':
-        # Add dynamic parameters
-        parser.add_argument(
-            "--min-line-length",
-            type=int,
-            help="Minimum line length (calculated dynamically if not specified)"
-        )
-        parser.add_argument(
-            "--max-line-gap",
-            type=int,
-            help="Maximum line gap (calculated dynamically if not specified)"
-        )
-        parser.add_argument(
-            "--hough-threshold",
-            type=int,
-            default=60,
-            help="Hough transform threshold"
-        )
-    elif processor_type == 'margin_removal':
+    if processor_type == 'margin_removal':
         parser.add_argument(
             "--method",
             choices=['inscribed', 'aggressive', 'bounding_box', 'smart', 'curved_black_background', 'hybrid', 'edge_transition', 'gradient'],
@@ -396,13 +377,7 @@ def get_command_args_dict(args: argparse.Namespace, processor_type: str) -> Dict
                 command_args[param_name] = getattr(args, attr_name)
     
     # Add processor-specific arguments
-    if processor_type == 'table_lines':
-        for param in ['min_line_length', 'max_line_gap', 'hough_threshold']:
-            if hasattr(args, param):
-                value = getattr(args, param)
-                if value is not None:
-                    command_args[param] = value
-    elif processor_type == 'margin_removal':
+    if processor_type == 'margin_removal':
         for param in ['method', 'expansion_factor', 'use_min_area_rect', 
                       'gradient_aggressive_cutting_threshold', 'gradient_min_margin_intensity', 
                       'gradient_contrast_threshold']:

@@ -31,8 +31,15 @@ class Config:
     horizontal_kernel_size: int = 10
     vertical_kernel_size: int = 10
     alignment_threshold: int = 3
-    pre_merge_length_ratio: float = 0.3
-    post_merge_length_ratio: float = 0.4
+    
+    # Horizontal line length filtering
+    h_min_length_image_ratio: float = 0.3  # Min length as ratio of image width
+    h_min_length_relative_ratio: float = 0.4  # Min length relative to longest h-line
+    
+    # Vertical line length filtering  
+    v_min_length_image_ratio: float = 0.3  # Min length as ratio of image height
+    v_min_length_relative_ratio: float = 0.4  # Min length relative to longest v-line
+    
     min_aspect_ratio: int = 5
 
     # Table line post-processing parameters
@@ -186,8 +193,15 @@ class Stage1Config(Config):
     horizontal_kernel_size: int = 15  # Larger kernels for initial pass
     vertical_kernel_size: int = 15
     alignment_threshold: int = 5  # More permissive clustering
-    pre_merge_length_ratio: float = 0.2  # Lower ratio to catch more segments
-    post_merge_length_ratio: float = 0.3  # More permissive final filtering
+    
+    # Stage 1 horizontal line filtering - more permissive
+    h_min_length_image_ratio: float = 0.2  # Lower ratio to catch more segments
+    h_min_length_relative_ratio: float = 0.3  # More permissive final filtering
+    
+    # Stage 1 vertical line filtering - more permissive
+    v_min_length_image_ratio: float = 0.2  # Lower ratio to catch more segments
+    v_min_length_relative_ratio: float = 0.3  # More permissive final filtering
+    
     min_aspect_ratio: int = 3  # Lower aspect ratio for initial detection
 
     # Stage 1 margin removal - more aggressive
@@ -254,15 +268,20 @@ class Stage1Config(Config):
 
         if "table_line_detection" in config_dict:
             line_det = config_dict["table_line_detection"]
+            
             config_dict.update(
                 {
                     "threshold": line_det.get("threshold"),
                     "horizontal_kernel_size": line_det.get("horizontal_kernel_size"),
                     "vertical_kernel_size": line_det.get("vertical_kernel_size"),
                     "alignment_threshold": line_det.get("alignment_threshold"),
-                    "pre_merge_length_ratio": line_det.get("pre_merge_length_ratio"),
-                    "post_merge_length_ratio": line_det.get("post_merge_length_ratio"),
                     "min_aspect_ratio": line_det.get("min_aspect_ratio"),
+                    
+                    # New separated parameters
+                    "h_min_length_image_ratio": line_det.get("h_min_length_image_ratio"),
+                    "h_min_length_relative_ratio": line_det.get("h_min_length_relative_ratio"),
+                    "v_min_length_image_ratio": line_det.get("v_min_length_image_ratio"),
+                    "v_min_length_relative_ratio": line_det.get("v_min_length_relative_ratio"),
                 }
             )
             del config_dict["table_line_detection"]
@@ -346,8 +365,15 @@ class Stage2Config(Config):
     horizontal_kernel_size: int = 8  # Smaller kernels for refinement pass
     vertical_kernel_size: int = 8
     alignment_threshold: int = 2  # More strict clustering
-    pre_merge_length_ratio: float = 0.4  # Higher ratio for quality filtering
-    post_merge_length_ratio: float = 0.5  # More strict final filtering
+    
+    # Stage 2 horizontal line filtering - more precise
+    h_min_length_image_ratio: float = 0.4  # Higher ratio for quality filtering
+    h_min_length_relative_ratio: float = 0.5  # More strict final filtering
+    
+    # Stage 2 vertical line filtering - more precise
+    v_min_length_image_ratio: float = 0.4  # Higher ratio for quality filtering
+    v_min_length_relative_ratio: float = 0.5  # More strict final filtering
+    
     min_aspect_ratio: int = 7  # Higher aspect ratio for refined detection
 
     # Stage 2 margin removal - more conservative (minimal additional cropping)
@@ -396,15 +422,20 @@ class Stage2Config(Config):
 
         if "table_line_detection" in config_dict:
             line_det = config_dict["table_line_detection"]
+            
             config_dict.update(
                 {
                     "threshold": line_det.get("threshold"),
                     "horizontal_kernel_size": line_det.get("horizontal_kernel_size"),
                     "vertical_kernel_size": line_det.get("vertical_kernel_size"),
                     "alignment_threshold": line_det.get("alignment_threshold"),
-                    "pre_merge_length_ratio": line_det.get("pre_merge_length_ratio"),
-                    "post_merge_length_ratio": line_det.get("post_merge_length_ratio"),
                     "min_aspect_ratio": line_det.get("min_aspect_ratio"),
+                    
+                    # New separated parameters
+                    "h_min_length_image_ratio": line_det.get("h_min_length_image_ratio"),
+                    "h_min_length_relative_ratio": line_det.get("h_min_length_relative_ratio"),
+                    "v_min_length_image_ratio": line_det.get("v_min_length_image_ratio"),
+                    "v_min_length_relative_ratio": line_det.get("v_min_length_relative_ratio"),
                 }
             )
             del config_dict["table_line_detection"]

@@ -218,36 +218,25 @@ class TableLineProcessor(BaseProcessor):
         """
         # Build parameters with proper defaults
         params = {
-            # Dynamic parameters (calculated if None)
-            'min_line_length': kwargs.get('min_line_length', None),
-            'max_line_gap': kwargs.get('max_line_gap', None),
+            # Core parameters
+            'threshold': kwargs.get('threshold', self.get_config_value('threshold', 40)),
+            'horizontal_kernel_size': kwargs.get('horizontal_kernel_size', self.get_config_value('horizontal_kernel_size', 10)),
+            'vertical_kernel_size': kwargs.get('vertical_kernel_size', self.get_config_value('vertical_kernel_size', 10)),
+            'alignment_threshold': kwargs.get('alignment_threshold', self.get_config_value('alignment_threshold', 3)),
+            'min_aspect_ratio': kwargs.get('min_aspect_ratio', self.get_config_value('min_aspect_ratio', 5)),
             
-            # Config parameters with defaults
-            'hough_threshold': kwargs.get('hough_threshold', 60),
-            'horizontal_kernel_ratio': self.get_config_value('horizontal_kernel_ratio', 30),
-            'vertical_kernel_ratio': self.get_config_value('vertical_kernel_ratio', 30),
-            'h_erode_iterations': self.get_config_value('h_erode_iterations', 1),
-            'h_dilate_iterations': self.get_config_value('h_dilate_iterations', 1),
-            'v_erode_iterations': self.get_config_value('v_erode_iterations', 1),
-            'v_dilate_iterations': self.get_config_value('v_dilate_iterations', 1),
-            'min_table_coverage': self.get_config_value('min_table_coverage', 0.15),
-            'max_parallel_distance': self.get_config_value('max_parallel_distance', 12),
-            'angle_tolerance': self.get_config_value('angle_tolerance', 5.0),
-            'h_length_filter_ratio': self.get_config_value('h_length_filter_ratio', 0.6),
-            'v_length_filter_ratio': self.get_config_value('v_length_filter_ratio', 0.6),
-            'line_merge_distance_h': self.get_config_value('line_merge_distance_h', 15),
-            'line_merge_distance_v': self.get_config_value('line_merge_distance_v', 15),
-            'line_extension_tolerance': self.get_config_value('line_extension_tolerance', 20),
-            'max_merge_iterations': self.get_config_value('max_merge_iterations', 3),
-            'return_analysis': kwargs.get('return_analysis', True),
+            # New separated H/V parameters
+            'h_min_length_image_ratio': kwargs.get('h_min_length_image_ratio', self.get_config_value('h_min_length_image_ratio', 0.3)),
+            'h_min_length_relative_ratio': kwargs.get('h_min_length_relative_ratio', self.get_config_value('h_min_length_relative_ratio', 0.4)),
+            'v_min_length_image_ratio': kwargs.get('v_min_length_image_ratio', self.get_config_value('v_min_length_image_ratio', 0.3)),
+            'v_min_length_relative_ratio': kwargs.get('v_min_length_relative_ratio', self.get_config_value('v_min_length_relative_ratio', 0.4)),
             
-            # New post-processing parameters
+            # Post-processing parameters
             'max_h_length_ratio': kwargs.get('max_h_length_ratio', self.get_config_value('max_h_length_ratio', 1.0)),
-            'max_v_length_ratio': kwargs.get('max_v_length_ratio', self.get_config_value('max_v_length_ratio', 0.9)),
-            'close_line_distance': kwargs.get('close_line_distance', self.get_config_value('close_line_distance', 20)),
+            'max_v_length_ratio': kwargs.get('max_v_length_ratio', self.get_config_value('max_v_length_ratio', 1.0)),
+            'close_line_distance': kwargs.get('close_line_distance', self.get_config_value('close_line_distance', 45)),
             
-            # Backward compatibility for old parameter name
-            'max_length_ratio': kwargs.get('max_length_ratio', None),
+            'return_analysis': kwargs.get('return_analysis', True),
         }
         
         # Override with any additional kwargs

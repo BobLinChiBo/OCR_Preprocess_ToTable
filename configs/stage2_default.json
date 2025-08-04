@@ -14,8 +14,10 @@
     "horizontal_kernel_size": 8,
     "vertical_kernel_size": 8,
     "alignment_threshold": 2,
-    "pre_merge_length_ratio": 0.4,
-    "post_merge_length_ratio": 0.5,
+    "h_min_length_image_ratio": 0.4,
+    "h_min_length_relative_ratio": 0.5,
+    "v_min_length_image_ratio": 0.4,
+    "v_min_length_relative_ratio": 0.5,
     "min_aspect_ratio": 7
   },
   "margin_removal": {
