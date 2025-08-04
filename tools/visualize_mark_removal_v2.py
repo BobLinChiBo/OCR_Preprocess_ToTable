@@ -20,7 +20,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline import utils
+from src.ocr_pipeline.processors import remove_marks, build_protect_mask
 from src.ocr_pipeline.config import Stage1Config
 from config_utils import load_config, get_command_args_dict
 from output_manager import (
@@ -40,7 +40,7 @@ def analyze_mark_removal(image: np.ndarray, dilate_iter: int = 2) -> Dict[str, A
         gray = image.copy()
     
     # Build protection mask
-    protect_mask = utils.build_protect_mask(gray, dilate_iter)
+    protect_mask = build_protect_mask(gray, dilate_iter)
     
     # Calculate statistics
     total_pixels = gray.size
@@ -104,7 +104,7 @@ def create_mark_removal_visualization(
     axes[0, 0].axis('off')
     
     # 2. Protection mask
-    protect_mask = utils.build_protect_mask(gray, dilate_iter)
+    protect_mask = build_protect_mask(gray, dilate_iter)
     axes[0, 1].imshow(protect_mask, cmap='gray')
     axes[0, 1].set_title(f'Protection Mask (dilate={dilate_iter})')
     axes[0, 1].axis('off')
@@ -116,7 +116,7 @@ def create_mark_removal_visualization(
     axes[0, 2].axis('off')
     
     # 4. Cleaned result
-    cleaned = utils.remove_marks(image, dilate_iter)
+    cleaned = remove_marks(image, dilate_iter)
     if len(cleaned.shape) == 2:
         cleaned_display = cv2.cvtColor(cleaned, cv2.COLOR_GRAY2RGB)
     else:
@@ -194,7 +194,7 @@ def process_single_image(
     print(f"  Marks detected: {analysis['num_marks_detected']}")
     
     # Apply mark removal
-    cleaned = utils.remove_marks(image, dilate_iter)
+    cleaned = remove_marks(image, dilate_iter)
     
     # Save cleaned result
     result_path = manager.get_output_path(image_path, "_cleaned", subdir="cleaned_images")
@@ -212,7 +212,7 @@ def process_single_image(
         debug_dir = manager.get_output_dir("debug")
         
         # Save protection mask
-        protect_mask = utils.build_protect_mask(
+        protect_mask = build_protect_mask(
             cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image,
             dilate_iter
         )

@@ -24,7 +24,7 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.utils import remove_margins_gradient, detect_gradient_boundaries
+from src.ocr_pipeline.processors import remove_margins_gradient
 
 
 def create_debug_visualizations(image_path: str, output_dir: str = None):

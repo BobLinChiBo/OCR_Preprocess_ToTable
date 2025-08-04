@@ -39,7 +39,7 @@ def find_gutter_detailed(
     **kwargs
 ) -> Dict[str, Any]:
     """Enhanced gutter detection with detailed analysis using new robust algorithm."""
-    import src.ocr_pipeline.utils as utils
+    from src.ocr_pipeline.processors import split_two_page_image
     
     # Get gutter detection parameters
     params = {
@@ -50,7 +50,7 @@ def find_gutter_detailed(
         'return_analysis': True,
     }
     
-    _, _, analysis = utils.split_two_page_image(image, **params)
+    _, _, analysis = split_two_page_image(image, **params)
     
     # Determine if image has two pages based on enhanced gutter analysis
     gutter_strength_threshold = 0.15  # Minimum contrast needed for valid gutter
@@ -216,8 +216,8 @@ def process_image(
     
     try:
         # Load image
-        import src.ocr_pipeline.utils as ocr_utils
-        image = ocr_utils.load_image(image_path)
+        from src.ocr_pipeline.processors import load_image
+        image = load_image(image_path)
         
         # Get gutter analysis
         gutter_info = find_gutter_detailed(image, processor)

@@ -1,5 +1,5 @@
 {
-  "input_dir": "data/output/stage1_initial_processing/06_border_cropped",
+  "input_dir": "data/output/stage1_initial_processing/07_border_cropped",
   "output_dir": "data/output/stage2_refinement",
   "debug_dir": "data/debug/stage2_debug",
   "verbose": true,

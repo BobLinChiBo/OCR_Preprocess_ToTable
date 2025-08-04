@@ -10,7 +10,22 @@ import numpy as np
 from pathlib import Path
 
 from .config import Stage1Config, Stage2Config
-from . import utils
+from .processors import (
+    split_two_page_image,
+    remove_margin_inscribed,
+    remove_margin_aggressive,
+    remove_margin_bounding_box,
+    remove_margin_smart,
+    remove_margins_gradient,
+    remove_margins_edge_transition,
+    remove_margins_hybrid,
+    remove_curved_black_background,
+    deskew_image,
+    detect_table_lines,
+    crop_to_table_borders,
+    detect_table_structure,
+    remove_marks,
+)
 
 
 class BaseProcessor:
@@ -48,7 +63,7 @@ class PageSplitProcessor(BaseProcessor):
             'width_min': kwargs.get('width_min', self.config.width_min),
         }
         
-        return utils.split_two_page_image(image, **params)
+        return split_two_page_image(image, **params)
 
 
 class MarginRemovalProcessor(BaseProcessor):
@@ -86,7 +101,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'close_iter': kwargs.get('close_iter', getattr(self.config, 'inscribed_close_iter', 2)),
                 'return_analysis': kwargs.get('return_analysis', False),
             }
-            return utils.remove_margin_inscribed(image, **inscribed_params)
+            return remove_margin_inscribed(image, **inscribed_params)
         elif method == "bounding_box":
             # Additional parameters for bounding box method
             base_params.update({
@@ -94,7 +109,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'expansion_factor': kwargs.get('expansion_factor', 0.0),
                 'use_min_area_rect': kwargs.get('use_min_area_rect', False),
             })
-            return utils.remove_margin_bounding_box(image, **base_params)
+            return remove_margin_bounding_box(image, **base_params)
         elif method == "smart":
             # Smart asymmetric margin removal with projection histograms
             base_params.update({
@@ -105,7 +120,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'histogram_threshold': kwargs.get('histogram_threshold', 0.05),
                 'projection_smoothing': kwargs.get('projection_smoothing', 3),
             })
-            return utils.remove_margin_smart(image, **base_params)
+            return remove_margin_smart(image, **base_params)
         elif method == "curved_black_background":
             # Curved black background removal for book pages
             curved_params = {
@@ -115,7 +130,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'fill_method': kwargs.get('fill_method', 'color_fill'),
                 'return_analysis': kwargs.get('return_analysis', False),
             }
-            return utils.remove_curved_black_background(image, **curved_params)
+            return remove_curved_black_background(image, **curved_params)
         elif method == "hybrid":
             # Hybrid position + texture analysis for margin removal
             hybrid_params = {
@@ -125,7 +140,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'fill_method': kwargs.get('fill_method', 'color_fill'),
                 'return_analysis': kwargs.get('return_analysis', False),
             }
-            return utils.remove_margins_hybrid(image, **hybrid_params)
+            return remove_margins_hybrid(image, **hybrid_params)
         elif method == "edge_transition":
             # Simple edge transition detection for margin removal
             edge_params = {
@@ -134,7 +149,7 @@ class MarginRemovalProcessor(BaseProcessor):
                 'fill_method': kwargs.get('fill_method', 'color_fill'),
                 'return_analysis': kwargs.get('return_analysis', False),
             }
-            return utils.remove_margins_edge_transition(image, **edge_params)
+            return remove_margins_edge_transition(image, **edge_params)
         elif method == "gradient":
             # Gradient-based sustained transition detection for margin removal
             gradient_params = {
@@ -152,13 +167,13 @@ class MarginRemovalProcessor(BaseProcessor):
                 'use_binarization': kwargs.get('use_binarization', False),
                 'return_analysis': kwargs.get('return_analysis', False),
             }
-            return utils.remove_margins_gradient(image, **gradient_params)
+            return remove_margins_gradient(image, **gradient_params)
         else:
             # Default to aggressive method
             base_params.update({
                 'padding': kwargs.get('padding', self.config.margin_padding),
             })
-            return utils.remove_margin_aggressive(image, **base_params)
+            return remove_margin_aggressive(image, **base_params)
 
 
 class DeskewProcessor(BaseProcessor):
@@ -185,7 +200,7 @@ class DeskewProcessor(BaseProcessor):
             'return_analysis_data': kwargs.get('return_analysis_data', False),
         }
         
-        result = utils.deskew_image(image, **params)
+        result = deskew_image(image, **params)
         
         # Handle different return formats
         if kwargs.get('return_angle', False):
@@ -244,7 +259,7 @@ class TableLineProcessor(BaseProcessor):
             if key in params:
                 params[key] = value
                 
-        return utils.detect_table_lines(image, **params)
+        return detect_table_lines(image, **params)
     
     def process_with_enhanced_analysis(self, image: np.ndarray, **kwargs) -> Dict[str, Any]:
         """
@@ -289,7 +304,7 @@ class TableDetectionProcessor(BaseProcessor):
             'return_analysis': kwargs.get('return_analysis', True),
         }
         
-        return utils.detect_table_structure(lines_image, **params)
+        return detect_table_structure(lines_image, **params)
 
 
 class TableCropProcessor(BaseProcessor):
@@ -315,7 +330,7 @@ class TableCropProcessor(BaseProcessor):
             'return_analysis': kwargs.get('return_analysis', False),
         }
         
-        return utils.crop_to_table_borders(deskewed_image, table_structure, **params)
+        return crop_to_table_borders(deskewed_image, table_structure, **params)
     
 # Factory function to create processors
 def create_processor(processor_type: str, config) -> BaseProcessor:

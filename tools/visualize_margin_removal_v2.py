@@ -256,8 +256,8 @@ def process_image_single_method(
     
     try:
         # Load image
-        import src.ocr_pipeline.utils as ocr_utils
-        image = ocr_utils.load_image(image_path)
+        from src.ocr_pipeline.processors import load_image
+        image = load_image(image_path)
         
         # Process with margin removal
         processing_params = {
@@ -376,8 +376,8 @@ def process_image(
     # Create comparison visualization if multiple methods
     if len(methods) > 1:
         try:
-            import src.ocr_pipeline.utils as ocr_utils
-            image = ocr_utils.load_image(image_path)
+            from src.ocr_pipeline.processors import load_image
+            image = load_image(image_path)
             
             # Create side-by-side comparison
             overlays = []

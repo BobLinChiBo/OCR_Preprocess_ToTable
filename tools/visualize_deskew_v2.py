@@ -196,8 +196,8 @@ def process_image(
     
     try:
         # Load image
-        import src.ocr_pipeline.utils as ocr_utils
-        image = ocr_utils.load_image(image_path)
+        from src.ocr_pipeline.processors import load_image
+        image = load_image(image_path)
         
         # Get processing parameters
         angle_range = command_args.get('angle_range', 5)

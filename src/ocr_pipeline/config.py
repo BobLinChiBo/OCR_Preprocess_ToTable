@@ -367,7 +367,7 @@ class Stage2Config(Config):
     """Stage 2 Configuration: Refinement processing with precise parameters."""
 
     # Stage 2 takes input from Stage 1 output
-    input_dir: Path = Path("data/output/stage1_initial_processing/06_border_cropped")
+    input_dir: Path = Path("data/output/stage1_initial_processing/07_border_cropped")
     output_dir: Path = Path("data/output/stage2_refinement")
 
     # Stage 2 deskewing (fine-tuning)

@@ -119,9 +119,9 @@ Examples:
         sys.exit(1)
 
     # Check if input directory has images
-    from src.ocr_pipeline import utils
+    from src.ocr_pipeline.processors import get_image_files
 
-    image_files = utils.get_image_files(input_path)
+    image_files = get_image_files(input_path)
     if not image_files:
         print(f"Error: No image files found in: {input_path}")
         print("Hint: Make sure Stage 1 completed successfully")

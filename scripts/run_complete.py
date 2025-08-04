@@ -235,7 +235,7 @@ Examples:
             if args.verbose:
                 print("\n*** STAGE 1 COMPLETED! ***")
                 print(f"Generated {len(results)} cropped table images")
-                print(f"Results: {stage1_config.output_dir / '06_border_cropped'}")
+                print(f"Results: {stage1_config.output_dir / '07_border_cropped'}")
                 print("\nNext step: python run_stage2.py --verbose")
 
         elif args.stage2_only:
