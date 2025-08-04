@@ -89,6 +89,11 @@ class VisualizationRunner:
                 "description": "Table line detection visualization (v2)",
                 "default_args": ["--save-debug", "--show-filtering-steps"],
             },
+            "table-structure": {
+                "script": "visualize_table_structure_v2.py",
+                "description": "Table structure detection visualization (v2)",
+                "default_args": [],
+            },
             "table-crop": {
                 "script": "visualize_table_crop_v2.py",
                 "description": "Table cropping visualization (v2)",
@@ -106,6 +111,7 @@ class VisualizationRunner:
         extra_args: List[str] = None,
         use_test_images: bool = False,
         no_filtering_steps: bool = False,
+        save_intermediates: bool = False,
     ) -> Dict[str, Any]:
         """Run a single visualization script."""
         if script_name not in self.available_scripts:
@@ -137,6 +143,19 @@ class VisualizationRunner:
             default_args.append("--no-filtering-steps")
         
         cmd.extend(default_args)
+        
+        # Add --save-intermediates if requested and supported by the script
+        if save_intermediates:
+            # Map to appropriate argument based on script and version
+            if script_name == "deskew":
+                if self.use_v2:
+                    cmd.append("--save-debug")  # V2 deskew uses --save-debug
+                else:
+                    cmd.append("--save-intermediates")  # V1 deskew uses --save-intermediates
+            # Note: Other V2 tools don't currently support intermediate saving
+            # Only add --save-intermediates for V1 tools that support it
+            elif not self.use_v2 and script_name in ["margin-removal", "margin-removal-fast", "margin-removal-bbox"]:
+                cmd.append("--save-intermediates")
 
         if extra_args:
             cmd.extend(extra_args)
@@ -219,6 +238,7 @@ class VisualizationRunner:
         args_per_script: Dict[str, List[str]] = None,
         use_test_images: bool = False,
         no_filtering_steps: bool = False,
+        save_intermediates: bool = False,
     ) -> List[Dict[str, Any]]:
         """Run multiple visualization scripts."""
         results = []
@@ -239,7 +259,7 @@ class VisualizationRunner:
         for script_name in script_names:
             extra_args = args_per_script.get(script_name, []) if args_per_script else []
             result = self.run_single_script(
-                script_name, images, extra_args, use_test_images, no_filtering_steps
+                script_name, images, extra_args, use_test_images, no_filtering_steps, save_intermediates
             )
             results.append(result)
 
@@ -273,6 +293,7 @@ class VisualizationRunner:
         args_per_script: Dict[str, List[str]] = None,
         use_test_images: bool = False,
         no_filtering_steps: bool = False,
+        save_intermediates: bool = False,
     ) -> List[Dict[str, Any]]:
         """Run scripts in pipeline mode where each stage uses previous stage's output as input."""
         results = []
@@ -308,29 +329,64 @@ class VisualizationRunner:
                     print("Stage 1: Using individual image arguments")
                     extra_args = []
             else:
-                # Special handling for table-crop which uses positional arguments
+                # Special handling for table-crop which needs both table structure and deskewed images
                 if script_name == "table-crop":
-                    print(
-                        f"Stage {stage_num}: Using table detection results from {script_names[i-1]}"
-                    )
-                    # Find all PNG files from table-lines output
-                    png_files = list(current_input_dir.glob("*.png"))
-                    extra_args = []
-                    for png_file in png_files:
-                        extra_args.append(str(png_file.resolve()))
-                else:
-                    # Subsequent stages use previous stage's processed images
-                    processed_input_dir = current_input_dir / "processed_images"
-                    if processed_input_dir.exists():
-                        print(
-                            f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input"
-                        )
-                        extra_args = ["--input-dir", str(processed_input_dir.resolve())]
+                    # table-crop needs to process deskewed images using table structure information
+                    # Find the deskew stage output (usually stage 3)
+                    deskew_stage_idx = None
+                    for idx, stage_name in enumerate(script_names):
+                        if stage_name == "deskew":
+                            deskew_stage_idx = idx
+                            break
+                    
+                    if deskew_stage_idx is not None:
+                        deskew_stage_num = deskew_stage_idx + 1
+                        deskew_dir = pipeline_dir / f"{deskew_stage_num:02d}_deskew" / "processed_images"
+                        if deskew_dir.exists():
+                            print(
+                                f"Stage {stage_num}: Using deskewed images from stage {deskew_stage_num} with table structure from {script_names[i-1]}"
+                            )
+                            extra_args = ["--input-dir", str(deskew_dir.resolve())]
+                        else:
+                            print(
+                                f"Stage {stage_num}: Warning - could not find deskewed images, using output from {script_names[i-1]}"
+                            )
+                            # Fallback to using files from previous stage
+                            extra_args = ["--input-dir", str(current_input_dir.resolve())]
                     else:
                         print(
-                            f"Stage {stage_num}: Using all output from {script_names[i-1]} as input"
+                            f"Stage {stage_num}: Using output from {script_names[i-1]}"
                         )
                         extra_args = ["--input-dir", str(current_input_dir.resolve())]
+                else:
+                    # Special handling for table-structure which needs table lines images
+                    if script_name == "table-structure" and i > 0 and script_names[i-1] == "table-lines":
+                        # Look for table_lines_images directory first
+                        table_lines_dir = current_input_dir / "table_lines_images"
+                        if table_lines_dir.exists():
+                            print(
+                                f"Stage {stage_num}: Using table lines images from {script_names[i-1]}"
+                            )
+                            extra_args = ["--input-dir", str(table_lines_dir.resolve())]
+                        else:
+                            # Fallback to main directory
+                            print(
+                                f"Stage {stage_num}: Using table lines output from {script_names[i-1]}"
+                            )
+                            extra_args = ["--input-dir", str(current_input_dir.resolve())]
+                    else:
+                        # Subsequent stages use previous stage's processed images
+                        processed_input_dir = current_input_dir / "processed_images"
+                        if processed_input_dir.exists():
+                            print(
+                                f"Stage {stage_num}: Using processed images from {script_names[i-1]} as input"
+                            )
+                            extra_args = ["--input-dir", str(processed_input_dir.resolve())]
+                        else:
+                            print(
+                                f"Stage {stage_num}: Using all output from {script_names[i-1]} as input"
+                            )
+                            extra_args = ["--input-dir", str(current_input_dir.resolve())]
 
             # Add output directory and any custom args (use absolute paths)
             extra_args.extend(["--output-dir", str(stage_dir.resolve())])
@@ -349,6 +405,7 @@ class VisualizationRunner:
                 extra_args,
                 False,  # Don't use test_images flag for individual scripts
                 no_filtering_steps,
+                save_intermediates,
             )
             results.append(result)
 
@@ -486,6 +543,12 @@ Examples:
   # Pipeline mode: each stage uses previous stage's output as input
   python run_visualizations.py page-split margin-removal deskew --test-images --pipeline
 
+  # Test new table structure detection (v2 only)
+  python run_visualizations.py table-structure --test-images --use-v2
+
+  # Test all v2 scripts including table structure
+  python run_visualizations.py all --test-images --pipeline --use-v2
+
   # List available scripts
   python run_visualizations.py --list
         """,
@@ -521,6 +584,16 @@ Examples:
         action="store_true",
         help="Use v2 visualization scripts with new processor architecture"
     )
+    parser.add_argument(
+        "--method",
+        type=str,
+        help="Method to use for margin removal (aggressive, bounding_box, smart, curved_black_background)"
+    )
+    parser.add_argument(
+        "--save-intermediates",
+        action="store_true",
+        help="Save intermediate processing steps (supported by deskew and other compatible tools)"
+    )
 
     # Per-script arguments (parsed manually)
     parser.add_argument(
@@ -548,9 +621,15 @@ Examples:
         help="Arguments for table-crop script",
     )
     parser.add_argument(
-        "--pipeline-args",
+        "--table-structure-args",
         nargs="*",
         dest="_ignore6",
+        help="Arguments for table-structure script",
+    )
+    parser.add_argument(
+        "--pipeline-args",
+        nargs="*",
+        dest="_ignore7",
         help="Arguments for pipeline script",
     )
 
@@ -604,6 +683,12 @@ Examples:
             else:
                 mapped_names.append(script)
         script_names = mapped_names
+
+    # Add method argument to margin-removal if specified
+    if args.method and "margin-removal" in script_names:
+        if "margin-removal" not in script_args:
+            script_args["margin-removal"] = []
+        script_args["margin-removal"].extend(["--method", args.method])
 
     if not script_names:
         print("No scripts specified. Use --list to see available scripts.")
@@ -664,7 +749,7 @@ Examples:
                 "Pipeline mode requires at least 2 scripts. Use regular mode for single script."
             )
             return
-        results = runner.run_pipeline(script_names, script_args, args.test_images, args.no_filtering_steps)
+        results = runner.run_pipeline(script_names, script_args, args.test_images, args.no_filtering_steps, args.save_intermediates)
     elif len(script_names) == 1:
         result = runner.run_single_script(
             script_names[0],
@@ -672,11 +757,12 @@ Examples:
             script_args.get(script_names[0], []),
             args.test_images,
             args.no_filtering_steps,
+            args.save_intermediates,
         )
         results = [result]
     else:
         results = runner.run_multiple_scripts(
-            script_names, valid_images, script_args, args.test_images, args.no_filtering_steps
+            script_names, valid_images, script_args, args.test_images, args.no_filtering_steps, args.save_intermediates
         )
 
     # Save report if requested

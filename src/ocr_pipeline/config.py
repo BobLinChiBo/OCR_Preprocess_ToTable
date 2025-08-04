@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -16,9 +16,15 @@ class Config:
     debug_dir: Optional[Path] = None
 
     # Page splitting
-    gutter_search_start: float = 0.4
-    gutter_search_end: float = 0.6
-    min_gutter_width: int = 50
+    gutter_search_start: float = 0.4  # DEPRECATED - use search_ratio
+    gutter_search_end: float = 0.6  # DEPRECATED - use search_ratio
+    min_gutter_width: int = 50  # DEPRECATED - use width_min
+
+    # New page split parameters (robust algorithm)
+    search_ratio: float = 0.3  # Fraction of width, centered, to search for gutter
+    blur_k: int = 21  # Gaussian blur kernel size (odd number)
+    open_k: int = 9  # Morphological opening kernel width
+    width_min: int = 20  # Minimum gutter width in pixels
 
     # Deskewing
     angle_range: int = 5
@@ -34,6 +40,23 @@ class Config:
     post_merge_length_ratio: float = 0.4
     min_aspect_ratio: int = 5
 
+    # Table line post-processing parameters
+    max_h_length_ratio: float = (
+        1.0  # Max horizontal line length ratio (1.0 = disable filtering)
+    )
+    max_v_length_ratio: float = (
+        1.0  # Max vertical line length ratio (1.0 = disable filtering)
+    )
+    close_line_distance: int = 45  # Distance for merging close lines (0 = disable)
+
+    # Table structure detection parameters
+    table_detection_eps: int = 10  # Clustering tolerance in pixels
+    table_detection_kernel_ratio: float = (
+        0.05  # Morphology kernel length as fraction of width/height
+    )
+    table_crop_padding: int = 20  # Padding around detected table borders
+    enable_table_border_cropping: bool = True  # Enable new table border cropping
+
     # Margin removal (replaces ROI detection)
     enable_margin_removal: bool = True
     blur_kernel_size: int = 7
@@ -42,6 +65,19 @@ class Config:
     morph_kernel_size: int = 25
     min_content_area_ratio: float = 0.01
     margin_padding: int = 5
+
+    # Smart margin removal parameters
+    histogram_threshold: float = 0.05
+    projection_smoothing: int = 3
+
+    # Curved black background removal parameters
+    min_contour_area: int = 1000
+    fill_method: str = "color_fill"
+
+    # Inscribed rectangle margin removal parameters
+    inscribed_blur_ksize: int = 5
+    inscribed_close_ksize: int = 25
+    inscribed_close_iter: int = 2
 
     # Debug options
     save_debug_images: bool = False
@@ -59,6 +95,7 @@ class Config:
 
     def _validate_parameters(self) -> None:
         """Validate configuration parameters."""
+        # Legacy page split parameters
         if not (0.0 <= self.gutter_search_start <= 1.0):
             raise ValueError(
                 f"gutter_search_start must be between 0 and 1, got {self.gutter_search_start}"
@@ -73,6 +110,18 @@ class Config:
             raise ValueError(
                 f"min_gutter_width must be positive, got {self.min_gutter_width}"
             )
+
+        # New page split parameters
+        if not (0.0 <= self.search_ratio <= 1.0):
+            raise ValueError(
+                f"search_ratio must be between 0 and 1, got {self.search_ratio}"
+            )
+        if self.blur_k <= 0 or self.blur_k % 2 == 0:
+            raise ValueError(f"blur_k must be positive and odd, got {self.blur_k}")
+        if self.open_k <= 0:
+            raise ValueError(f"open_k must be positive, got {self.open_k}")
+        if self.width_min <= 0:
+            raise ValueError(f"width_min must be positive, got {self.width_min}")
         if self.angle_range <= 0:
             raise ValueError(f"angle_range must be positive, got {self.angle_range}")
         if self.angle_step <= 0:
@@ -80,9 +129,25 @@ class Config:
         if self.threshold <= 0:
             raise ValueError(f"threshold must be positive, got {self.threshold}")
         if self.horizontal_kernel_size <= 0:
-            raise ValueError(f"horizontal_kernel_size must be positive, got {self.horizontal_kernel_size}")
+            raise ValueError(
+                f"horizontal_kernel_size must be positive, got {self.horizontal_kernel_size}"
+            )
         if self.vertical_kernel_size <= 0:
-            raise ValueError(f"vertical_kernel_size must be positive, got {self.vertical_kernel_size}")
+            raise ValueError(
+                f"vertical_kernel_size must be positive, got {self.vertical_kernel_size}"
+            )
+        if self.max_h_length_ratio <= 0:
+            raise ValueError(
+                f"max_h_length_ratio must be positive, got {self.max_h_length_ratio}"
+            )
+        if self.max_v_length_ratio <= 0:
+            raise ValueError(
+                f"max_v_length_ratio must be positive, got {self.max_v_length_ratio}"
+            )
+        if self.close_line_distance < 0:
+            raise ValueError(
+                f"close_line_distance must be non-negative, got {self.close_line_distance}"
+            )
 
     def create_output_dirs(self) -> None:
         """Create output directories if they don't exist."""
@@ -155,6 +220,11 @@ class Stage1Config(Config):
     min_content_area_ratio: float = 0.005
     margin_padding: int = 10
 
+    # Stage 1 inscribed rectangle margin removal - more aggressive
+    inscribed_blur_ksize: int = 7
+    inscribed_close_ksize: int = 30
+    inscribed_close_iter: int = 3
+
     def __post_init__(self) -> None:
         """Initialize Stage 1 specific settings."""
         super().__post_init__()
@@ -166,10 +236,11 @@ class Stage1Config(Config):
         # Create Stage 1 subdirectories
         stage1_dirs = [
             "01_split_pages",
-            "02_deskewed",
-            "03_margin_removed",
+            "02_margin_removed",
+            "03_deskewed",
             "04_table_lines",
-            "05_cropped_tables",
+            "05_table_structure",
+            "06_border_cropped",
         ]
 
         for subdir in stage1_dirs:
@@ -225,11 +296,42 @@ class Stage1Config(Config):
                     "black_threshold": margin.get("black_threshold", 50),
                     "content_threshold": margin.get("content_threshold", 200),
                     "morph_kernel_size": margin.get("morph_kernel_size", 25),
-                    "min_content_area_ratio": margin.get("min_content_area_ratio", 0.01),
+                    "min_content_area_ratio": margin.get(
+                        "min_content_area_ratio", 0.01
+                    ),
                     "margin_padding": margin.get("margin_padding", 5),
                 }
             )
             del config_dict["margin_removal"]
+
+        # Handle inscribed_margin_removal specially
+        if "inscribed_margin_removal" in config_dict:
+            inscribed = config_dict["inscribed_margin_removal"]
+            config_dict.update(
+                {
+                    "inscribed_blur_ksize": inscribed.get("inscribed_blur_ksize"),
+                    "inscribed_close_ksize": inscribed.get("inscribed_close_ksize"),
+                    "inscribed_close_iter": inscribed.get("inscribed_close_iter"),
+                }
+            )
+            del config_dict["inscribed_margin_removal"]
+
+        # Handle table_detection specially
+        if "table_detection" in config_dict:
+            table_det = config_dict["table_detection"]
+            config_dict.update(
+                {
+                    "table_detection_eps": table_det.get("table_detection_eps"),
+                    "table_detection_kernel_ratio": table_det.get(
+                        "table_detection_kernel_ratio"
+                    ),
+                    "table_crop_padding": table_det.get("table_crop_padding"),
+                    "enable_table_border_cropping": table_det.get(
+                        "enable_table_border_cropping"
+                    ),
+                }
+            )
+            del config_dict["table_detection"]
 
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
@@ -238,7 +340,7 @@ class Stage1Config(Config):
             config_dict["roi_margins_page_2"] = margins.get("page_2")
             config_dict["roi_margins_default"] = margins.get("default")
             del config_dict["roi_margins"]
-        
+
         # Remove any unrecognized sections
         if "table_fitting" in config_dict:
             del config_dict["table_fitting"]
@@ -251,7 +353,7 @@ class Stage2Config(Config):
     """Stage 2 Configuration: Refinement processing with precise parameters."""
 
     # Stage 2 takes input from Stage 1 output
-    input_dir: Path = Path("data/output/stage1_initial_processing/05_cropped_tables")
+    input_dir: Path = Path("data/output/stage1_initial_processing/06_border_cropped")
     output_dir: Path = Path("data/output/stage2_refinement")
 
     # Stage 2 deskewing (fine-tuning)
@@ -269,7 +371,14 @@ class Stage2Config(Config):
     min_aspect_ratio: int = 7  # Higher aspect ratio for refined detection
 
     # Stage 2 margin removal - more conservative (minimal additional cropping)
-    enable_margin_removal: bool = False  # Usually disabled for Stage 2 (already cropped)
+    enable_margin_removal: bool = (
+        False  # Usually disabled for Stage 2 (already cropped)
+    )
+
+    # Stage 2 inscribed rectangle margin removal - conservative
+    inscribed_blur_ksize: int = 3
+    inscribed_close_ksize: int = 15
+    inscribed_close_iter: int = 1
 
     def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
@@ -329,12 +438,26 @@ class Stage2Config(Config):
                     "black_threshold": margin.get("black_threshold", 50),
                     "content_threshold": margin.get("content_threshold", 200),
                     "morph_kernel_size": margin.get("morph_kernel_size", 25),
-                    "min_content_area_ratio": margin.get("min_content_area_ratio", 0.01),
+                    "min_content_area_ratio": margin.get(
+                        "min_content_area_ratio", 0.01
+                    ),
                     "margin_padding": margin.get("margin_padding", 5),
                 }
             )
             del config_dict["margin_removal"]
-        
+
+        # Handle inscribed_margin_removal specially
+        if "inscribed_margin_removal" in config_dict:
+            inscribed = config_dict["inscribed_margin_removal"]
+            config_dict.update(
+                {
+                    "inscribed_blur_ksize": inscribed.get("inscribed_blur_ksize"),
+                    "inscribed_close_ksize": inscribed.get("inscribed_close_ksize"),
+                    "inscribed_close_iter": inscribed.get("inscribed_close_iter"),
+                }
+            )
+            del config_dict["inscribed_margin_removal"]
+
         # Remove any unrecognized sections
         if "table_fitting" in config_dict:
             del config_dict["table_fitting"]

@@ -2,8 +2,8 @@
 """
 Table Crop Visualization Script (Version 2)
 
-This version uses the new processor architecture for better maintainability.
-Note: This script uses Stage2Config as it's a stage 2 operation.
+This script performs step 6 of the pipeline: crop to table borders using table structure.
+Uses the new table structure detection and border cropping architecture.
 """
 
 import cv2
@@ -19,8 +19,8 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.ocr_pipeline.processor_wrappers import TableCropProcessor, TableLineProcessor
-from src.ocr_pipeline.config import Stage2Config, Stage1Config
+from src.ocr_pipeline.processor_wrappers import TableDetectionProcessor, TableCropProcessor
+from src.ocr_pipeline.config import Stage1Config
 from config_utils import (
     load_config, 
     add_config_arguments, 
@@ -36,102 +36,127 @@ from output_manager import (
 
 def draw_table_crop_overlay(
     image: np.ndarray, 
-    h_lines: List, 
-    v_lines: List,
-    crop_info: Dict[str, Any]
+    table_structure: Dict,
+    crop_analysis: Dict[str, Any]
 ) -> np.ndarray:
-    """Draw table cropping overlay showing detected boundaries."""
+    """Draw table cropping overlay showing table structure and crop boundaries."""
     overlay = image.copy()
     height, width = image.shape[:2]
     
-    # Draw all detected lines (faint)
-    for line in h_lines:
-        x1, y1, x2, y2 = line
-        cv2.line(overlay, (x1, y1), (x2, y2), (0, 200, 0), 1)
+    # Draw detected table structure (faint grid)
+    xs = table_structure.get("xs", [])
+    ys = table_structure.get("ys", [])
     
-    for line in v_lines:
-        x1, y1, x2, y2 = line
-        cv2.line(overlay, (x1, y1), (x2, y2), (200, 0, 0), 1)
+    # Draw vertical lines (faint green)
+    for x in xs:
+        cv2.line(overlay, (x, 0), (x, height), (0, 200, 0), 1)
     
-    # Draw crop boundaries (thick)
-    if "padded_boundaries" in crop_info:
-        bounds = crop_info["padded_boundaries"]
-        min_x = bounds["min_x"]
-        min_y = bounds["min_y"]
-        max_x = bounds["max_x"]
-        max_y = bounds["max_y"]
-        
-        # Draw crop rectangle
-        cv2.rectangle(overlay, (min_x, min_y), (max_x, max_y), (0, 255, 255), 3)
-        
-        # Draw margin area
-        if "margin" in crop_info:
-            margin = crop_info["margin"]
-            # Original bounds without padding
-            orig_bounds = crop_info.get("original_boundaries", bounds)
-            orig_min_x = orig_bounds.get("min_x", min_x + margin)
-            orig_min_y = orig_bounds.get("min_y", min_y + margin)
-            orig_max_x = orig_bounds.get("max_x", max_x - margin)
-            orig_max_y = orig_bounds.get("max_y", max_y - margin)
+    # Draw horizontal lines (faint blue)
+    for y in ys:
+        cv2.line(overlay, (0, y), (width, y), (200, 0, 0), 1)
+    
+    # Draw table cells (very faint red rectangles)
+    cells = table_structure.get("cells", [])
+    for (x1, y1, x2, y2) in cells:
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 150), 1)
+    
+    # Draw crop boundaries if cropping was successful
+    if crop_analysis.get("cropped", False):
+        # Draw actual table boundaries (red)
+        if "table_bounds" in crop_analysis:
+            table_bounds = crop_analysis["table_bounds"]
+            table_min_x = table_bounds["min_x"]
+            table_max_x = table_bounds["max_x"]
+            table_min_y = table_bounds["min_y"]
+            table_max_y = table_bounds["max_y"]
             
-            # Draw original bounds
-            cv2.rectangle(overlay, (orig_min_x, orig_min_y), 
-                         (orig_max_x, orig_max_y), (255, 255, 0), 1)
+            cv2.rectangle(overlay, (table_min_x, table_min_y), (table_max_x, table_max_y), (0, 0, 255), 2)
+        
+        # Draw crop boundaries with padding (thick yellow)
+        if "crop_bounds" in crop_analysis:
+            bounds = crop_analysis["crop_bounds"]
+            min_x, max_x = bounds["min_x"], bounds["max_x"]
+            min_y, max_y = bounds["min_y"], bounds["max_y"]
+            
+            cv2.rectangle(overlay, (min_x, min_y), (max_x, max_y), (0, 255, 255), 3)
     
     # Add text information
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.7
     thickness = 2
     
-    # Line counts
+    # Table structure info
+    structure_analysis = table_structure.get("analysis", {})
     cv2.putText(
         overlay,
-        f"H lines: {len(h_lines)}",
+        f"Table detected: {structure_analysis.get('table_detected', False)}",
         (10, 30),
         font,
         font_scale,
-        (0, 255, 0),
+        (0, 255, 0) if structure_analysis.get('table_detected', False) else (0, 0, 255),
         thickness,
     )
     cv2.putText(
         overlay,
-        f"V lines: {len(v_lines)}",
+        f"Grid: {structure_analysis.get('num_vertical_lines', 0)}x{structure_analysis.get('num_horizontal_lines', 0)}",
         (10, 60),
         font,
         font_scale,
         (255, 0, 0),
         thickness,
     )
+    cv2.putText(
+        overlay,
+        f"Cells: {structure_analysis.get('num_cells', 0)}",
+        (10, 90),
+        font,
+        font_scale,
+        (255, 0, 255),
+        thickness,
+    )
     
     # Crop status
-    if crop_info.get("has_table"):
-        crop_dims = crop_info.get("cropped_dimensions", (0, 0))
+    if crop_analysis.get("cropped", False):
+        cropped_shape = crop_analysis.get("cropped_shape", (0, 0))
+        padding = crop_analysis.get("padding_applied", 0)
+        crop_method = crop_analysis.get("crop_method", "unknown")
         cv2.putText(
             overlay,
-            f"Table found: {crop_dims[0]}x{crop_dims[1]}px",
-            (10, 90),
+            f"Cropped: {cropped_shape[1]}x{cropped_shape[0]}px (pad={padding})",
+            (10, 120),
+            font,
+            font_scale,
+            (0, 255, 255),
+            thickness,
+        )
+        cv2.putText(
+            overlay,
+            f"Method: {crop_method}",
+            (10, 150),
             font,
             font_scale,
             (0, 255, 255),
             thickness,
         )
         
-        # Efficiency
-        efficiency = crop_info.get("crop_efficiency", 0)
-        cv2.putText(
-            overlay,
-            f"Efficiency: {efficiency:.1%}",
-            (10, 120),
-            font,
-            font_scale,
-            (255, 255, 255),
-            thickness,
-        )
+        # Size reduction
+        if "size_reduction" in crop_analysis:
+            reduction = crop_analysis["size_reduction"]
+            cv2.putText(
+                overlay,
+                f"Reduction: {reduction['width']}x{reduction['height']}px",
+                (10, 180),
+                font,
+                font_scale,
+                (255, 255, 255),
+                thickness,
+            )
     else:
+        reason = crop_analysis.get("reason", "Unknown")
         cv2.putText(
             overlay,
-            "No table found",
-            (10, 90),
+            f"Not cropped: {reason}",
+            (10, 120),
             font,
             font_scale,
             (0, 0, 255),
@@ -141,159 +166,134 @@ def draw_table_crop_overlay(
     return overlay
 
 
-def process_image(
+def process_image_table_crop(
     image_path: Path,
-    line_processor: TableLineProcessor,
-    crop_processor: TableCropProcessor,
-    output_dir: Path,
-    save_cropped: bool = True,
-    save_debug: bool = False,
-    command_args: Dict[str, Any] = None,
-    config_source: str = "default",
+    config: Stage1Config,
+    processor_args: Dict[str, Any],
+    pipeline_dir: Optional[Path] = None
 ) -> Dict[str, Any]:
-    """Process a single image with table crop visualization."""
-    print(f"Processing: {image_path.name}")
+    """Process a single image for table border cropping (step 6)."""
     
-    try:
-        # Load image
-        import src.ocr_pipeline.utils as ocr_utils
-        image = ocr_utils.load_image(image_path)
-        
-        # First detect table lines
-        line_params = {}
-        if command_args:
-            for key in ['min_line_length', 'max_line_gap', 'hough_threshold']:
-                if key in command_args and command_args[key] is not None:
-                    line_params[key] = command_args[key]
-        
-        h_lines, v_lines, line_analysis = line_processor.process(image, **line_params)
-        
-        print(f"  Detected lines: H={len(h_lines)}, V={len(v_lines)}")
-        
-        # Then crop table region
-        crop_params = {
-            'return_crop_info': True,
-        }
-        if command_args:
-            for key in ['margin', 'min_width', 'min_height']:
-                if key in command_args:
-                    crop_params[key] = command_args[key]
-        
-        result = crop_processor.process(image, h_lines, v_lines, **crop_params)
-        
-        if isinstance(result, tuple):
-            cropped_image, crop_info = result
-        else:
-            cropped_image = result
-            crop_info = {}
-        
-        # Check if table was found
-        has_table = crop_info.get("has_table", cropped_image is not None)
-        
-        # Create visualizations
+    # Load image
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise ValueError(f"Could not load image: {image_path}")
+    
+    target_image = image  # This is what we'll crop
+    table_structure = None  # Initialize to None
+    
+    # In pipeline mode, we MUST have the table structure data
+    if pipeline_dir:
+        # Extract base name - handle both deskewed and regular image names
         base_name = image_path.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
+        if "_deskewed" in base_name:
+            base_name = base_name.replace("_deskewed", "")
+        elif "_table" in base_name:
+            # Handle other suffixes if present
+            base_name = base_name.split("_table")[0]
         
-        # Draw overlay
-        overlay_image = draw_table_crop_overlay(image, h_lines, v_lines, crop_info)
-        overlay_path = output_dir / f"{base_name}_table_crop_overlay.jpg"
-        cv2.imwrite(str(overlay_path), overlay_image)
+        # Look for table structure JSON in stage 5 output
+        structure_json_path = pipeline_dir / "05_table-structure" / "table_structure_data" / f"{base_name}_table_lines_structure.json"
         
-        output_files = {
-            "overlay": str(overlay_path),
-        }
+        if not structure_json_path.exists():
+            raise FileNotFoundError(
+                f"Table structure data not found: {structure_json_path}\n"
+                f"Make sure table-structure stage completed successfully and saved data for {base_name}"
+            )
         
-        # Save cropped image if table found and requested
-        if save_cropped and has_table and cropped_image is not None:
-            cropped_path = output_dir / f"{base_name}_table_cropped.jpg"
-            cv2.imwrite(str(cropped_path), cropped_image)
-            output_files["cropped"] = str(cropped_path)
-            
-            # Save to processed_images directory for pipeline
-            processed_dir = output_dir / "processed_images"
-            processed_dir.mkdir(exist_ok=True)
-            processed_path = processed_dir / f"{base_name}.jpg"
-            cv2.imwrite(str(processed_path), cropped_image)
+        # Load pre-computed table structure
+        print(f"  Loading table structure from: {structure_json_path.name}")
+        try:
+            with open(structure_json_path, 'r') as f:
+                table_structure = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {structure_json_path}: {e}")
         
-        # Save debug visualizations if requested
-        if save_debug:
-            debug_dir = output_dir / "debug" / base_name
-            debug_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Line detection debug
-            if "horizontal_morph" in line_analysis:
-                h_morph_path = debug_dir / "horizontal_morph.png"
-                cv2.imwrite(str(h_morph_path), line_analysis["horizontal_morph"])
-                output_files["debug_h_morph"] = str(h_morph_path)
-            
-            if "vertical_morph" in line_analysis:
-                v_morph_path = debug_dir / "vertical_morph.png"
-                cv2.imwrite(str(v_morph_path), line_analysis["vertical_morph"])
-                output_files["debug_v_morph"] = str(v_morph_path)
+        # Validate structure
+        if not isinstance(table_structure, dict):
+            raise ValueError(f"Table structure should be a dict, got: {type(table_structure)}")
+        if "cells" not in table_structure:
+            raise ValueError(f"Table structure missing 'cells' key. Keys found: {list(table_structure.keys())}")
         
-        # Save parameter documentation
-        param_file = save_step_parameters(
-            step_name="table_crop_v2",
-            config_obj=crop_processor.config,
-            command_args=command_args,
-            processing_results={
-                "image_name": image_path.name,
-                "success": True,
-                "output_files": output_files,
-                "has_table": has_table,
-                "h_line_count": len(h_lines),
-                "v_line_count": len(v_lines),
-                "crop_info": {
-                    k: v for k, v in crop_info.items()
-                    if k not in ["cropped_image"]
-                },
-            },
-            output_dir=output_dir,
-            config_source=config_source,
+        print(f"  Loaded structure with {len(table_structure.get('cells', []))} cells")
+    else:
+        # Standalone mode - we cannot proceed without table structure
+        raise ValueError(
+            "Table crop requires table structure data from previous pipeline stages.\n"
+            "Please run the full pipeline or provide pipeline directory with --pipeline-dir"
         )
-        
-        if param_file:
-            output_files["parameters"] = str(param_file)
-        
-        result = {
-            "image_name": image_path.name,
-            "success": True,
-            "output_files": output_files,
-            "parameter_file": str(param_file) if param_file else None,
-            "has_table": has_table,
-            "h_line_count": len(h_lines),
-            "v_line_count": len(v_lines),
-            "crop_efficiency": crop_info.get("crop_efficiency", 0),
-        }
-        
-        if has_table:
-            crop_dims = crop_info.get("cropped_dimensions", (0, 0))
-            print(f"  SUCCESS: Table found ({crop_dims[0]}x{crop_dims[1]}px, {crop_info.get('crop_efficiency', 0):.1%} efficiency)")
-        else:
-            print(f"  SUCCESS: No table found")
-        
-        return result
-        
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return {
-            "image_name": image_path.name,
-            "success": False,
-            "error": str(e),
-        }
+    
+    # Create crop processor
+    crop_processor = TableCropProcessor(config)
+    
+    # Step 6: Crop the target image (deskewed) using detected structure
+    crop_args = {k: v for k, v in processor_args.items() 
+                if k in ['padding']}
+    result = crop_processor.process(target_image, table_structure, return_analysis=True, **crop_args)
+    
+    if isinstance(result, tuple):
+        cropped_image, crop_analysis = result
+    else:
+        cropped_image = result
+        crop_analysis = {"cropped": False, "reason": "No analysis returned"}
+    
+    # Create visualization overlay using the target image
+    overlay = draw_table_crop_overlay(target_image, table_structure, crop_analysis)
+    
+    # Prepare combined analysis data
+    structure_analysis = table_structure.get("analysis", {})
+    analysis_data = {
+        "image_path": str(image_path),
+        "image_shape": target_image.shape,
+        "table_detected": structure_analysis.get("table_detected", False),
+        "num_vertical_lines": structure_analysis.get("num_vertical_lines", 0),
+        "num_horizontal_lines": structure_analysis.get("num_horizontal_lines", 0),
+        "num_cells": structure_analysis.get("num_cells", 0),
+        "cropped": crop_analysis.get("cropped", False),
+        "crop_analysis": convert_numpy_types(crop_analysis),
+        "original_size": {"width": target_image.shape[1], "height": target_image.shape[0]},
+        "cropped_size": {
+            "width": cropped_image.shape[1], 
+            "height": cropped_image.shape[0]
+        } if cropped_image is not None else None,
+    }
+    
+    return {
+        "original": target_image,
+        "cropped": cropped_image,
+        "overlay": overlay,
+        "analysis": analysis_data,
+        "table_structure": table_structure,
+    }
+
+
+# Table crop arguments are now handled by the config system in DEFAULT_PARAMS
 
 
 def main():
-    """Main function for table crop visualization."""
     parser = argparse.ArgumentParser(
-        description="Table crop visualization (Version 2)"
+        description="Visualize table border cropping using table structure (Step 6)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python visualize_table_crop_v2.py                          # Process test images
+  python visualize_table_crop_v2.py --test-images *.jpg      # Process specific files
+  python visualize_table_crop_v2.py --pipeline --padding 30  # Custom padding
+  python visualize_table_crop_v2.py --eps 15 --kernel-ratio 0.08  # Custom detection params
+
+Pipeline Context:
+  This script performs Step 6: Crop to table borders with padding
+  - Input: Deskewed image (from step 3)
+  - Process: Detect table structure → Crop using borders
+  - Output: Border-cropped table with visualization
+        """
     )
     
-    # Image input arguments - note table-crop takes PNG files directly
+    # Standard visualization arguments
     parser.add_argument(
         "images",
         nargs="*",
-        help="Images to process (PNG files with table lines)",
+        help="Images to process",
     )
     parser.add_argument(
         "--test-images",
@@ -306,69 +306,26 @@ def main():
     )
     parser.add_argument(
         "--output-dir",
-        default="data/output/visualization/table_crop_v2",
+        default="output/visualization/table_crop_v2",
         help="Output directory for visualizations",
     )
     parser.add_argument(
-        "--save-cropped",
+        "--show",
         action="store_true",
-        default=True,
-        help="Save cropped table images",
-    )
-    parser.add_argument(
-        "--no-cropped",
-        dest="save_cropped",
-        action="store_false",
-        help="Don't save cropped images",
-    )
-    parser.add_argument(
-        "--save-debug",
-        action="store_true",
-        help="Save debug visualizations",
+        help="Show visualization results",
     )
     
-    # Add configuration arguments for both processors
+    # Add common arguments
     add_config_arguments(parser, 'table_crop')
-    
-    # Table line detection parameters (for initial detection)
-    parser.add_argument(
-        "--min-line-length",
-        type=int,
-        help="Minimum line length for table detection",
-    )
-    parser.add_argument(
-        "--max-line-gap",
-        type=int,
-        help="Maximum line gap for table detection",
-    )
-    parser.add_argument(
-        "--hough-threshold",
-        type=int,
-        default=60,
-        help="Hough transform threshold",
-    )
-    
-    # Table crop specific parameters
-    parser.add_argument(
-        "--margin",
-        type=int,
-        default=10,
-        help="Margin around table in pixels",
-    )
-    parser.add_argument(
-        "--min-width",
-        type=int,
-        default=100,
-        help="Minimum table width",
-    )
-    parser.add_argument(
-        "--min-height",
-        type=int,
-        default=100,
-        help="Minimum table height",
-    )
+    add_processor_specific_arguments(parser, 'table_crop')
     
     args = parser.parse_args()
+    
+    # Load configuration
+    config, config_source = load_config(args, Stage1Config, 'table_crop')
+    
+    # Get processor arguments
+    processor_args = get_command_args_dict(args, 'table_crop')
     
     # Determine which images to process
     if args.input_dir:
@@ -377,122 +334,173 @@ def main():
         if not input_dir.exists():
             print(f"Error: Input directory {args.input_dir} does not exist!")
             return
-        # For table-crop, we look for PNG files (output from table-lines)
-        image_paths = list(input_dir.glob("*.png"))
-        if not image_paths:
-            # Fallback to regular image formats
-            for ext in ["*.jpg", "*.jpeg", "*.JPG", "*.JPEG", "*.PNG"]:
-                image_paths.extend(input_dir.glob(ext))
-        if not image_paths:
+        test_images = []
+        for ext in ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]:
+            test_images.extend(input_dir.glob(ext))
+        if not test_images:
             print(f"No images found in {args.input_dir}!")
             return
     elif args.test_images:
         print("Using batch mode: processing all images in test_images/")
-        image_paths = get_test_images()
-        if not image_paths:
+        test_images = get_test_images()
+        if not test_images:
             print("No images found in test_images directory!")
             return
     else:
         # Use individual image arguments
-        image_paths = []
+        test_images = []
         for img_path in args.images:
             path = Path(img_path)
             if path.exists():
-                image_paths.append(path)
+                test_images.append(path)
             else:
                 print(f"Warning: {img_path} not found, skipping")
         
-        if not image_paths:
+        if not test_images:
             print("No valid images found!")
             parser.print_help()
             return
     
-    # Load configurations
-    # Use Stage1Config for line detection
-    line_config, _ = load_config(args, Stage1Config, 'table_lines')
-    # Use Stage2Config for table cropping
-    crop_config, config_source = load_config(args, Stage2Config, 'table_crop')
+    print(f"Processing {len(test_images)} images for table border cropping...")
     
-    # Create processors
-    line_processor = TableLineProcessor(line_config)
-    crop_processor = TableCropProcessor(crop_config)
+    # Create output directory
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        # Create processed_images subdirectory for pipeline
+        processed_dir = output_dir / "processed_images"
+        processed_dir.mkdir(exist_ok=True)
     
-    # Get command arguments
-    command_args = get_command_args_dict(args, 'table_crop')
-    # Add line detection parameters
-    command_args.update({
-        'min_line_length': args.min_line_length,
-        'max_line_gap': args.max_line_gap,
-        'hough_threshold': args.hough_threshold,
-        'margin': args.margin,
-        'min_width': args.min_width,
-        'min_height': args.min_height,
-    })
+    # Detect if we're in pipeline mode by checking output directory structure
+    pipeline_dir = None
+    if output_dir and output_dir.parent.name.startswith("pipeline_"):
+        pipeline_dir = output_dir.parent
+        print(f"Detected pipeline mode, pipeline directory: {pipeline_dir}")
     
-    output_dir = Path(args.output_dir)
-    
-    print(f"Table Crop Visualization (Version 2)")
-    print(f"Processing {len(image_paths)} images")
-    print(f"Configuration source: {config_source}")
-    print(f"Output directory: {output_dir}")
-    print()
-    
-    # Process all images
+    # Process images
     results = []
-    for i, image_path in enumerate(image_paths, 1):
-        print(f"[{i}/{len(image_paths)}] {image_path.name}")
-        result = process_image(
-            image_path,
-            line_processor,
-            crop_processor,
-            output_dir,
-            args.save_cropped,
-            args.save_debug,
-            command_args,
-            config_source,
-        )
-        results.append(result)
-    
-    # Summary
-    successful_results = [r for r in results if r["success"]]
-    print(f"\n{'='*60}")
-    print("TABLE CROP SUMMARY")
-    print(f"{'='*60}")
-    print(f"Processed: {len(successful_results)}/{len(image_paths)} images")
-    
-    if successful_results:
-        with_tables = [r for r in successful_results if r.get("has_table", False)]
-        print(f"Images with tables: {len(with_tables)}")
-        
-        if with_tables:
-            efficiencies = [r.get("crop_efficiency", 0) for r in with_tables]
-            avg_efficiency = sum(efficiencies) / len(efficiencies) if efficiencies else 0
-            print(f"Average crop efficiency: {avg_efficiency:.1%}")
+    for image_path in test_images:
+        try:
+            print(f"Processing: {image_path.name}")
+            result = process_image_table_crop(image_path, config, processor_args, pipeline_dir)
+            results.append({
+                "image_name": image_path.name,
+                **result
+            })
             
-            # Show least efficient crops
-            sorted_by_efficiency = sorted(with_tables, key=lambda x: x.get("crop_efficiency", 0))
-            if len(sorted_by_efficiency) > 0:
-                print(f"\nLeast efficient crops:")
-                for r in sorted_by_efficiency[:3]:
-                    print(f"  {r['image_name']}: {r.get('crop_efficiency', 0):.1%}")
+            # Save visualization overlay if output directory specified
+            if output_dir:
+                base_name = image_path.stem
+                overlay_path = output_dir / f"{base_name}_table_crop.png"
+                cv2.imwrite(str(overlay_path), result["overlay"])
+                
+                # Save cropped image to processed_images for pipeline
+                if result["cropped"] is not None:
+                    processed_path = processed_dir / f"{base_name}.jpg"
+                    cv2.imwrite(str(processed_path), result["cropped"])
+                else:
+                    # If no cropping, save original
+                    processed_path = processed_dir / f"{base_name}.jpg"
+                    cv2.imwrite(str(processed_path), result["original"])
+                
+                result["output_files"] = {
+                    "overlay": str(overlay_path),
+                    "processed": str(processed_path)
+                }
+            
+            analysis = result["analysis"]
+            print(f"  Table detected: {analysis['table_detected']}")
+            print(f"  Grid: {analysis['num_vertical_lines']}x{analysis['num_horizontal_lines']}")
+            print(f"  Cells: {analysis['num_cells']}")
+            print(f"  Cropped: {analysis['cropped']}")
+            if analysis['cropped']:
+                crop_method = analysis.get('crop_analysis', {}).get('crop_method', 'unknown')
+                print(f"  Crop method: {crop_method}")
+                if analysis['cropped_size']:
+                    print(f"  Final size: {analysis['cropped_size']['width']}x{analysis['cropped_size']['height']}px")
+            if output_dir:
+                print(f"  Saved: {base_name}_table_crop.png")
+            
+        except Exception as e:
+            print(f"  Error: {e}")
+            continue
     
-    print(f"\nOutput files saved to: {output_dir}")
+    if not results:
+        print("No images processed successfully.")
+        return
     
-    # Save summary
-    summary_file = output_dir / "table_crop_visualization_summary.json"
-    summary_data = {
-        "processor_version": "v2",
-        "architecture": "processor_based",
-        "config_source": config_source,
-        "command_args": command_args,
-        "results": results,
-    }
+    # Save parameters used
+    if output_dir:
+        # Prepare summary of all results
+        summary_data = {
+            "total_images": len(results),
+            "tables_detected": sum(1 for r in results if r["analysis"]["table_detected"]),
+            "successfully_cropped": sum(1 for r in results if r["analysis"]["cropped"]),
+            "processor_args": processor_args,
+            "config_summary": {
+                "table_detection_eps": getattr(config, 'table_detection_eps', 10),
+                "table_detection_kernel_ratio": getattr(config, 'table_detection_kernel_ratio', 0.05),
+                "table_crop_padding": getattr(config, 'table_crop_padding', 20),
+            }
+        }
+        
+        param_file = save_step_parameters(
+            step_name="table_border_crop_v2",
+            config_obj=config,
+            command_args=processor_args,
+            processing_results=summary_data,
+            output_dir=output_dir,
+            config_source=config_source,
+        )
     
-    summary_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(summary_file, "w") as f:
-        json.dump(convert_numpy_types(summary_data), f, indent=2)
+    # Show results if requested
+    if args.show:
+        print("\nShowing results (press any key to continue, ESC to quit)...")
+        for result in results:
+            image_name = result["image_name"]
+            overlay = result["overlay"]
+            cropped = result["cropped"]
+            
+            # Show overlay with crop boundaries
+            window_name = f"Table Border Crop: {image_name}"
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.imshow(window_name, overlay)
+            
+            # Show cropped result if available
+            if cropped is not None:
+                crop_window_name = f"Cropped Result: {image_name}"
+                cv2.namedWindow(crop_window_name, cv2.WINDOW_NORMAL)
+                cv2.imshow(crop_window_name, cropped)
+            
+            key = cv2.waitKey(0) & 0xFF
+            cv2.destroyAllWindows()
+            
+            if key == 27:  # ESC key
+                break
     
-    print(f"Summary saved to: {summary_file}")
+    print(f"\nTable border crop visualization complete! Processed {len(results)} images.")
+    
+    # Print summary statistics
+    cropped_count = sum(1 for r in results if r["analysis"]["cropped"])
+    detected_count = sum(1 for r in results if r["analysis"]["table_detected"])
+    
+    print(f"Summary:")
+    print(f"  Tables detected: {detected_count}/{len(results)}")
+    print(f"  Successfully cropped: {cropped_count}/{len(results)}")
+    
+    if cropped_count > 0:
+        # Calculate average size reduction
+        size_reductions = []
+        for r in results:
+            if r["analysis"]["cropped"] and r["analysis"]["cropped_size"]:
+                orig = r["analysis"]["original_size"]
+                crop = r["analysis"]["cropped_size"]
+                reduction_ratio = 1 - ((crop["width"] * crop["height"]) / (orig["width"] * orig["height"]))
+                size_reductions.append(reduction_ratio)
+        
+        if size_reductions:
+            avg_reduction = sum(size_reductions) / len(size_reductions)
+            print(f"  Average size reduction: {avg_reduction:.1%}")
 
 
 if __name__ == "__main__":

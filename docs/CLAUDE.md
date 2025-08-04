@@ -13,9 +13,11 @@ This is a professional two-stage OCR (Optical Character Recognition) table extra
 - **src/ocr_pipeline/**: Main pipeline modules
   - `pipeline.py`: Core pipeline classes (`OCRPipeline`, `TwoStageOCRPipeline`)
   - `config.py`: Configuration classes (`Config`, `Stage1Config`, `Stage2Config`)
-  - `utils.py`: Image processing utilities
+  - `utils.py`: Core image processing utilities
+  - `utils_optimized.py`: Performance-optimized utilities
+  - `processor_wrappers.py`: V2 processor wrapper classes for visualization
 - **scripts/**: CLI entry points for pipeline execution
-- **tools/**: Comprehensive parameter tuning and visualization tools
+- **tools/**: Comprehensive parameter tuning and visualization tools with V2 architecture
 
 ### Data Flow
 1. **Raw Input**: Scanned document images → `data/input/`
@@ -61,14 +63,21 @@ python tools/check_results.py cleanup
 
 ### Visualization and Analysis
 ```bash
-# Complete pipeline analysis
+# Complete pipeline analysis (V2 architecture)
 python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
 
-# Individual step analysis
+# Individual step analysis (V2 tools)
+python tools/visualize_deskew_v2.py image.jpg
+python tools/visualize_page_split_v2.py image.jpg  
+python tools/visualize_margin_removal_v2.py image.jpg
+python tools/visualize_table_lines_v2.py image.jpg
+
+# Legacy V1 tools (still available)
 python tools/visualize_deskew.py image.jpg
 python tools/visualize_page_split.py image.jpg
-python tools/visualize_roi.py image.jpg
-python tools/visualize_table_lines.py image.jpg
+
+# Debug and analysis tools
+python tools/debug_margin_analysis.py image.jpg
 
 # Results management
 python tools/check_results.py list
@@ -80,13 +89,19 @@ python tools/check_results.py view latest
 # Install dependencies
 pip install -r requirements.txt
 
+# Install with dev dependencies
+pip install -e ".[dev]"
+
 # Run tests
 python -m pytest tests/ -v
 
-# Code quality (if dev dependencies installed)
+# Code quality and linting
 python -m black src/ scripts/ tools/
 python -m flake8 src/ scripts/ tools/
 python -m mypy src/
+
+# Build package
+python -m build
 ```
 
 ## Key Processing Stages
@@ -94,7 +109,7 @@ python -m mypy src/
 ### Stage 1: Initial Processing
 1. **Page Splitting**: Separate double-page scans using gutter detection
 2. **Deskewing**: Correct rotation with sub-degree precision
-3. **Margin Removal**: Remove document margins and background noise
+3. **Margin Removal**: Remove document margins using inscribed rectangle method (paper mask detection + largest inscribed rectangle)
 4. **Line Detection**: Find table structure using connected components method
 5. **Table Cropping**: Extract table regions for Stage 2 processing
 
@@ -109,7 +124,8 @@ python -m mypy src/
 ### Key Parameters
 - **Page Splitting**: `gutter_search_start` (0.4), `gutter_search_end` (0.6)
 - **Deskewing**: `angle_range` (5°), `min_angle_correction` (0.1°)
-- **Margin Removal**: `black_threshold` (50), `content_threshold` (200)
+- **Margin Removal (Inscribed)**: `inscribed_blur_ksize` (5), `inscribed_close_ksize` (25), `inscribed_close_iter` (2)
+- **Margin Removal (Legacy)**: `black_threshold` (50), `content_threshold` (200)
 - **Line Detection**: `threshold` (40), `horizontal_kernel_size` (10), `vertical_kernel_size` (10)
 
 ## Data Organization
@@ -195,4 +211,19 @@ This prevents accidental code loss and maintains system functionality during git
 - Use `--save-intermediates` selectively to manage disk space
 - Clean up output directories periodically using provided management tools
 
-The tools/ directory provides visualization and analysis capabilities - refer to `tools/README.md` for detailed usage guidance.
+## Tool Architecture
+
+### V2 Visualization Tools
+The project uses a V2 visualization architecture with processor wrappers:
+- All V2 tools (ending in `_v2.py`) use the new processor wrapper system
+- V2 tools provide enhanced debugging output and standardized visualization formats
+- Legacy V1 tools are maintained for compatibility but V2 tools are preferred
+- **New inscribed rectangle method**: Default margin removal method using paper mask detection and largest inscribed rectangle algorithm
+
+### Available Tools
+- **V2 Tools**: `visualize_*_v2.py` - Enhanced with processor wrappers
+- **Debug Tools**: `debug_margin_analysis.py` - Specialized debugging utilities
+- **Analysis Tools**: `run_visualizations.py` - Comprehensive pipeline analysis
+- **Management Tools**: `check_results.py`, `config_utils.py` - Result and config management
+
+The tools/ directory provides comprehensive visualization and analysis capabilities - refer to `tools/README.md` for detailed usage guidance.

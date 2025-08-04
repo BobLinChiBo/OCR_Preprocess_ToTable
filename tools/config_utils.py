@@ -27,9 +27,13 @@ DEFAULT_PARAMS = {
         'morph_kernel_size': 30,
         'min_content_area_ratio': 0.005,
         'margin_padding': 10,
+        'histogram_threshold': 0.05,
+        'projection_smoothing': 3,
+        'min_contour_area': 1000,
+        'fill_method': 'color_fill',
     },
     'deskew': {
-        'deskew_angle_range': (-5, 5),
+        'deskew_angle_range': 5,
         'deskew_angle_step': 0.1,
         'deskew_method': 'projection',
         'edge_detection_method': 'canny',
@@ -57,6 +61,13 @@ DEFAULT_PARAMS = {
         'table_crop_margin': 10,
         'min_table_width': 100,
         'min_table_height': 100,
+        'eps': 10,
+        'kernel_ratio': 0.05,
+        'padding': 20,
+    },
+    'table_structure': {
+        'eps': 10,
+        'kernel_ratio': 0.05,
     }
 }
 
@@ -205,8 +216,8 @@ def add_processor_specific_arguments(parser: argparse.ArgumentParser, processor_
     elif processor_type == 'margin_removal':
         parser.add_argument(
             "--method",
-            choices=['aggressive', 'bounding_box'],
-            default='aggressive',
+            choices=['inscribed', 'aggressive', 'bounding_box', 'smart', 'curved_black_background', 'hybrid', 'edge_transition', 'gradient'],
+            default='inscribed',
             help="Margin removal method"
         )
         parser.add_argument(
@@ -220,12 +231,138 @@ def add_processor_specific_arguments(parser: argparse.ArgumentParser, processor_
             action="store_true",
             help="Use minimum area rectangle for bounding box method"
         )
+        parser.add_argument(
+            "--padding-top",
+            type=int,
+            help="Top padding for smart method (defaults to margin-padding)"
+        )
+        parser.add_argument(
+            "--padding-bottom",
+            type=int,
+            help="Bottom padding for smart method (defaults to margin-padding)"
+        )
+        parser.add_argument(
+            "--padding-left",
+            type=int,
+            help="Left padding for smart method (defaults to margin-padding)"
+        )
+        parser.add_argument(
+            "--padding-right",
+            type=int,
+            help="Right padding for smart method (defaults to margin-padding)"
+        )
+        # Hybrid method parameters
+        parser.add_argument(
+            "--edge-margin-width",
+            type=int,
+            default=50,
+            help="Width of edge regions to analyze for hybrid method"
+        )
+        parser.add_argument(
+            "--texture-threshold",
+            type=float,
+            default=10.0,
+            help="Variance threshold for uniform areas in hybrid method"
+        )
+        parser.add_argument(
+            "--black-intensity-max",
+            type=int,
+            default=75,
+            help="Maximum intensity for dark areas in hybrid method"
+        )
+        # Edge transition method parameters
+        parser.add_argument(
+            "--edge-percentage",
+            type=float,
+            default=0.20,
+            help="Percentage of image edge to scan for transitions (gradient method: 0.20, edge_transition method: 0.15)"
+        )
+        parser.add_argument(
+            "--intensity-jump-threshold",
+            type=int,
+            default=30,
+            help="Minimum intensity jump to consider a boundary (edge_transition method)"
+        )
+        # Gradient method parameters
+        parser.add_argument(
+            "--gradient-window-size",
+            type=int,
+            default=21,
+            help="Size of smoothing window for gradient analysis (gradient method)"
+        )
+        parser.add_argument(
+            "--intensity-shift-threshold",
+            type=float,
+            default=50.0,
+            help="Minimum sustained intensity change for boundary (gradient method)"
+        )
+        parser.add_argument(
+            "--margin-confidence-threshold",
+            type=float,
+            default=0.7,
+            help="Statistical confidence required for margin detection (gradient method)"
+        )
+        # Inscribed rectangle method parameters
+        parser.add_argument(
+            "--inscribed-blur-ksize",
+            type=int,
+            default=7,
+            help="Gaussian blur kernel size for inscribed rectangle method"
+        )
+        parser.add_argument(
+            "--inscribed-close-ksize",
+            type=int,
+            default=30,
+            help="Morphological closing kernel size for inscribed rectangle method"
+        )
+        parser.add_argument(
+            "--inscribed-close-iter",
+            type=int,
+            default=3,
+            help="Number of closing iterations for inscribed rectangle method"
+        )
+        parser.add_argument(
+            "--direct-gradient-cutting",
+            action="store_true",
+            default=True,
+            help="Use direct gradient-based cutting point calculation (gradient method)"
+        )
+        parser.add_argument(
+            "--max-content-cut-ratio",
+            type=float,
+            default=0.25,
+            help="Maximum ratio of image dimension to cut into content (gradient method)"
+        )
+        parser.add_argument(
+            "--strict-margin-detection",
+            action="store_true",
+            default=True,
+            help="Use strict criteria to avoid false positives on clean sides (gradient method)"
+        )
+        parser.add_argument(
+            "--gradient-aggressive-cutting-threshold",
+            type=float,
+            default=80.0,
+            help="Edge intensity threshold for aggressive cutting (gradient method)"
+        )
+        parser.add_argument(
+            "--gradient-min-margin-intensity",
+            type=int,
+            default=80,
+            help="Minimum intensity to consider a margin - lower values require darker margins (gradient method)"
+        )
+        parser.add_argument(
+            "--gradient-contrast-threshold",
+            type=float,
+            default=40.0,
+            help="Minimum contrast between edge and content for margin detection (gradient method)"
+        )
     elif processor_type == 'deskew':
         parser.add_argument(
             "--angle-range",
-            type=lambda x: eval(x),
-            default="(-5, 5)",
-            help="Angle range for deskewing as tuple"
+            type=int,
+            default=5,
+            help="Angle range for deskewing (±degrees)"
         )
         parser.add_argument(
             "--angle-step",
@@ -266,7 +403,9 @@ def get_command_args_dict(args: argparse.Namespace, processor_type: str) -> Dict
                 if value is not None:
                     command_args[param] = value
     elif processor_type == 'margin_removal':
-        for param in ['method', 'expansion_factor', 'use_min_area_rect']:
+        for param in ['method', 'expansion_factor', 'use_min_area_rect', 
+                      'gradient_aggressive_cutting_threshold', 'gradient_min_margin_intensity', 
+                      'gradient_contrast_threshold']:
             if hasattr(args, param):
                 command_args[param] = getattr(args, param)
     

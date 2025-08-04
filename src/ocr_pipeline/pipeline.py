@@ -43,14 +43,11 @@ class OCRPipeline:
             # Margin removal (preprocessing step)
             processing_image = page
             if self.config.enable_margin_removal:
-                processing_image = utils.remove_margin_aggressive(
+                processing_image = utils.remove_margin_inscribed(
                     page,
-                    blur_kernel_size=self.config.blur_kernel_size,
-                    black_threshold=self.config.black_threshold,
-                    content_threshold=self.config.content_threshold,
-                    morph_kernel_size=self.config.morph_kernel_size,
-                    min_content_area_ratio=self.config.min_content_area_ratio,
-                    padding=self.config.margin_padding,
+                    blur_ksize=getattr(self.config, 'inscribed_blur_ksize', 5),
+                    close_ksize=getattr(self.config, 'inscribed_close_ksize', 25),
+                    close_iter=getattr(self.config, 'inscribed_close_iter', 2),
                 )
 
                 if self.config.verbose:
@@ -191,14 +188,11 @@ class TwoStageOCRPipeline:
                     # Margin removal
                     processing_image = page
                     if self.stage1_config.enable_margin_removal:
-                        processing_image = utils.remove_margin_aggressive(
+                        processing_image = utils.remove_margin_inscribed(
                             page,
-                            blur_kernel_size=self.stage1_config.blur_kernel_size,
-                            black_threshold=self.stage1_config.black_threshold,
-                            content_threshold=self.stage1_config.content_threshold,
-                            morph_kernel_size=self.stage1_config.morph_kernel_size,
-                            min_content_area_ratio=self.stage1_config.min_content_area_ratio,
-                            padding=self.stage1_config.margin_padding,
+                            blur_ksize=getattr(self.stage1_config, 'inscribed_blur_ksize', 7),
+                            close_ksize=getattr(self.stage1_config, 'inscribed_close_ksize', 30),
+                            close_iter=getattr(self.stage1_config, 'inscribed_close_iter', 3),
                         )
 
                         # Save margin-removed image
@@ -240,17 +234,31 @@ class TwoStageOCRPipeline:
                     vis_image = utils.visualize_detected_lines(deskewed, h_lines, v_lines)
                     utils.save_image(vis_image, lines_path)
 
-                    # Final table cropping
-                    if h_lines and v_lines:
-                        cropped_table = utils.crop_table_region(
-                            deskewed, h_lines, v_lines
-                        )
-                    else:
-                        cropped_table = deskewed
+                    # NEW: Table structure detection from lines image
+                    table_structure = utils.detect_table_structure(
+                        vis_image,  # Use the lines visualization as input
+                        eps=getattr(self.stage1_config, 'table_detection_eps', 10),
+                        kernel_ratio=getattr(self.stage1_config, 'table_detection_kernel_ratio', 0.05),
+                        return_analysis=True
+                    )
 
-                    # Save final cropped table for Stage 2
-                    crop_dir = self.stage1_config.output_dir / "05_cropped_tables"
-                    crop_path = crop_dir / f"{page_name}_cropped.jpg"
+                    # Save table structure visualization
+                    structure_dir = self.stage1_config.output_dir / "05_table_structure"
+                    structure_path = structure_dir / f"{page_name}_table_structure.jpg"
+                    structure_vis = utils.visualize_table_structure(deskewed, table_structure)
+                    utils.save_image(structure_vis, structure_path)
+
+                    # NEW: Crop deskewed image using detected table borders with padding
+                    cropped_table = utils.crop_to_table_borders(
+                        deskewed, 
+                        table_structure,
+                        padding=getattr(self.stage1_config, 'table_crop_padding', 20),
+                        return_analysis=False
+                    )
+
+                    # Save border-cropped table for Stage 2
+                    crop_dir = self.stage1_config.output_dir / "06_border_cropped"
+                    crop_path = crop_dir / f"{page_name}_border_cropped.jpg"
                     utils.save_image(cropped_table, crop_path)
                     cropped_tables.append(crop_path)
 
@@ -264,7 +272,7 @@ class TwoStageOCRPipeline:
             print(
                 f"\n*** STAGE 1 COMPLETE: {len(cropped_tables)} cropped tables ready for Stage 2 ***"
             )
-            print(f"Output: {self.stage1_config.output_dir / '05_cropped_tables'}")
+            print(f"Output: {self.stage1_config.output_dir / '06_border_cropped'}")
 
         return cropped_tables
 

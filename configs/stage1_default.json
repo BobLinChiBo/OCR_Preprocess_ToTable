@@ -31,5 +31,16 @@
     "morph_kernel_size": 30,
     "min_content_area_ratio": 0.1,
     "margin_padding": 10
+  },
+  "inscribed_margin_removal": {
+    "inscribed_blur_ksize": 7,
+    "inscribed_close_ksize": 30,
+    "inscribed_close_iter": 3
+  },
+  "table_detection": {
+    "table_detection_eps": 10,
+    "table_detection_kernel_ratio": 0.05,
+    "table_crop_padding": 20,
+    "enable_table_border_cropping": true
   }
 }

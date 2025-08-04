@@ -75,6 +75,85 @@ def draw_margins_overlay(
             cv2.rectangle(overlay, (0, y + h), (width, height), (0, 0, 255), -1)
             overlay[y + h:, :] = cv2.addWeighted(image[y + h:, :], 0.7, overlay[y + h:, :], 0.3, 0)
             
+    elif method == "smart":
+        # For smart asymmetric method
+        if "boundaries" in analysis:
+            boundaries = analysis["boundaries"]
+            top, bottom = boundaries["top"], boundaries["bottom"]
+            left, right = boundaries["left"], boundaries["right"]
+            
+            # Draw the detected content rectangle
+            cv2.rectangle(overlay, (left, top), (right, bottom), (0, 255, 0), 3)
+            
+            # Draw margin areas in red with transparency
+            margin_overlay = np.zeros_like(overlay)
+            margin_overlay[:, :] = (0, 0, 255)
+            
+            # Top margin
+            if top > 0:
+                overlay[:top, :] = cv2.addWeighted(image[:top, :], 0.7, margin_overlay[:top, :], 0.3, 0)
+            # Bottom margin  
+            if bottom < height - 1:
+                overlay[bottom:, :] = cv2.addWeighted(image[bottom:, :], 0.7, margin_overlay[bottom:, :], 0.3, 0)
+            # Left margin
+            if left > 0:
+                overlay[:, :left] = cv2.addWeighted(image[:, :left], 0.7, margin_overlay[:, :left], 0.3, 0)
+            # Right margin
+            if right < width - 1:
+                overlay[:, right:] = cv2.addWeighted(image[:, right:], 0.7, margin_overlay[:, right:], 0.3, 0)
+                
+            # Draw projection histograms if available
+            if "projections" in analysis:
+                proj = analysis["projections"]
+                # Draw horizontal projection (scaled)
+                h_proj = proj["normalized_horizontal"]
+                for i, val in enumerate(h_proj):
+                    if i < height:
+                        bar_length = int(val * 50)  # Scale for visibility
+                        cv2.line(overlay, (width - 60, i), (width - 60 + bar_length, i), (255, 255, 0), 1)
+                
+                # Draw vertical projection (scaled)
+                v_proj = proj["normalized_vertical"]
+                for i, val in enumerate(v_proj):
+                    if i < width:
+                        bar_length = int(val * 50)  # Scale for visibility
+                        cv2.line(overlay, (i, height - 60), (i, height - 60 + bar_length), (255, 255, 0), 1)
+                        
+    elif method == "curved_black_background":
+        # For curved black background method
+        if "page_contour" in analysis and analysis["page_contour"]:
+            # Convert back from list to numpy array
+            contour = np.array(analysis["page_contour"], dtype=np.int32)
+            
+            # Draw the detected page contour
+            cv2.drawContours(overlay, [contour], 0, (0, 255, 0), 3)
+            
+            # Draw bounding rectangle
+            if "crop_bounds" in analysis:
+                x, y, w, h = analysis["crop_bounds"]
+                cv2.rectangle(overlay, (x, y), (x + w, y + h), (255, 0, 255), 2)
+            
+            # Highlight black areas that will be removed/filled
+            black_threshold = analysis.get("black_threshold", 30)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            black_mask = gray < black_threshold
+            
+            # Show black areas in red with transparency
+            black_overlay = np.zeros_like(overlay)
+            black_overlay[:, :] = (0, 0, 255)
+            overlay = np.where(black_mask[..., None], 
+                             cv2.addWeighted(image, 0.6, black_overlay, 0.4, 0),
+                             overlay)
+            
+            # Show detected page background color
+            if "page_background_color" in analysis:
+                bg_color = analysis["page_background_color"]
+                # Draw a color sample in the corner
+                cv2.rectangle(overlay, (width - 100, 10), (width - 10, 60), bg_color, -1)
+                cv2.rectangle(overlay, (width - 100, 10), (width - 10, 60), (255, 255, 255), 2)
+                cv2.putText(overlay, "Page", (width - 95, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                cv2.putText(overlay, "Color", (width - 95, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                        
     else:
         # For aggressive method (inscribed rectangle)
         if "padded_rect" in analysis:
@@ -425,7 +504,7 @@ def main():
     
     # Determine which methods to use
     if args.compare:
-        methods = ["aggressive", "bounding_box"]
+        methods = ["inscribed", "aggressive", "bounding_box"]
     else:
         methods = [args.method]
     

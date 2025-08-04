@@ -438,3 +438,185 @@ def remove_margin_bounding_box_optimized(
     }
     
     return cropped, analysis
+
+
+def paper_mask_optimized(
+    img: np.ndarray,
+    blur_ksize: int = 5,
+    close_ksize: int = 25,
+    close_iter: int = 2
+) -> np.ndarray:
+    """Optimized version of paper mask detection.
+    
+    Args:
+        img: Input image (BGR or grayscale)
+        blur_ksize: Gaussian blur kernel size for noise reduction
+        close_ksize: Morphological closing kernel size for hole filling
+        close_iter: Number of closing iterations
+        
+    Returns:
+        Binary mask where 255=paper, 0=background
+    """
+    # Convert to grayscale if needed
+    if len(img.shape) == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img.copy()
+
+    # Downsample for faster processing on large images
+    height, width = gray.shape
+    if height > 2000 or width > 2000:
+        scale = min(2000 / height, 2000 / width, 1.0)
+        new_height = int(height * scale)
+        new_width = int(width * scale)
+        gray_small = cv2.resize(gray, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        blur_ksize_small = max(3, int(blur_ksize * scale))
+        close_ksize_small = max(3, int(close_ksize * scale))
+    else:
+        gray_small = gray
+        blur_ksize_small = blur_ksize
+        close_ksize_small = close_ksize
+        scale = 1.0
+
+    # Otsu threshold on a blurred version gives robust split
+    gray_blur = cv2.GaussianBlur(gray_small, (blur_ksize_small, blur_ksize_small), 0) \
+        if blur_ksize_small else gray_small
+    _, th = cv2.threshold(
+        gray_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    if np.mean(th) < 127:        # ensure paper is white
+        th = cv2.bitwise_not(th)
+
+    # Morphological closing fills text holes, unites regions
+    kernel = np.ones((close_ksize_small, close_ksize_small), np.uint8)
+    mask_small = cv2.morphologyEx(th, cv2.MORPH_CLOSE, kernel, iterations=close_iter)
+
+    # Keep largest connected component (the page)
+    cnts, _ = cv2.findContours(mask_small, cv2.RETR_EXTERNAL,
+                               cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        raise RuntimeError("No white component detected – tune parameters.")
+
+    biggest = max(cnts, key=cv2.contourArea)
+    clean_small = np.zeros_like(mask_small)
+    cv2.drawContours(clean_small, [biggest], -1, 255, cv2.FILLED)
+    
+    # Scale back up if we downsampled
+    if scale < 1.0:
+        clean = cv2.resize(clean_small, (width, height), interpolation=cv2.INTER_NEAREST)
+    else:
+        clean = clean_small
+        
+    return clean
+
+
+def largest_inside_rect_optimized(mask: np.ndarray) -> tuple:
+    """Optimized version of finding largest inscribed rectangle.
+
+    Args:
+        mask: Binary image with 0/255 values where 255=valid area
+        
+    Returns:
+        Tuple of (x1, y1, x2, y2) coordinates of largest inscribed rectangle
+    """
+    # Convert mask to binary (0/1) for processing
+    binary_mask = (mask > 0).astype(np.uint8)
+    h, w = binary_mask.shape
+    
+    # Use the existing optimized function that already exists in this file
+    x, y, width, height = find_largest_rectangle_optimized(binary_mask)
+    
+    # Convert to (x1, y1, x2, y2) format
+    x1, y1 = x, y
+    x2, y2 = x + width - 1, y + height - 1
+    
+    return (x1, y1, x2, y2)
+
+
+def remove_margin_inscribed_optimized(
+    image: np.ndarray,
+    blur_ksize: int = 5,
+    close_ksize: int = 25,
+    close_iter: int = 2,
+    return_analysis: bool = False,
+) -> tuple:
+    """Optimized version of inscribed rectangle margin removal.
+    
+    This method:
+    1. Detects paper mask based on brightness (white paper) with optimization
+    2. Fills holes so the mask is one solid blob
+    3. Finds the largest axis-aligned rectangle fully contained in the mask
+    4. Crops the original image to that rectangle
+    
+    Args:
+        image: Input image (BGR or grayscale)
+        blur_ksize: Gaussian blur kernel size (default 5)
+        close_ksize: Closing kernel size (default 25)
+        close_iter: Closing iterations (default 2)
+        return_analysis: If True, returns additional analysis information
+        
+    Returns:
+        Cropped image or tuple with analysis if return_analysis=True
+    """
+    try:
+        # Step 1: Create paper mask with optimization
+        mask = paper_mask_optimized(image, blur_ksize, close_ksize, close_iter)
+        
+        # Step 2: Find largest inscribed rectangle
+        x1, y1, x2, y2 = largest_inside_rect_optimized(mask)
+        
+        # Step 3: Crop the original image
+        crop = image[y1:y2 + 1, x1:x2 + 1]
+        
+        if not return_analysis:
+            return crop
+            
+        # Step 4: Calculate analysis information
+        original_area = image.shape[0] * image.shape[1]
+        cropped_area = crop.shape[0] * crop.shape[1]
+        
+        analysis = {
+            "method": "inscribed_rectangle_optimized",
+            "success": True,
+            "original_shape": image.shape,
+            "cropped_shape": crop.shape,
+            "crop_bounds": (x1, y1, x2 - x1 + 1, y2 - y1 + 1),
+            "area_retention": cropped_area / original_area if original_area > 0 else 0,
+            "inscribed_rectangle": (x1, y1, x2, y2),
+            "parameters": {
+                "blur_ksize": blur_ksize,
+                "close_ksize": close_ksize,
+                "close_iter": close_iter,
+            },
+            "paper_mask": mask,
+        }
+        
+        return crop, analysis
+        
+    except RuntimeError as e:
+        # Fallback to aggressive optimized method if inscribed fails
+        if return_analysis:
+            fallback_result = remove_margin_aggressive_optimized(
+                image, return_analysis=True
+            )
+            fallback_crop, fallback_analysis = fallback_result
+            fallback_analysis["method"] = "inscribed_optimized_fallback_to_aggressive"
+            fallback_analysis["fallback_reason"] = str(e)
+            return fallback_crop, fallback_analysis
+        else:
+            return remove_margin_aggressive_optimized(image)
+    except Exception as e:
+        # Handle any other errors gracefully
+        if return_analysis:
+            analysis = {
+                "method": "inscribed_rectangle_optimized",
+                "success": False,
+                "error": str(e),
+                "original_shape": image.shape,
+                "cropped_shape": image.shape,
+                "crop_bounds": (0, 0, image.shape[1], image.shape[0]),
+                "area_retention": 1.0,
+            }
+            return image, analysis
+        else:
+            return image

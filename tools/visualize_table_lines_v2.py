@@ -105,6 +105,28 @@ def draw_table_lines_overlay(
     return overlay
 
 
+def draw_lines_only(
+    image_shape: tuple, line_info: Dict[str, Any], background_color: int = 255
+) -> np.ndarray:
+    """Draw only the detected table lines on a clean background."""
+    height, width = image_shape[:2]
+    
+    # Create clean background (white by default)
+    lines_image = np.full((height, width, 3), background_color, dtype=np.uint8)
+    
+    # Draw horizontal lines in green
+    for line in line_info["h_lines"]:
+        x1, y1, x2, y2 = line
+        cv2.line(lines_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    
+    # Draw vertical lines in blue  
+    for line in line_info["v_lines"]:
+        x1, y1, x2, y2 = line
+        cv2.line(lines_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+    
+    return lines_image
+
+
 def process_image(
     image_path: Path,
     processor: TableLineProcessor,
@@ -177,11 +199,25 @@ def process_image(
         if param_file:
             output_files["parameters"] = str(param_file)
         
-        # Save table line data if detected
+        # Save clean lines-only visualization if table structure detected
         if line_info["has_table_structure"]:
+            lines_only_image = draw_lines_only(image.shape, line_info)
             table_data_path = output_dir / f"{base_name}_table_lines.png"
-            cv2.imwrite(str(table_data_path), overlay_image)
-            output_files["table_data"] = str(table_data_path)
+            cv2.imwrite(str(table_data_path), lines_only_image)
+            output_files["table_lines_only"] = str(table_data_path)
+        
+        # Save to processed_images directory for pipeline
+        processed_dir = output_dir / "processed_images"
+        processed_dir.mkdir(exist_ok=True)
+        processed_path = processed_dir / f"{base_name}.jpg"
+        cv2.imwrite(str(processed_path), image)  # Save original image for pipeline
+        
+        # Also save table lines images to a dedicated directory for table structure detection
+        if line_info["has_table_structure"]:
+            table_lines_dir = output_dir / "table_lines_images"
+            table_lines_dir.mkdir(exist_ok=True)
+            table_lines_copy_path = table_lines_dir / f"{base_name}_table_lines.png"
+            cv2.imwrite(str(table_lines_copy_path), lines_only_image)
         
         result = {
             "image_name": image_path.name,
@@ -247,6 +283,34 @@ def main():
     add_config_arguments(parser, 'table_lines')
     add_processor_specific_arguments(parser, 'table_lines')
     
+    # Table line post-processing arguments
+    parser.add_argument(
+        "--max-h-length-ratio",
+        type=float,
+        default=1.0,
+        help="Maximum horizontal line length ratio (1.0 = disable filtering)",
+    )
+    parser.add_argument(
+        "--max-v-length-ratio",
+        type=float,
+        default=0.9,
+        help="Maximum vertical line length ratio (1.0 = disable filtering)",
+    )
+    parser.add_argument(
+        "--close-line-distance",
+        type=int,
+        default=20,
+        help="Distance for merging close parallel lines (0 = disable merging)",
+    )
+    
+    # Backward compatibility argument
+    parser.add_argument(
+        "--max-length-ratio",
+        type=float,
+        default=None,
+        help="DEPRECATED: Use --max-h-length-ratio and --max-v-length-ratio instead",
+    )
+    
     args = parser.parse_args()
     
     # Handle show-filtering-steps
@@ -295,6 +359,14 @@ def main():
     
     # Get command arguments
     command_args = get_command_args_dict(args, 'table_lines')
+    
+    # Add new post-processing arguments
+    command_args.update({
+        'max_h_length_ratio': args.max_h_length_ratio,
+        'max_v_length_ratio': args.max_v_length_ratio,
+        'close_line_distance': args.close_line_distance,
+        'max_length_ratio': args.max_length_ratio,  # Backward compatibility
+    })
     
     output_dir = Path(args.output_dir)
     

@@ -38,23 +38,63 @@ def find_gutter_detailed(
     processor: PageSplitProcessor,
     **kwargs
 ) -> Dict[str, Any]:
-    """Enhanced gutter detection with detailed analysis."""
+    """Enhanced gutter detection with detailed analysis using new robust algorithm."""
     import src.ocr_pipeline.utils as utils
     
-    # Get gutter detection parameters
+    # Get gutter detection parameters - prioritize new parameters
     params = {
+        # New algorithm parameters
+        'search_ratio': kwargs.get('search_ratio', 0.3),
+        'blur_k': kwargs.get('blur_k', 21),
+        'open_k': kwargs.get('open_k', 9),
+        'width_min': kwargs.get('width_min', 20),
+        'return_analysis': True,
+        
+        # Legacy parameters for backward compatibility
         'gutter_start': kwargs.get('gutter_start', 0.4),
         'gutter_end': kwargs.get('gutter_end', 0.6),
         'min_gutter_width': kwargs.get('min_gutter_width', 50),
-        'return_analysis': True,
     }
     
     _, _, analysis = utils.split_two_page_image(image, **params)
+    
+    # Determine if image has two pages based on enhanced gutter analysis
+    gutter_strength_threshold = 0.15  # Minimum contrast needed for valid gutter
+    min_effective_width = 1  # Minimum width for any recognizable gutter
+    
+    meets_width_requirement = analysis.get('meets_min_width', False)
+    gutter_strength = analysis.get('gutter_strength', 0)
+    gutter_width = analysis.get('gutter_width', 0)
+    fallback_used = analysis.get('fallback_used', False)
+    
+    # Enhanced two-page detection logic for new algorithm
+    if fallback_used:
+        # If fallback was used, probably single page or very poor quality
+        has_two_pages = False
+    else:
+        # Use improved criteria based on segment analysis
+        valid_segments = analysis.get('valid_segments', [])
+        segments = analysis.get('segments', [])
+        
+        # Accept if we found valid segments and good strength
+        has_two_pages = (
+            len(valid_segments) > 0 and 
+            gutter_strength >= gutter_strength_threshold and
+            gutter_width >= min_effective_width
+        ) or (
+            # Alternative: good strength with minimal width and some segments found
+            len(segments) > 0 and 
+            gutter_width >= min_effective_width and 
+            gutter_strength >= 0.3
+        )
+    
+    analysis['has_two_pages'] = has_two_pages
+    
     return analysis
 
 
 def draw_split_overlay(image: np.ndarray, gutter_info: Dict[str, Any]) -> np.ndarray:
-    """Draw page splitting overlay showing gutter detection."""
+    """Draw page splitting overlay showing gutter detection with enhanced visualization."""
     overlay = image.copy()
     height, width = image.shape[:2]
 
@@ -68,6 +108,22 @@ def draw_split_overlay(image: np.ndarray, gutter_info: Dict[str, Any]) -> np.nda
         search_overlay, (search_start, 0), (search_end, height), (255, 255, 0), -1
     )
     overlay = cv2.addWeighted(overlay, 0.9, search_overlay, 0.1, 0)
+
+    # Draw all detected segments (light green)
+    segments = gutter_info.get("segments", [])
+    for start_x, end_x in segments:
+        cv2.rectangle(overlay, (start_x, 0), (end_x, height), (0, 255, 0), 1)
+
+    # Draw valid segments (bright green)
+    valid_segments = gutter_info.get("valid_segments", [])
+    for start_x, end_x in valid_segments:
+        cv2.rectangle(overlay, (start_x, 0), (end_x, height), (0, 255, 0), 2)
+
+    # Draw selected segment (magenta)
+    selected_segment = gutter_info.get("selected_segment")
+    if selected_segment:
+        start_x, end_x = selected_segment
+        cv2.rectangle(overlay, (start_x, 0), (end_x, height), (255, 0, 255), 3)
 
     # Draw gutter line (red)
     cv2.line(overlay, (gutter_x, 0), (gutter_x, height), (0, 0, 255), 3)
@@ -113,11 +169,37 @@ def draw_split_overlay(image: np.ndarray, gutter_info: Dict[str, Any]) -> np.nda
         thickness,
     )
 
+    # Show segment information
+    segments_count = len(gutter_info.get("segments", []))
+    valid_count = len(gutter_info.get("valid_segments", []))
+    cv2.putText(
+        overlay,
+        f"Segments: {segments_count} found, {valid_count} valid",
+        (10, 120),
+        font,
+        font_scale,
+        (255, 255, 255),
+        thickness,
+    )
+
+    # Show if fallback was used
+    fallback_used = gutter_info.get("fallback_used", False)
+    if fallback_used:
+        cv2.putText(
+            overlay,
+            "FALLBACK: Center split used",
+            (10, 150),
+            font,
+            font_scale,
+            (0, 165, 255),  # Orange
+            thickness,
+        )
+
     has_two_pages = gutter_info.get("has_two_pages", False)
     cv2.putText(
         overlay,
         f"Two pages detected: {'Yes' if has_two_pages else 'No'}",
-        (10, 120),
+        (10, 180),
         font,
         font_scale,
         (0, 255, 0) if has_two_pages else (0, 0, 255),
@@ -179,6 +261,15 @@ def process_image(
             processed_right = processed_dir / f"{base_name}_right_page.jpg"
             cv2.imwrite(str(processed_left), left_page)
             cv2.imwrite(str(processed_right), right_page)
+        else:
+            # For single page images or when individual pages not requested,
+            # still save to processed_images for pipeline support
+            processed_dir = output_dir / "processed_images"
+            processed_dir.mkdir(exist_ok=True)
+            
+            # For single page, save the original or left page (which is the processed result)
+            processed_image = processed_dir / f"{base_name}_processed.jpg"
+            cv2.imwrite(str(processed_image), left_page)  # left_page contains the processed result
         
         # Save parameter documentation
         param_file = save_step_parameters(
@@ -267,23 +358,49 @@ def main():
     # Add configuration arguments
     add_config_arguments(parser, 'page_split')
     
-    # Page split specific arguments
+    # Page split specific arguments - Legacy (for backward compatibility)
     parser.add_argument(
         "--gutter-start",
         type=float,
         default=0.4,
-        help="Start position for gutter search (0-1)",
+        help="Start position for gutter search (0-1) [DEPRECATED - use --search-ratio]",
     )
     parser.add_argument(
         "--gutter-end",
         type=float,
         default=0.6,
-        help="End position for gutter search (0-1)",
+        help="End position for gutter search (0-1) [DEPRECATED - use --search-ratio]",
     )
     parser.add_argument(
         "--min-gutter-width",
         type=int,
         default=50,
+        help="Minimum gutter width in pixels [DEPRECATED - use --width-min]",
+    )
+    
+    # New robust algorithm arguments
+    parser.add_argument(
+        "--search-ratio",
+        type=float,
+        default=0.3,
+        help="Fraction of width (centered) to search for gutter (0-1)",
+    )
+    parser.add_argument(
+        "--blur-k",
+        type=int,
+        default=21,
+        help="Gaussian blur kernel size (odd number, higher = more noise removal)",
+    )
+    parser.add_argument(
+        "--open-k",
+        type=int,
+        default=9,
+        help="Morphological opening kernel width (removes thin vertical lines)",
+    )
+    parser.add_argument(
+        "--width-min",
+        type=int,
+        default=20,
         help="Minimum gutter width in pixels",
     )
     
@@ -331,11 +448,17 @@ def main():
     
     # Get command arguments
     command_args = get_command_args_dict(args, 'page_split')
-    # Add page split specific args
+    # Add page split specific args (both legacy and new)
     command_args.update({
+        # Legacy parameters
         'gutter_start': args.gutter_start,
         'gutter_end': args.gutter_end,
         'min_gutter_width': args.min_gutter_width,
+        # New robust algorithm parameters
+        'search_ratio': args.search_ratio,
+        'blur_k': args.blur_k,
+        'open_k': args.open_k,
+        'width_min': args.width_min,
     })
     
     output_dir = Path(args.output_dir)

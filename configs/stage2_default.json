@@ -1,5 +1,5 @@
 {
-  "input_dir": "data/output/stage1_initial_processing/05_cropped_tables",
+  "input_dir": "data/output/stage1_initial_processing/06_border_cropped",
   "output_dir": "data/output/stage2_refinement",
   "debug_dir": "data/debug/stage2_debug",
   "verbose": true,
@@ -20,5 +20,10 @@
   },
   "margin_removal": {
     "enable_margin_removal": false
+  },
+  "inscribed_margin_removal": {
+    "inscribed_blur_ksize": 3,
+    "inscribed_close_ksize": 15,
+    "inscribed_close_iter": 1
   }
 }

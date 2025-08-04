@@ -36,7 +36,7 @@ from output_manager import (
 def analyze_skew_detailed(
     image: np.ndarray, 
     processor: DeskewProcessor,
-    angle_range: Tuple[float, float] = (-5, 5),
+    angle_range: int = 5,
     angle_step: float = 0.1,
     method: str = "projection",
 ) -> Dict[str, Any]:
@@ -46,7 +46,6 @@ def analyze_skew_detailed(
         image,
         angle_range=angle_range,
         angle_step=angle_step,
-        method=method,
         return_angle=True
     )
     
@@ -135,10 +134,10 @@ def draw_deskew_overlay(image: np.ndarray, analysis: Dict[str, Any]) -> np.ndarr
         )
     
     # Search range
-    angle_range = analysis.get("angle_range", (-5, 5))
+    angle_range = analysis.get("angle_range", 5)
     cv2.putText(
         overlay,
-        f"Search range: {angle_range[0]}° to {angle_range[1]}°",
+        f"Search range: -{angle_range}° to +{angle_range}°",
         (10, 120),
         font,
         0.6,
@@ -201,7 +200,7 @@ def process_image(
         image = ocr_utils.load_image(image_path)
         
         # Get processing parameters
-        angle_range = command_args.get('angle_range', (-5, 5))
+        angle_range = command_args.get('angle_range', 5)
         angle_step = command_args.get('angle_step', 0.1)
         method = command_args.get('method', 'projection')
         
@@ -333,8 +332,8 @@ def main():
     )
     parser.add_argument(
         "--save-deskewed",
+        dest="save_deskewed",
         action="store_true",
-        default=True,
         help="Save deskewed images",
     )
     parser.add_argument(
@@ -343,6 +342,7 @@ def main():
         action="store_false",
         help="Don't save deskewed images",
     )
+    parser.set_defaults(save_deskewed=True)
     parser.add_argument(
         "--save-debug",
         action="store_true",
