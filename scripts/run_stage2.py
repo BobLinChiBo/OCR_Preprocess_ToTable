@@ -11,7 +11,7 @@ Usage:
 
 Example:
     python run_stage2.py  # Use default Stage 1 output
-    python run_stage2.py output/stage1_initial_processing/05_cropped_tables/ --verbose
+    python run_stage2.py output/stage1_initial_processing/06_border_cropped/ --verbose
     python run_stage2.py cropped_tables/ -o output/stage2 --debug
 """
 
@@ -36,7 +36,7 @@ def main():
 Examples:
   python run_stage2.py                                      # Use default Stage 1 output
   python run_stage2.py cropped_tables/                      # Process custom directory
-  python run_stage2.py stage1_output/05_cropped_tables/     # Specific Stage 1 output
+  python run_stage2.py stage1_output/06_border_cropped/     # Specific Stage 1 output
   python run_stage2.py cropped/ -o refined/ --verbose       # Custom input/output
         """,
     )
@@ -44,10 +44,10 @@ Examples:
     parser.add_argument(
         "input",
         nargs="?",
-        default="data/output/stage1_initial_processing/05_cropped_tables",
+        default="data/output/stage1_initial_processing/06_border_cropped",
         help=(
             "Input directory with cropped tables from Stage 1 "
-            "(default: data/output/stage1_initial_processing/05_cropped_tables/)"
+            "(default: data/output/stage1_initial_processing/06_border_cropped/)"
         ),
     )
 

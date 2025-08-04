@@ -34,11 +34,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  python run_complete.py                     # Use default (data/input/raw_images/)
   python run_complete.py input/              # Process a directory
   python run_complete.py image.jpg           # Process a single image
+  python run_complete.py --test-images       # Process test images
+  python run_complete.py --test-images -v    # Test images with verbose output
   python run_complete.py input/ -o output/   # Set output directory
-  python run_complete.py input/ --verbose --debug  # Verbose and debug
-  python run_complete.py input/ --stage1-only      # Run only Stage 1
+  python run_complete.py --stage1-only       # Run only Stage 1
   python run_complete.py --stage2-only       # Run only Stage 2
         """,
     )
@@ -46,8 +48,8 @@ Examples:
     parser.add_argument(
         "input",
         nargs="?",
-        default="data/input",
-        help="Input directory or single image file (default: data/input/)",
+        default="data/input/raw_images",
+        help="Input directory or single image file (default: data/input/raw_images/)",
     )
 
     parser.add_argument(
@@ -63,6 +65,12 @@ Examples:
 
     parser.add_argument(
         "--debug", action="store_true", help="Save debug images during processing"
+    )
+
+    parser.add_argument(
+        "--test-images",
+        action="store_true",
+        help="Use test images directory (data/input/test_images/) instead of default input"
     )
 
     parser.add_argument(
@@ -149,6 +157,12 @@ Examples:
 
     args = parser.parse_args()
 
+    # Handle --test-images flag
+    if args.test_images:
+        input_path = Path("data/input/test_images")
+    else:
+        input_path = Path(args.input)
+
     # Validate stage selection
     if args.stage1_only and args.stage2_only:
         print("❌ Error: Cannot specify both --stage1-only and --stage2-only")
@@ -156,7 +170,6 @@ Examples:
 
     # Validate input for Stage 1 or complete pipeline
     if not args.stage2_only:
-        input_path = Path(args.input)
         if not input_path.exists():
             print(f"❌ Error: Input path does not exist: {input_path}")
             sys.exit(1)
@@ -167,9 +180,7 @@ Examples:
     # Stage 1 configuration
     stage1_config = get_stage1_config(args.stage1_config)
     if not args.stage2_only:
-        stage1_config.input_dir = (
-            Path(args.input) if Path(args.input).is_dir() else Path(args.input).parent
-        )
+        stage1_config.input_dir = input_path
         stage1_config.output_dir = base_output / "stage1_initial_processing"
         stage1_config.verbose = args.verbose
         stage1_config.save_debug_images = args.debug
@@ -182,9 +193,9 @@ Examples:
     stage2_config = get_stage2_config(args.stage2_config)
     if not args.stage1_only:
         stage2_config.input_dir = (
-            stage1_config.output_dir / "05_cropped_tables"
+            stage1_config.output_dir / "06_border_cropped"
             if not args.stage2_only
-            else Path("data/output/stage1_initial_processing/05_cropped_tables")
+            else Path("data/output/stage1_initial_processing/06_border_cropped")
         )
         stage2_config.output_dir = base_output / "stage2_refinement"
         stage2_config.verbose = args.verbose
@@ -199,7 +210,7 @@ Examples:
             print("*** COMPLETE TWO-STAGE OCR PIPELINE ***")
             print("=" * 70)
             if not args.stage2_only:
-                print(f"Input: {args.input}")
+                print(f"Input: {input_path}")
             print(f"Output Base: {base_output}")
 
             if args.stage1_only:
@@ -219,26 +230,12 @@ Examples:
         # Execute pipeline based on mode
         if args.stage1_only:
             # Run only Stage 1
-            input_dir = Path(args.input) if Path(args.input).is_dir() else None
-            if Path(args.input).is_file():
-                # Handle single file for Stage 1
-                temp_input_dir = stage1_config.output_dir / "temp_input"
-                temp_input_dir.mkdir(parents=True, exist_ok=True)
-
-                temp_file = temp_input_dir / Path(args.input).name
-                shutil.copy2(Path(args.input), temp_file)
-
-                try:
-                    results = pipeline.run_stage1(temp_input_dir)
-                finally:
-                    shutil.rmtree(temp_input_dir, ignore_errors=True)
-            else:
-                results = pipeline.run_stage1(input_dir)
+            results = pipeline.run_stage1(input_path)
 
             if args.verbose:
                 print("\n*** STAGE 1 COMPLETED! ***")
                 print(f"Generated {len(results)} cropped table images")
-                print(f"Results: {stage1_config.output_dir / '05_cropped_tables'}")
+                print(f"Results: {stage1_config.output_dir / '06_border_cropped'}")
                 print("\nNext step: python run_stage2.py --verbose")
 
         elif args.stage2_only:
@@ -257,21 +254,7 @@ Examples:
 
         else:
             # Run complete two-stage pipeline
-            input_dir = Path(args.input) if Path(args.input).is_dir() else None
-            if Path(args.input).is_file():
-                # Handle single file for complete pipeline
-                temp_input_dir = stage1_config.output_dir / "temp_input"
-                temp_input_dir.mkdir(parents=True, exist_ok=True)
-
-                temp_file = temp_input_dir / Path(args.input).name
-                shutil.copy2(Path(args.input), temp_file)
-
-                try:
-                    results = pipeline.run_complete_pipeline(temp_input_dir)
-                finally:
-                    shutil.rmtree(temp_input_dir, ignore_errors=True)
-            else:
-                results = pipeline.run_complete_pipeline(input_dir)
+            results = pipeline.run_complete_pipeline(input_path)
 
             if args.verbose:
                 print("\n*** COMPLETE PIPELINE FINISHED! ***")

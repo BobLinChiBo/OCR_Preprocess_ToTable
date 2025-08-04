@@ -1,6 +1,7 @@
 """Main OCR pipeline."""
 
 import argparse
+import json
 from pathlib import Path
 from typing import List
 
@@ -131,12 +132,12 @@ class TwoStageOCRPipeline:
         self.stage1_pipeline = OCRPipeline(self.stage1_config)
         self.stage2_pipeline = OCRPipeline(self.stage2_config)
 
-    def run_stage1(self, input_dir: Path = None) -> List[Path]:
+    def run_stage1(self, input_path: Path = None) -> List[Path]:
         """
         Run Stage 1: Initial processing and table cropping.
 
         Args:
-            input_dir: Input directory with raw images (optional)
+            input_path: Input directory or single image file (optional)
 
         Returns:
             List of cropped table image paths ready for Stage 2
@@ -146,15 +147,21 @@ class TwoStageOCRPipeline:
             print("=" * 50)
 
         # Process images through complete Stage 1 pipeline
-        input_dir = input_dir or self.stage1_config.input_dir
+        input_path = input_path or self.stage1_config.input_dir
         cropped_tables = []
 
-        if not input_dir.exists():
-            raise ValueError(f"Input directory does not exist: {input_dir}")
+        if not input_path.exists():
+            raise ValueError(f"Input path does not exist: {input_path}")
 
-        image_files = utils.get_image_files(input_dir)
-        if not image_files:
-            raise ValueError(f"No image files found in: {input_dir}")
+        # Handle single file or directory
+        if input_path.is_file():
+            # Single file processing
+            image_files = [input_path]
+        else:
+            # Directory processing
+            image_files = utils.get_image_files(input_path)
+            if not image_files:
+                raise ValueError(f"No image files found in: {input_path}")
 
         if self.stage1_config.verbose:
             print(f"Found {len(image_files)} images to process")
@@ -204,7 +211,7 @@ class TwoStageOCRPipeline:
                             print(f"    Margin removed: {processing_image.shape} (from {page.shape})")
 
                     # Deskew
-                    deskewed, _ = utils.deskew_image(
+                    deskewed, angle = utils.deskew_image(
                         processing_image,
                         self.stage1_config.angle_range,
                         self.stage1_config.angle_step,
@@ -215,6 +222,9 @@ class TwoStageOCRPipeline:
                     deskew_dir = self.stage1_config.output_dir / "03_deskewed"
                     deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
                     utils.save_image(deskewed, deskew_path)
+
+                    if self.stage1_config.verbose:
+                        print(f"  Deskewed: {angle:.2f} degrees")
 
                     # Table line detection
                     h_lines, v_lines = utils.detect_table_lines(
@@ -234,11 +244,25 @@ class TwoStageOCRPipeline:
                     vis_image = utils.visualize_detected_lines(deskewed, h_lines, v_lines)
                     utils.save_image(vis_image, lines_path)
 
-                    # NEW: Table structure detection from lines image
+                    if self.stage1_config.verbose:
+                        print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
+
+                    # Save lines data to JSON for next step
+                    lines_data_dir = lines_dir / "lines_data"
+                    lines_data_dir.mkdir(parents=True, exist_ok=True)
+                    lines_json_path = lines_data_dir / f"{page_name}_lines_data.json"
+                    lines_data = {
+                        "horizontal_lines": [[int(x1), int(y1), int(x2), int(y2)] for x1, y1, x2, y2 in h_lines],
+                        "vertical_lines": [[int(x1), int(y1), int(x2), int(y2)] for x1, y1, x2, y2 in v_lines]
+                    }
+                    with open(lines_json_path, 'w') as f:
+                        json.dump(lines_data, f, indent=2)
+
+                    # Table structure detection from detected lines
                     table_structure = utils.detect_table_structure(
-                        vis_image,  # Use the lines visualization as input
+                        h_lines,  # Pass horizontal lines
+                        v_lines,  # Pass vertical lines
                         eps=getattr(self.stage1_config, 'table_detection_eps', 10),
-                        kernel_ratio=getattr(self.stage1_config, 'table_detection_kernel_ratio', 0.05),
                         return_analysis=True
                     )
 
@@ -247,6 +271,19 @@ class TwoStageOCRPipeline:
                     structure_path = structure_dir / f"{page_name}_table_structure.jpg"
                     structure_vis = utils.visualize_table_structure(deskewed, table_structure)
                     utils.save_image(structure_vis, structure_path)
+
+                    if self.stage1_config.verbose:
+                        xs = table_structure.get("xs", [])
+                        ys = table_structure.get("ys", [])
+                        cells = table_structure.get("cells", [])
+                        print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
+
+                    # Save table structure data to JSON for next step
+                    structure_data_dir = structure_dir / "structure_data"
+                    structure_data_dir.mkdir(parents=True, exist_ok=True)
+                    structure_json_path = structure_data_dir / f"{page_name}_structure_data.json"
+                    with open(structure_json_path, 'w') as f:
+                        json.dump(table_structure, f, indent=2)
 
                     # NEW: Crop deskewed image using detected table borders with padding
                     cropped_table = utils.crop_to_table_borders(
@@ -369,12 +406,12 @@ class TwoStageOCRPipeline:
 
         return refined_tables
 
-    def run_complete_pipeline(self, input_dir: Path = None) -> List[Path]:
+    def run_complete_pipeline(self, input_path: Path = None) -> List[Path]:
         """
         Run both Stage 1 and Stage 2 sequentially.
 
         Args:
-            input_dir: Input directory with raw images
+            input_path: Input directory or single image file
 
         Returns:
             List of final refined table image paths
@@ -383,7 +420,7 @@ class TwoStageOCRPipeline:
         print("=" * 60)
 
         # Run Stage 1
-        stage1_outputs = self.run_stage1(input_dir)
+        stage1_outputs = self.run_stage1(input_path)
 
         if not stage1_outputs:
             raise RuntimeError("Stage 1 produced no output. Cannot proceed to Stage 2.")

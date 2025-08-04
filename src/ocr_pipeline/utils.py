@@ -3197,41 +3197,49 @@ def enumerate_table_cells(xs: List[int], ys: List[int]) -> List[Tuple[int, int, 
             for yi, yj in zip(ys[:-1], ys[1:])]
 
 
-def detect_table_structure(lines_image: np.ndarray,
+def detect_table_structure(h_lines: List[Tuple[int, int, int, int]],
+                          v_lines: List[Tuple[int, int, int, int]],
                           eps: int = 10,
-                          kernel_ratio: float = 0.05,
                           return_analysis: bool = True) -> Union[Dict, Tuple]:
     """
-    Detect table structure from a lines image.
+    Detect table structure from pre-detected lines.
     
     Args:
-        lines_image: Image containing detected table lines
+        h_lines: List of horizontal lines as (x1, y1, x2, y2) tuples
+        v_lines: List of vertical lines as (x1, y1, x2, y2) tuples
         eps: Clustering tolerance in pixels
-        kernel_ratio: Morphology kernel length as fraction of width/height
         return_analysis: If True, return detailed analysis
         
     Returns:
-        Dict with 'xs', 'ys', 'cells' keys, or tuple if return_analysis=False
+        Dict with 'xs', 'ys', 'cells' keys
+        
+    Raises:
+        ValueError: If no line information is provided
     """
-    if len(lines_image.shape) == 3:
-        gray = cv2.cvtColor(lines_image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = lines_image.copy()
+    # Check if line information is provided
+    if h_lines is None or v_lines is None:
+        raise ValueError("Line information is required. Both h_lines and v_lines must be provided.")
     
-    # Convert to binary (assuming lines are dark on light background)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
+    if not isinstance(h_lines, list) or not isinstance(v_lines, list):
+        raise ValueError("h_lines and v_lines must be lists of line tuples")
     
-    # Calculate kernel sizes
-    h_len = max(10, int(kernel_ratio * lines_image.shape[1]))
-    v_len = max(10, int(kernel_ratio * lines_image.shape[0]))
+    # Extract y positions from horizontal lines
+    y_positions = []
+    for x1, y1, x2, y2 in h_lines:
+        # Use average y position for each line
+        y_pos = (y1 + y2) // 2
+        y_positions.append(y_pos)
     
-    # Detect horizontal and vertical lines
-    horiz = detect_table_lines_morphology(binary, "h", h_len)
-    vert = detect_table_lines_morphology(binary, "v", v_len)
+    # Extract x positions from vertical lines
+    x_positions = []
+    for x1, y1, x2, y2 in v_lines:
+        # Use average x position for each line
+        x_pos = (x1 + x2) // 2
+        x_positions.append(x_pos)
     
-    # Extract line positions
-    ys = cluster_line_positions(np.where(horiz.sum(axis=1) > 0)[0].tolist(), eps)
-    xs = cluster_line_positions(np.where(vert.sum(axis=0) > 0)[0].tolist(), eps)
+    # Cluster positions to handle near-duplicate lines
+    ys = cluster_line_positions(y_positions, eps)
+    xs = cluster_line_positions(x_positions, eps)
     
     # Generate table cells
     cells = enumerate_table_cells(xs, ys)
@@ -3239,19 +3247,28 @@ def detect_table_structure(lines_image: np.ndarray,
     result = {"xs": xs, "ys": ys, "cells": cells}
     
     if return_analysis:
+        # Calculate bounds if we have lines
+        if xs and ys:
+            bounds = {
+                "min_x": min(xs),
+                "max_x": max(xs),
+                "min_y": min(ys),
+                "max_y": max(ys),
+            }
+        else:
+            bounds = None
+            
         analysis = {
             "table_detected": len(xs) > 1 and len(ys) > 1,
             "num_vertical_lines": len(xs),
             "num_horizontal_lines": len(ys),
             "num_cells": len(cells),
-            "table_bounds": {
-                "min_x": min(xs) if xs else 0,
-                "max_x": max(xs) if xs else lines_image.shape[1],
-                "min_y": min(ys) if ys else 0,
-                "max_y": max(ys) if ys else lines_image.shape[0],
-            } if xs and ys else None,
-            "kernel_sizes": {"horizontal": h_len, "vertical": v_len},
+            "table_bounds": bounds,
             "clustering_eps": eps,
+            "lines_input": {
+                "horizontal_count": len(h_lines),
+                "vertical_count": len(v_lines)
+            }
         }
         result["analysis"] = analysis
         
