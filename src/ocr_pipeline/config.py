@@ -15,12 +15,7 @@ class Config:
     output_dir: Path = Path("data/output")
     debug_dir: Optional[Path] = None
 
-    # Page splitting
-    gutter_search_start: float = 0.4  # DEPRECATED - use search_ratio
-    gutter_search_end: float = 0.6  # DEPRECATED - use search_ratio
-    min_gutter_width: int = 50  # DEPRECATED - use width_min
-
-    # New page split parameters (robust algorithm)
+    # Page splitting parameters
     search_ratio: float = 0.3  # Fraction of width, centered, to search for gutter
     blur_k: int = 21  # Gaussian blur kernel size (odd number)
     open_k: int = 9  # Morphological opening kernel width
@@ -95,23 +90,7 @@ class Config:
 
     def _validate_parameters(self) -> None:
         """Validate configuration parameters."""
-        # Legacy page split parameters
-        if not (0.0 <= self.gutter_search_start <= 1.0):
-            raise ValueError(
-                f"gutter_search_start must be between 0 and 1, got {self.gutter_search_start}"
-            )
-        if not (0.0 <= self.gutter_search_end <= 1.0):
-            raise ValueError(
-                f"gutter_search_end must be between 0 and 1, got {self.gutter_search_end}"
-            )
-        if self.gutter_search_start >= self.gutter_search_end:
-            raise ValueError("gutter_search_start must be less than gutter_search_end")
-        if self.min_gutter_width <= 0:
-            raise ValueError(
-                f"min_gutter_width must be positive, got {self.min_gutter_width}"
-            )
-
-        # New page split parameters
+        # Page split parameters
         if not (0.0 <= self.search_ratio <= 1.0):
             raise ValueError(
                 f"search_ratio must be between 0 and 1, got {self.search_ratio}"
@@ -254,9 +233,10 @@ class Stage1Config(Config):
             page_split = config_dict["page_splitting"]
             config_dict.update(
                 {
-                    "gutter_search_start": page_split.get("gutter_search_start"),
-                    "gutter_search_end": page_split.get("gutter_search_end"),
-                    "min_gutter_width": page_split.get("min_gutter_width"),
+                    "search_ratio": page_split.get("search_ratio", 0.3),
+                    "blur_k": page_split.get("blur_k", 21),
+                    "open_k": page_split.get("open_k", 9),
+                    "width_min": page_split.get("width_min", 20),
                 }
             )
             del config_dict["page_splitting"]

@@ -303,14 +303,6 @@ def main():
         help="Distance for merging close parallel lines (0 = disable merging)",
     )
     
-    # Backward compatibility argument
-    parser.add_argument(
-        "--max-length-ratio",
-        type=float,
-        default=None,
-        help="DEPRECATED: Use --max-h-length-ratio and --max-v-length-ratio instead",
-    )
-    
     args = parser.parse_args()
     
     # Handle show-filtering-steps
@@ -365,8 +357,7 @@ def main():
         'max_h_length_ratio': args.max_h_length_ratio,
         'max_v_length_ratio': args.max_v_length_ratio,
         'close_line_distance': args.close_line_distance,
-        'max_length_ratio': args.max_length_ratio,  # Backward compatibility
-    })
+            })
     
     output_dir = Path(args.output_dir)
     

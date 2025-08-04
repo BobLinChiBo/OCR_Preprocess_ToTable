@@ -41,25 +41,14 @@ class PageSplitProcessor(BaseProcessor):
         Returns:
             Tuple of (left_page, right_page)
         """
-        # New algorithm parameters (preferred)
         params = {
-            'search_ratio': kwargs.get('search_ratio', self.get_config_value('search_ratio', 0.3)),
-            'blur_k': kwargs.get('blur_k', self.get_config_value('blur_k', 21)),
-            'open_k': kwargs.get('open_k', self.get_config_value('open_k', 9)),
-            'width_min': kwargs.get('width_min', self.get_config_value('width_min', 20)),
+            'search_ratio': kwargs.get('search_ratio', self.config.search_ratio),
+            'blur_k': kwargs.get('blur_k', self.config.blur_k),
+            'open_k': kwargs.get('open_k', self.config.open_k),
+            'width_min': kwargs.get('width_min', self.config.width_min),
         }
         
-        # Legacy parameters for backward compatibility
-        legacy_params = {
-            'gutter_start': kwargs.get('gutter_start', self.config.gutter_search_start),
-            'gutter_end': kwargs.get('gutter_end', self.config.gutter_search_end),
-            'min_gutter_width': kwargs.get('min_gutter_width', self.config.min_gutter_width),
-        }
-        
-        # Merge all parameters
-        all_params = {**legacy_params, **params}
-        
-        return utils.split_two_page_image(image, **all_params)
+        return utils.split_two_page_image(image, **params)
 
 
 class MarginRemovalProcessor(BaseProcessor):
@@ -339,27 +328,6 @@ class TableCropProcessor(BaseProcessor):
         
         return utils.crop_to_table_borders(deskewed_image, table_structure, **params)
     
-    def process_legacy(self, image: np.ndarray, h_lines: List, v_lines: List, **kwargs) -> Tuple:
-        """
-        DEPRECATED: Legacy crop method for backward compatibility.
-        
-        Args:
-            image: Input image
-            h_lines: Horizontal lines
-            v_lines: Vertical lines
-            **kwargs: Additional parameters to override config
-            
-        Returns:
-            Cropped table image or (cropped_image, crop_info) if return_crop_info=True
-        """
-        params = {
-            'crop_padding': kwargs.get('margin', kwargs.get('crop_padding', self.get_config_value('table_crop_padding', 10))),
-            'return_analysis': kwargs.get('return_crop_info', kwargs.get('return_analysis', False)),
-        }
-        
-        return utils.crop_table_region(image, h_lines, v_lines, **params)
-
-
 # Factory function to create processors
 def create_processor(processor_type: str, config) -> BaseProcessor:
     """

@@ -24,85 +24,43 @@ from output_manager import OutputManager  # noqa: E402
 class VisualizationRunner:
     """Manages running multiple visualization scripts."""
 
-    def __init__(self, use_v2=False):
+    def __init__(self, use_v2=True):
         self.manager = OutputManager()
         self.use_v2 = use_v2
         
-        # V1 scripts (original)
-        self.available_scripts_v1 = {
-            "page-split": {
-                "script": "visualize_page_split.py",
-                "description": "Page splitting visualization",
-                "default_args": [""],
-            },
-            "margin-removal": {
-                "script": "visualize_margin_removal.py",
-                "description": "Margin removal visualization",
-                "default_args": ["--save-debug"],
-            },
-            "margin-removal-fast": {
-                "script": "visualize_margin_removal_fast.py",
-                "description": "Fast margin removal visualization (optimized)",
-                "default_args": ["--save-debug"],
-            },
-            "margin-removal-bbox": {
-                "script": "visualize_margin_removal_bbox.py",
-                "description": "Bounding box margin removal (fastest)",
-                "default_args": ["--save-debug"],
-            },
-            "deskew": {
-                "script": "visualize_deskew.py",
-                "description": "Deskewing analysis and visualization",
-                "default_args": [],
-            },
-            "table-lines": {
-                "script": "visualize_table_lines.py",
-                "description": "Table line detection visualization",
-                "default_args": ["--save-debug", "--show-filtering-steps"],
-            },
-            "table-crop": {
-                "script": "visualize_table_crop.py",
-                "description": "Table cropping visualization",
-                "default_args": [],
-            },
-        }
-        
-        # V2 scripts (new processor architecture)
-        self.available_scripts_v2 = {
+        # V2 scripts are now the only supported version
+        self.available_scripts = {
             "page-split": {
                 "script": "visualize_page_split_v2.py",
-                "description": "Page splitting visualization (v2)",
+                "description": "Page splitting visualization",
                 "default_args": [],
             },
             "margin-removal": {
                 "script": "visualize_margin_removal_v2.py",
-                "description": "Margin removal visualization (v2)",
+                "description": "Margin removal visualization (supports multiple methods)",
                 "default_args": ["--save-debug"],
             },
             "deskew": {
                 "script": "visualize_deskew_v2.py",
-                "description": "Deskewing analysis and visualization (v2)",
+                "description": "Deskewing analysis and visualization",
                 "default_args": [],
             },
             "table-lines": {
                 "script": "visualize_table_lines_v2.py",
-                "description": "Table line detection visualization (v2)",
+                "description": "Table line detection visualization",
                 "default_args": ["--save-debug", "--show-filtering-steps"],
             },
             "table-structure": {
                 "script": "visualize_table_structure_v2.py",
-                "description": "Table structure detection visualization (v2)",
+                "description": "Table structure detection visualization",
                 "default_args": [],
             },
             "table-crop": {
                 "script": "visualize_table_crop_v2.py",
-                "description": "Table cropping visualization (v2)",
+                "description": "Table cropping visualization",
                 "default_args": [],
             },
         }
-        
-        # Select which version to use
-        self.available_scripts = self.available_scripts_v2 if use_v2 else self.available_scripts_v1
 
     def run_single_script(
         self,
@@ -146,16 +104,9 @@ class VisualizationRunner:
         
         # Add --save-intermediates if requested and supported by the script
         if save_intermediates:
-            # Map to appropriate argument based on script and version
+            # V2 scripts use --save-debug for intermediate saving
             if script_name == "deskew":
-                if self.use_v2:
-                    cmd.append("--save-debug")  # V2 deskew uses --save-debug
-                else:
-                    cmd.append("--save-intermediates")  # V1 deskew uses --save-intermediates
-            # Note: Other V2 tools don't currently support intermediate saving
-            # Only add --save-intermediates for V1 tools that support it
-            elif not self.use_v2 and script_name in ["margin-removal", "margin-removal-fast", "margin-removal-bbox"]:
-                cmd.append("--save-intermediates")
+                cmd.append("--save-debug")
 
         if extra_args:
             cmd.extend(extra_args)
@@ -543,11 +494,11 @@ Examples:
   # Pipeline mode: each stage uses previous stage's output as input
   python run_visualizations.py page-split margin-removal deskew --test-images --pipeline
 
-  # Test new table structure detection (v2 only)
-  python run_visualizations.py table-structure --test-images --use-v2
+  # Test new table structure detection
+  python run_visualizations.py table-structure --test-images
 
-  # Test all v2 scripts including table structure
-  python run_visualizations.py all --test-images --pipeline --use-v2
+  # Test all scripts including table structure
+  python run_visualizations.py all --test-images --pipeline
 
   # List available scripts
   python run_visualizations.py --list
@@ -582,7 +533,8 @@ Examples:
     parser.add_argument(
         "--use-v2",
         action="store_true",
-        help="Use v2 visualization scripts with new processor architecture"
+        default=True,
+        help="Use v2 visualization scripts (default: True, v1 scripts have been removed)"
     )
     parser.add_argument(
         "--method",
@@ -661,28 +613,27 @@ Examples:
     if "all" in script_names:
         script_names = list(runner.available_scripts.keys())
     
-    # For v2, handle margin-removal variants by mapping to single script
-    if args.use_v2:
-        # Map all margin-removal variants to the unified v2 script
-        mapped_names = []
-        for script in script_names:
-            if script in ["margin-removal-fast", "margin-removal-bbox"]:
-                # Map to base margin-removal, but preserve args
-                if "margin-removal" not in mapped_names:
-                    mapped_names.append("margin-removal")
-                # Transfer args from variant to base
-                if script in script_args:
-                    if "margin-removal" not in script_args:
-                        script_args["margin-removal"] = []
-                    script_args["margin-removal"].extend(script_args[script])
-                    # Add method selection based on variant
-                    if script == "margin-removal-fast":
-                        script_args["margin-removal"].append("--use-optimized")
-                    elif script == "margin-removal-bbox":
-                        script_args["margin-removal"].extend(["--method", "bounding_box"])
-            else:
-                mapped_names.append(script)
-        script_names = mapped_names
+    # Handle margin-removal variants by mapping to single script
+    # Map all margin-removal variants to the unified v2 script
+    mapped_names = []
+    for script in script_names:
+        if script in ["margin-removal-fast", "margin-removal-bbox"]:
+            # Map to base margin-removal, but preserve args
+            if "margin-removal" not in mapped_names:
+                mapped_names.append("margin-removal")
+            # Transfer args from variant to base
+            if script in script_args:
+                if "margin-removal" not in script_args:
+                    script_args["margin-removal"] = []
+                script_args["margin-removal"].extend(script_args[script])
+                # Add method selection based on variant
+                if script == "margin-removal-fast":
+                    script_args["margin-removal"].append("--use-optimized")
+                elif script == "margin-removal-bbox":
+                    script_args["margin-removal"].extend(["--method", "bounding_box"])
+        else:
+            mapped_names.append(script)
+    script_names = mapped_names
 
     # Add method argument to margin-removal if specified
     if args.method and "margin-removal" in script_names:

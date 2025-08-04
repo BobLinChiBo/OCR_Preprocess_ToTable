@@ -34,7 +34,11 @@ class OCRPipeline:
 
         # Split into two pages
         left_page, right_page = utils.split_two_page_image(
-            image, self.config.gutter_search_start, self.config.gutter_search_end
+            image,
+            search_ratio=self.config.search_ratio,
+            blur_k=self.config.blur_k,
+            open_k=self.config.open_k,
+            width_min=self.config.width_min
         )
 
         output_paths = []
@@ -74,11 +78,8 @@ class OCRPipeline:
                 min_aspect_ratio=self.config.min_aspect_ratio,
             )
 
-            # Crop to table region
-            if h_lines and v_lines:
-                cropped = utils.crop_table_region(deskewed, h_lines, v_lines)
-            else:
-                cropped = deskewed
+            # Use deskewed image directly (table cropping is done in Stage 1)
+            cropped = deskewed
 
             # Save result
             output_name = f"{image_path.stem}_page_{i}.jpg"
@@ -176,8 +177,10 @@ class TwoStageOCRPipeline:
                 image = utils.load_image(image_path)
                 left_page, right_page = utils.split_two_page_image(
                     image,
-                    self.stage1_config.gutter_search_start,
-                    self.stage1_config.gutter_search_end,
+                    search_ratio=self.stage1_config.search_ratio,
+                    blur_k=self.stage1_config.blur_k,
+                    open_k=self.stage1_config.open_k,
+                    width_min=self.stage1_config.width_min,
                 )
 
                 # Save split pages

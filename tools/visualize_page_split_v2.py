@@ -41,19 +41,13 @@ def find_gutter_detailed(
     """Enhanced gutter detection with detailed analysis using new robust algorithm."""
     import src.ocr_pipeline.utils as utils
     
-    # Get gutter detection parameters - prioritize new parameters
+    # Get gutter detection parameters
     params = {
-        # New algorithm parameters
         'search_ratio': kwargs.get('search_ratio', 0.3),
         'blur_k': kwargs.get('blur_k', 21),
         'open_k': kwargs.get('open_k', 9),
         'width_min': kwargs.get('width_min', 20),
         'return_analysis': True,
-        
-        # Legacy parameters for backward compatibility
-        'gutter_start': kwargs.get('gutter_start', 0.4),
-        'gutter_end': kwargs.get('gutter_end', 0.6),
-        'min_gutter_width': kwargs.get('min_gutter_width', 50),
     }
     
     _, _, analysis = utils.split_two_page_image(image, **params)
@@ -358,27 +352,7 @@ def main():
     # Add configuration arguments
     add_config_arguments(parser, 'page_split')
     
-    # Page split specific arguments - Legacy (for backward compatibility)
-    parser.add_argument(
-        "--gutter-start",
-        type=float,
-        default=0.4,
-        help="Start position for gutter search (0-1) [DEPRECATED - use --search-ratio]",
-    )
-    parser.add_argument(
-        "--gutter-end",
-        type=float,
-        default=0.6,
-        help="End position for gutter search (0-1) [DEPRECATED - use --search-ratio]",
-    )
-    parser.add_argument(
-        "--min-gutter-width",
-        type=int,
-        default=50,
-        help="Minimum gutter width in pixels [DEPRECATED - use --width-min]",
-    )
-    
-    # New robust algorithm arguments
+    # Page split specific arguments
     parser.add_argument(
         "--search-ratio",
         type=float,
@@ -448,13 +422,8 @@ def main():
     
     # Get command arguments
     command_args = get_command_args_dict(args, 'page_split')
-    # Add page split specific args (both legacy and new)
+    # Add page split specific args
     command_args.update({
-        # Legacy parameters
-        'gutter_start': args.gutter_start,
-        'gutter_end': args.gutter_end,
-        'min_gutter_width': args.min_gutter_width,
-        # New robust algorithm parameters
         'search_ratio': args.search_ratio,
         'blur_k': args.blur_k,
         'open_k': args.open_k,

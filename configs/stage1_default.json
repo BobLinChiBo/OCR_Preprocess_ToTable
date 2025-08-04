@@ -5,23 +5,27 @@
   "verbose": true,
   "save_debug_images": false,
   "page_splitting": {
-    "gutter_search_start": 0.4,
-    "gutter_search_end": 0.6,
-    "min_gutter_width": 50
+    "search_ratio": 0.3,
+    "blur_k": 21,
+    "open_k": 9,
+    "width_min": 20
   },
   "deskewing": {
-    "angle_range": 10,
+    "angle_range": 5,
     "angle_step": 0.2,
     "min_angle_correction": 0.2
   },
   "table_line_detection": {
     "threshold": 35,
-    "horizontal_kernel_size": 15,
-    "vertical_kernel_size": 15,
-    "alignment_threshold": 5,
-    "pre_merge_length_ratio": 0.2,
-    "post_merge_length_ratio": 0.3,
-    "min_aspect_ratio": 3
+    "horizontal_kernel_size": 10,
+    "vertical_kernel_size": 10,
+    "alignment_threshold": 3,
+    "pre_merge_length_ratio": 0.3,
+    "post_merge_length_ratio": 0.5,
+    "min_aspect_ratio": 3,
+    "max_h_length_ratio": 1.0,
+    "max_v_length_ratio": 1.0,
+    "close_line_distance": 45
   },
   "margin_removal": {
     "enable_margin_removal": true,
