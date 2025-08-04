@@ -12,10 +12,10 @@ class PageSplitProcessor(BaseProcessor):
     def process(
         self,
         image: np.ndarray,
-        search_ratio: float = 0.3,
-        blur_k: int = 21,
-        open_k: int = 9,
-        width_min: int = 20,
+        search_ratio: float = 0.5,
+        line_len_frac: float = 0.3,
+        line_thick: int = 3,
+        peak_thr: float = 0.3,
         return_analysis: bool = False,
         **kwargs
     ) -> tuple:
@@ -24,9 +24,9 @@ class PageSplitProcessor(BaseProcessor):
         Args:
             image: Input two-page image
             search_ratio: Fraction of width, centered, to search for gutter (0.0-1.0)
-            blur_k: Odd kernel size for Gaussian blur (higher = more noise removal)
-            open_k: Horizontal kernel width for morphological opening (removes thin lines)
-            width_min: Minimum gutter width in pixels
+            line_len_frac: Vertical kernel = fraction of image height
+            line_thick: Kernel width in pixels
+            peak_thr: Peak threshold (fraction of max response)
             return_analysis: If True, returns detailed analysis information
             
         Returns:
@@ -36,81 +36,62 @@ class PageSplitProcessor(BaseProcessor):
         return split_two_page_image(
             image,
             search_ratio=search_ratio,
-            blur_k=blur_k,
-            open_k=open_k,
-            width_min=width_min,
+            line_len_frac=line_len_frac,
+            line_thick=line_thick,
+            peak_thr=peak_thr,
             return_analysis=return_analysis
         )
 
 
 def split_two_page_image(
     image: np.ndarray,
-    search_ratio: float = 0.3,
-    blur_k: int = 21,
-    open_k: int = 9,
-    width_min: int = 20,
+    search_ratio: float = 0.5,
+    line_len_frac: float = 0.3,
+    line_thick: int = 3,
+    peak_thr: float = 0.3,
     return_analysis: bool = False,
 ) -> tuple:
-    """Split a two-page scanned image into separate pages using robust algorithm.
+    """Split a two-page scanned image into separate pages using V2 algorithm.
 
     Args:
         image: Input two-page image
         search_ratio: Fraction of width, centered, to search for gutter (0.0-1.0)
-        blur_k: Odd kernel size for Gaussian blur (higher = more noise removal)
-        open_k: Horizontal kernel width for morphological opening (removes thin lines)
-        width_min: Minimum gutter width in pixels
+        line_len_frac: Vertical kernel = fraction of image height
+        line_thick: Kernel width in pixels
+        peak_thr: Peak threshold (fraction of max response)
         return_analysis: If True, returns detailed analysis information
 
     Returns:
         tuple: (left_page, right_page) or (left_page, right_page, analysis) if return_analysis=True
     """
-
-    # Ensure blur_k is odd
-    if blur_k % 2 == 0:
-        blur_k += 1
-
-    height, width = image.shape[:2]
-
-    # 1. Pre-processing
+    h, w = image.shape[:2]
+    
+    # 1) extract long vertical lines
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    blur = cv2.GaussianBlur(gray, (blur_k, blur_k), 0)
+    _, bw  = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    vert   = 255 - bw
+    k_len  = max(15, int(line_len_frac * h))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (line_thick, k_len))
+    lines  = cv2.morphologyEx(vert, cv2.MORPH_OPEN, kernel)
 
-    # 2. Remove thin vertical lines (table borders)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (open_k, 1))
-    cleaned = cv2.morphologyEx(blur, cv2.MORPH_OPEN, kernel)
+    # 2) column response & search window
+    col_sum = lines.sum(axis=0)
+    centre  = w // 2
+    margin  = int((1 - search_ratio) / 2 * w)
+    window  = col_sum[margin:w - margin]
 
-    # 3. Column-wise darkness profile
-    col_dark = cleaned.mean(axis=0)  # lower values = darker
-    w = col_dark.size
-    margin = int((1 - search_ratio) / 2 * w)
-    window = col_dark[margin : w - margin]
-
-    # 4. Boolean mask of "dark" columns (20th percentile)
-    thresh = np.percentile(window, 20)
-    darkmask = window < thresh
-
-    # 5. Find contiguous dark segments inside the search window
-    segments, start = [], None
-    for i, is_dark in enumerate(darkmask):
-        if is_dark and start is None:
-            start = i
-        elif not is_dark and start is not None:
-            segments.append((start + margin, i - 1 + margin))
-            start = None
-    if start is not None:  # mask ended while still dark
-        segments.append((start + margin, len(window) - 1 + margin))
-
-    if not segments:
-        # Fallback: use center if no segments found
-        gutter_x = width // 2
-        left_page = image[:, :gutter_x]
-        right_page = image[:, gutter_x:]
-
+    peaks = np.where(window >= peak_thr * window.max())[0] + margin
+    if len(peaks) < 2:                     # fallback if only one border found
+        split_x = centre
+        left_page = image[:, :split_x]
+        right_page = image[:, split_x:]
+        
         if not return_analysis:
             return left_page, right_page
-
+            
+        # Build analysis for fallback case
         analysis = {
-            "gutter_x": gutter_x,
+            "gutter_x": split_x,
             "gutter_strength": 0.0,
             "gutter_width": 0,
             "search_start": margin,
@@ -120,96 +101,86 @@ def split_two_page_image(
             "fallback_used": True,
             "meets_min_width": False,
             "has_two_pages": False,
-            "col_dark": col_dark,
-            "darkmask": darkmask,
-            "thresh": thresh,
+            "col_dark": None,
+            "darkmask": None,
+            "thresh": None,
+            "widest_segment_width": 0,
+            # Legacy compatibility fields
+            "vertical_sums": None,
+            "min_sum": 0,
+            "avg_sum": 0,
         }
         return left_page, right_page, analysis
 
-    # 6. Keep only segments wide enough to be the gutter
-    valid_segments = [(s, e) for s, e in segments if (e - s + 1) >= width_min]
-    if not valid_segments:
-        # Fallback to center if no valid segments
-        gutter_x = width // 2
-        left_page = image[:, :gutter_x]
-        right_page = image[:, gutter_x:]
+    # 3) contiguous-peak grouping
+    segments, s = [], peaks[0]
+    for p, q in zip(peaks, peaks[1:]):
+        if q != p + 1:
+            segments.append((s, p)); s = q
+    segments.append((s, peaks[-1]))
 
+    # 4) choose the two segments nearest the centre
+    segs = sorted(segments, key=lambda ab: abs(((ab[0]+ab[1])//2) - centre))[:2]
+    if len(segs) < 2:  # If only one segment found, use center fallback
+        split_x = centre
+        left_page = image[:, :split_x]
+        right_page = image[:, split_x:]
+        
         if not return_analysis:
             return left_page, right_page
-
+            
+        # Build analysis for single segment case
         analysis = {
-            "gutter_x": gutter_x,
-            "gutter_strength": 0.0,
-            "gutter_width": 0,
+            "gutter_x": split_x,
+            "gutter_strength": 0.5,
+            "gutter_width": 1,
             "search_start": margin,
             "search_end": w - margin,
             "segments": segments,
-            "valid_segments": [],
-            "selected_segment": None,
+            "selected_segment": segments[0] if segments else None,
             "fallback_used": True,
             "meets_min_width": False,
             "has_two_pages": False,
-            "col_dark": col_dark,
-            "darkmask": darkmask,
-            "thresh": thresh,
+            "col_dark": None,
+            "darkmask": None,
+            "thresh": None,
+            "widest_segment_width": 1,
+            # Legacy compatibility fields
+            "vertical_sums": None,
+            "min_sum": 0,
+            "avg_sum": 0,
         }
         return left_page, right_page, analysis
-
-    # 7. Choose the best candidate (widest, then nearest center)
-    widest = max(e - s + 1 for s, e in valid_segments)
-    centre = w // 2
-    selected_segment = min(
-        (
-            (abs(((s + e) // 2) - centre), (s + e) // 2, s, e)
-            for s, e in valid_segments
-            if (e - s + 1) == widest
-        ),
-        key=lambda x: x[0],
-    )
-    gutter_x = selected_segment[1]
-    selected_s, selected_e = selected_segment[2], selected_segment[3]
-
-    # 8. Crop pages
-    left_page = image[:, :gutter_x]
-    right_page = image[:, gutter_x:]
-
+    
+    (a1, b1), (a2, b2) = sorted(segs, key=lambda ab: ab[0])
+    split_x = (b1 + a2) // 2
+    
+    left_page = image[:, :split_x]
+    right_page = image[:, split_x:]
+    
     if not return_analysis:
         return left_page, right_page
-
-    # Calculate enhanced analysis information
-    gutter_width = selected_e - selected_s + 1
-
-    # Calculate gutter strength based on contrast within the selected segment
-    segment_values = col_dark[selected_s : selected_e + 1]
-    avg_segment = np.mean(segment_values)
-    avg_all = np.mean(col_dark)
-    gutter_strength = (avg_all - avg_segment) / avg_all if avg_all > 0 else 0
-
-    # Determine if image has two pages based on segment analysis
-    has_two_pages = (
-        len(valid_segments) > 0 and gutter_strength >= 0.15 and gutter_width >= 1
-    )
-
+    
+    # Build full analysis dict for compatibility
     analysis = {
-        "gutter_x": gutter_x,
-        "gutter_strength": gutter_strength,
-        "gutter_width": gutter_width,
+        "gutter_x": split_x,
+        "gutter_strength": 1.0,  # V2 doesn't calculate this exactly
+        "gutter_width": a2 - b1,
         "search_start": margin,
         "search_end": w - margin,
         "segments": segments,
-        "valid_segments": valid_segments,
-        "selected_segment": (selected_s, selected_e),
+        "selected_segment": (b1, a2),
         "fallback_used": False,
-        "meets_min_width": gutter_width >= width_min,
-        "has_two_pages": has_two_pages,
-        "col_dark": col_dark,
-        "darkmask": darkmask,
-        "thresh": thresh,
-        "widest_segment_width": widest,
+        "meets_min_width": True,
+        "has_two_pages": True,
+        "col_dark": None,
+        "darkmask": None,
+        "thresh": None,
+        "widest_segment_width": max(b - a + 1 for a, b in segments) if segments else 0,
         # Legacy compatibility fields
-        "vertical_sums": None,  # Not used in new algorithm
-        "min_sum": avg_segment * height,  # Approximate for compatibility
-        "avg_sum": avg_all * height,  # Approximate for compatibility
+        "vertical_sums": None,
+        "min_sum": 0,
+        "avg_sum": 0,
     }
-
+    
     return left_page, right_page, analysis

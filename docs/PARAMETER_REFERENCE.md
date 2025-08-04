@@ -38,40 +38,51 @@ Complete reference guide for all configurable parameters in the simplified OCR t
 
 ## Page Splitting Parameters
 
-Page splitting separates double-page scanned documents into individual pages by detecting the gutter (binding area).
+Page splitting separates double-page scanned documents into individual pages by detecting the gutter (binding area). The V2 algorithm uses vertical line detection for more robust gutter detection.
 
-### `gutter_search_start`
+### `search_ratio`
 - **Type**: `float`
-- **Default**: `0.4`
-- **Range**: `0.0 - 1.0` (fraction of image width)
-- **Description**: Start position for searching the page gutter from the left edge
+- **Default**: `0.5`
+- **Range**: `0.0 - 1.0` (fraction of width to search, centered)
+- **Description**: Fraction of image width (centered) to search for the gutter
 - **Examples**:
-  - `0.35`: Start searching at 35% of image width (wider search area)
-  - `0.4`: Start searching at 40% of image width (default)
-  - `0.45`: Start searching at 45% of image width (narrower search area)
-- **Tuning**: Decrease for documents with off-center binding, increase for centered binding
+  - `0.3`: Search central 30% of image (narrow search)
+  - `0.5`: Search central 50% of image (default)
+  - `0.8`: Search central 80% of image (wide search)
+- **Tuning**: Increase for off-center bindings, decrease for well-centered documents
 
-### `gutter_search_end`
+### `line_len_frac`
 - **Type**: `float`
-- **Default**: `0.6`
-- **Range**: `0.0 - 1.0` (fraction of image width)
-- **Description**: End position for searching the page gutter from the left edge
+- **Default**: `0.3`
+- **Range**: `0.1 - 0.5` (fraction of image height)
+- **Description**: Minimum vertical line length as fraction of image height
 - **Examples**:
-  - `0.55`: Stop searching at 55% of image width (narrower search area)
-  - `0.6`: Stop searching at 60% of image width (default)
-  - `0.65`: Stop searching at 65% of image width (wider search area)
-- **Tuning**: Must be greater than `gutter_search_start`
+  - `0.2`: Detect shorter vertical lines (20% of height)
+  - `0.3`: Standard detection (30% of height)
+  - `0.4`: Detect only longer vertical lines (40% of height)
+- **Tuning**: Decrease for documents with partial vertical lines, increase for cleaner documents
 
-### `min_gutter_width`
+### `line_thick`
 - **Type**: `int`
-- **Default**: `50`
-- **Range**: `20 - 200` pixels
-- **Description**: Minimum width required for a valid gutter detection
+- **Default**: `3`
+- **Range**: `1 - 10` pixels
+- **Description**: Kernel width for vertical line detection
 - **Examples**:
-  - `30`: Very narrow binding (magazines, thin books)
-  - `50`: Standard book binding (default)
-  - `100`: Thick book binding (textbooks, manuals)
-- **Tuning**: Increase for thicker books, decrease for thin publications
+  - `2`: Detect thinner lines
+  - `3`: Standard line thickness (default)
+  - `5`: Detect thicker lines
+- **Tuning**: Increase for documents with thick borders, decrease for thin lines
+
+### `peak_thr`
+- **Type**: `float`
+- **Default**: `0.3`
+- **Range**: `0.1 - 0.8` (fraction of max response)
+- **Description**: Peak threshold for line detection (fraction of maximum response)
+- **Examples**:
+  - `0.2`: More sensitive detection (20% of max)
+  - `0.3`: Standard sensitivity (30% of max)
+  - `0.5`: Less sensitive detection (50% of max)
+- **Tuning**: Decrease for faint lines, increase to reduce false detections
 
 ---
 
@@ -325,8 +336,7 @@ Line detection uses a connected components method to identify table structure by
 ```json
 {
   "verbose": true,
-  "gutter_search_start": 0.4,
-  "gutter_search_end": 0.6,
+  "search_ratio": 0.5,
   "threshold": 40
 }
 ```
@@ -334,8 +344,9 @@ Line detection uses a connected components method to identify table structure by
 ### High Sensitivity Configuration
 ```json
 {
-  "gutter_search_start": 0.35,
-  "gutter_search_end": 0.65,
+  "search_ratio": 0.8,
+  "line_len_frac": 0.2,
+  "peak_thr": 0.2,
   "angle_range": 10,
   "min_angle_correction": 0.05,
   "black_threshold": 30,
@@ -354,8 +365,9 @@ Line detection uses a connected components method to identify table structure by
 ### Conservative Configuration
 ```json
 {
-  "gutter_search_start": 0.42,
-  "gutter_search_end": 0.58,
+  "search_ratio": 0.3,
+  "line_thick": 5,
+  "peak_thr": 0.5,
   "angle_range": 3,
   "min_angle_correction": 0.5,
   "black_threshold": 60,

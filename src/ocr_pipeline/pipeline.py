@@ -49,9 +49,9 @@ class OCRPipeline:
         left_page, right_page = split_two_page_image(
             image,
             search_ratio=self.config.search_ratio,
-            blur_k=self.config.blur_k,
-            open_k=self.config.open_k,
-            width_min=self.config.width_min
+            line_len_frac=getattr(self.config, 'line_len_frac', 0.3),
+            line_thick=getattr(self.config, 'line_thick', 3),
+            peak_thr=getattr(self.config, 'peak_thr', 0.3)
         )
 
         output_paths = []
@@ -242,9 +242,9 @@ class TwoStageOCRPipeline:
                 left_page, right_page = split_two_page_image(
                     processing_image,
                     search_ratio=self.stage1_config.search_ratio,
-                    blur_k=self.stage1_config.blur_k,
-                    open_k=self.stage1_config.open_k,
-                    width_min=self.stage1_config.width_min,
+                    line_len_frac=getattr(self.stage1_config, 'line_len_frac', 0.3),
+                    line_thick=getattr(self.stage1_config, 'line_thick', 3),
+                    peak_thr=getattr(self.stage1_config, 'peak_thr', 0.3),
                 )
 
                 # Save split pages

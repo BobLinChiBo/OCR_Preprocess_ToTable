@@ -122,7 +122,7 @@ python -m build
 ## Configuration Parameters
 
 ### Key Parameters
-- **Page Splitting**: `gutter_search_start` (0.4), `gutter_search_end` (0.6)
+- **Page Splitting (V2)**: `search_ratio` (0.5), `line_len_frac` (0.3), `line_thick` (3), `peak_thr` (0.3)
 - **Deskewing**: `angle_range` (5°), `min_angle_correction` (0.1°)
 - **Margin Removal (Inscribed)**: `inscribed_blur_ksize` (5), `inscribed_close_ksize` (25), `inscribed_close_iter` (2)
 - **Margin Removal (Legacy)**: `black_threshold` (50), `content_threshold` (200)

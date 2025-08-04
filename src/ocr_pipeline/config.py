@@ -16,10 +16,10 @@ class Config:
     debug_dir: Optional[Path] = None
 
     # Page splitting parameters
-    search_ratio: float = 0.3  # Fraction of width, centered, to search for gutter
-    blur_k: int = 21  # Gaussian blur kernel size (odd number)
-    open_k: int = 9  # Morphological opening kernel width
-    width_min: int = 20  # Minimum gutter width in pixels
+    search_ratio: float = 0.5  # Fraction of width, centered, to search for gutter
+    line_len_frac: float = 0.3  # Vertical kernel = 30% of image height
+    line_thick: int = 3  # Kernel width in pixels
+    peak_thr: float = 0.3  # Peak threshold (30% of max response)
 
     # Deskewing
     angle_range: int = 5
@@ -102,12 +102,16 @@ class Config:
             raise ValueError(
                 f"search_ratio must be between 0 and 1, got {self.search_ratio}"
             )
-        if self.blur_k <= 0 or self.blur_k % 2 == 0:
-            raise ValueError(f"blur_k must be positive and odd, got {self.blur_k}")
-        if self.open_k <= 0:
-            raise ValueError(f"open_k must be positive, got {self.open_k}")
-        if self.width_min <= 0:
-            raise ValueError(f"width_min must be positive, got {self.width_min}")
+        if not (0.0 <= self.line_len_frac <= 1.0):
+            raise ValueError(
+                f"line_len_frac must be between 0 and 1, got {self.line_len_frac}"
+            )
+        if self.line_thick <= 0:
+            raise ValueError(f"line_thick must be positive, got {self.line_thick}")
+        if not (0.0 <= self.peak_thr <= 1.0):
+            raise ValueError(
+                f"peak_thr must be between 0 and 1, got {self.peak_thr}"
+            )
         if self.angle_range <= 0:
             raise ValueError(f"angle_range must be positive, got {self.angle_range}")
         if self.angle_step <= 0:
@@ -252,10 +256,10 @@ class Stage1Config(Config):
             page_split = config_dict["page_splitting"]
             config_dict.update(
                 {
-                    "search_ratio": page_split.get("search_ratio", 0.3),
-                    "blur_k": page_split.get("blur_k", 21),
-                    "open_k": page_split.get("open_k", 9),
-                    "width_min": page_split.get("width_min", 20),
+                    "search_ratio": page_split.get("search_ratio", 0.5),
+                    "line_len_frac": page_split.get("line_len_frac", 0.3),
+                    "line_thick": page_split.get("line_thick", 3),
+                    "peak_thr": page_split.get("peak_thr", 0.3),
                 }
             )
             del config_dict["page_splitting"]

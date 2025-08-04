@@ -43,10 +43,10 @@ def find_gutter_detailed(
     
     # Get gutter detection parameters
     params = {
-        'search_ratio': kwargs.get('search_ratio', 0.3),
-        'blur_k': kwargs.get('blur_k', 21),
-        'open_k': kwargs.get('open_k', 9),
-        'width_min': kwargs.get('width_min', 20),
+        'search_ratio': kwargs.get('search_ratio', 0.5),
+        'line_len_frac': kwargs.get('line_len_frac', 0.3),
+        'line_thick': kwargs.get('line_thick', 3),
+        'peak_thr': kwargs.get('peak_thr', 0.3),
         'return_analysis': True,
     }
     
@@ -356,26 +356,26 @@ def main():
     parser.add_argument(
         "--search-ratio",
         type=float,
-        default=0.3,
+        default=0.5,
         help="Fraction of width (centered) to search for gutter (0-1)",
     )
     parser.add_argument(
-        "--blur-k",
-        type=int,
-        default=21,
-        help="Gaussian blur kernel size (odd number, higher = more noise removal)",
+        "--line-len-frac",
+        type=float,
+        default=0.3,
+        help="Minimum vertical line length as fraction of image height (0.1-0.5)",
     )
     parser.add_argument(
-        "--open-k",
+        "--line-thick",
         type=int,
-        default=9,
-        help="Morphological opening kernel width (removes thin vertical lines)",
+        default=3,
+        help="Kernel width for vertical line detection (1-10 pixels)",
     )
     parser.add_argument(
-        "--width-min",
-        type=int,
-        default=20,
-        help="Minimum gutter width in pixels",
+        "--peak-thr",
+        type=float,
+        default=0.3,
+        help="Peak threshold for line detection (0.1-0.8, fraction of max response)",
     )
     
     args = parser.parse_args()
@@ -425,9 +425,9 @@ def main():
     # Add page split specific args
     command_args.update({
         'search_ratio': args.search_ratio,
-        'blur_k': args.blur_k,
-        'open_k': args.open_k,
-        'width_min': args.width_min,
+        'line_len_frac': getattr(args, 'line_len_frac', 0.3),
+        'line_thick': getattr(args, 'line_thick', 3),
+        'peak_thr': getattr(args, 'peak_thr', 0.3),
     })
     
     output_dir = Path(args.output_dir)
