@@ -1,14 +1,18 @@
 {
   "input_dir": "data/input",
-  "output_dir": "data/output/stage1_initial_processing",
+  "output_dir": "data/output/stage1",
   "debug_dir": "data/debug/stage1_debug",
   "verbose": true,
   "save_debug_images": false,
+  "mark_removal": {
+    "enable_mark_removal": true,
+    "dilate_iter": 2
+  },
   "page_splitting": {
     "search_ratio": 0.3,
-    "blur_k": 21,
-    "open_k": 9,
-    "width_min": 20
+    "blur_k": 15,
+    "open_k": 15,
+    "width_min": 30
   },
   "deskewing": {
     "angle_range": 5,

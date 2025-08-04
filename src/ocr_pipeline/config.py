@@ -204,6 +204,10 @@ class Stage1Config(Config):
     
     min_aspect_ratio: int = 3  # Lower aspect ratio for initial detection
 
+    # Stage 1 mark removal - remove watermarks/stamps/artifacts
+    enable_mark_removal: bool = True
+    mark_removal_dilate_iter: int = 2
+
     # Stage 1 margin removal - more aggressive
     enable_margin_removal: bool = True
     blur_kernel_size: int = 9
@@ -228,12 +232,13 @@ class Stage1Config(Config):
 
         # Create Stage 1 subdirectories
         stage1_dirs = [
-            "01_split_pages",
+            "01_marks_removed",
             "02_margin_removed",
-            "03_deskewed",
-            "04_table_lines",
-            "05_table_structure",
-            "06_border_cropped",
+            "03_split_pages",
+            "04_deskewed",
+            "05_table_lines",
+            "06_table_structure",
+            "07_border_cropped",
         ]
 
         for subdir in stage1_dirs:
@@ -285,6 +290,16 @@ class Stage1Config(Config):
                 }
             )
             del config_dict["table_line_detection"]
+
+        if "mark_removal" in config_dict:
+            mark = config_dict["mark_removal"]
+            config_dict.update(
+                {
+                    "enable_mark_removal": mark.get("enable_mark_removal", True),
+                    "mark_removal_dilate_iter": mark.get("dilate_iter", 2),
+                }
+            )
+            del config_dict["mark_removal"]
 
         if "margin_removal" in config_dict:
             margin = config_dict["margin_removal"]

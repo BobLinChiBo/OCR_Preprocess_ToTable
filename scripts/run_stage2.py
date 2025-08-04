@@ -44,10 +44,10 @@ Examples:
     parser.add_argument(
         "input",
         nargs="?",
-        default="data/output/stage1_initial_processing/06_border_cropped",
+        default="data/output/stage1_initial_processing/07_border_cropped",
         help=(
             "Input directory with cropped tables from Stage 1 "
-            "(default: data/output/stage1_initial_processing/06_border_cropped/)"
+            "(default: data/output/stage1_initial_processing/07_border_cropped/)"
         ),
     )
 

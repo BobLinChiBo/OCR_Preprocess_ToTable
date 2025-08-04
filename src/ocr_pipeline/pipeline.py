@@ -131,9 +131,23 @@ class TwoStageOCRPipeline:
         self.stage1_config = stage1_config or get_stage1_config()
         self.stage2_config = stage2_config or get_stage2_config()
 
-        # Create separate pipeline instances for each stage
-        self.stage1_pipeline = OCRPipeline(self.stage1_config)
-        self.stage2_pipeline = OCRPipeline(self.stage2_config)
+        # Lazy initialization - pipelines created only when needed
+        self._stage1_pipeline = None
+        self._stage2_pipeline = None
+
+    @property
+    def stage1_pipeline(self) -> OCRPipeline:
+        """Get or create Stage 1 pipeline on demand."""
+        if self._stage1_pipeline is None:
+            self._stage1_pipeline = OCRPipeline(self.stage1_config)
+        return self._stage1_pipeline
+
+    @property
+    def stage2_pipeline(self) -> OCRPipeline:
+        """Get or create Stage 2 pipeline on demand."""
+        if self._stage2_pipeline is None:
+            self._stage2_pipeline = OCRPipeline(self.stage2_config)
+        return self._stage2_pipeline
 
     def run_stage1(self, input_path: Path = None) -> List[Path]:
         """
@@ -175,10 +189,45 @@ class TwoStageOCRPipeline:
                 if self.stage1_config.verbose:
                     print(f"\nProcessing: {image_path.name}")
 
-                # Load and split image
+                # Load image
                 image = utils.load_image(image_path)
+                processing_image = image
+
+                # Step 1: Mark removal (on full image)
+                if self.stage1_config.enable_mark_removal:
+                    processing_image = utils.remove_marks(
+                        processing_image,
+                        dilate_iter=self.stage1_config.mark_removal_dilate_iter
+                    )
+                    
+                    # Save marks-removed image
+                    marks_dir = self.stage1_config.output_dir / "01_marks_removed"
+                    marks_path = marks_dir / f"{image_path.stem}_marks_removed.jpg"
+                    utils.save_image(processing_image, marks_path)
+                    
+                    if self.stage1_config.verbose:
+                        print(f"  Marks removed from full image")
+
+                # Step 2: Margin removal (on cleaned full image)
+                if self.stage1_config.enable_margin_removal:
+                    processing_image = utils.remove_margin_inscribed(
+                        processing_image,
+                        blur_ksize=getattr(self.stage1_config, 'inscribed_blur_ksize', 7),
+                        close_ksize=getattr(self.stage1_config, 'inscribed_close_ksize', 30),
+                        close_iter=getattr(self.stage1_config, 'inscribed_close_iter', 3),
+                    )
+                    
+                    # Save margin-removed image
+                    margin_dir = self.stage1_config.output_dir / "02_margin_removed"
+                    margin_path = margin_dir / f"{image_path.stem}_margin_removed.jpg"
+                    utils.save_image(processing_image, margin_path)
+                    
+                    if self.stage1_config.verbose:
+                        print(f"  Margin removed from full image: {processing_image.shape}")
+
+                # Step 3: Split processed image into pages
                 left_page, right_page = utils.split_two_page_image(
-                    image,
+                    processing_image,
                     search_ratio=self.stage1_config.search_ratio,
                     blur_k=self.stage1_config.blur_k,
                     open_k=self.stage1_config.open_k,
@@ -186,7 +235,7 @@ class TwoStageOCRPipeline:
                 )
 
                 # Save split pages
-                split_dir = self.stage1_config.output_dir / "01_split_pages"
+                split_dir = self.stage1_config.output_dir / "03_split_pages"
                 for i, page in enumerate([left_page, right_page], 1):
                     split_path = split_dir / f"{image_path.stem}_page_{i}.jpg"
                     utils.save_image(page, split_path)
@@ -196,26 +245,9 @@ class TwoStageOCRPipeline:
                 # Process each split page
                 for i, page in enumerate([left_page, right_page], 1):
                     page_name = f"{image_path.stem}_page_{i}"
-
-                    # Margin removal
                     processing_image = page
-                    if self.stage1_config.enable_margin_removal:
-                        processing_image = utils.remove_margin_inscribed(
-                            page,
-                            blur_ksize=getattr(self.stage1_config, 'inscribed_blur_ksize', 7),
-                            close_ksize=getattr(self.stage1_config, 'inscribed_close_ksize', 30),
-                            close_iter=getattr(self.stage1_config, 'inscribed_close_iter', 3),
-                        )
 
-                        # Save margin-removed image
-                        margin_dir = self.stage1_config.output_dir / "02_margin_removed"
-                        margin_path = margin_dir / f"{page_name}_margin_removed.jpg"
-                        utils.save_image(processing_image, margin_path)
-
-                        if self.stage1_config.verbose:
-                            print(f"    Margin removed: {processing_image.shape} (from {page.shape})")
-
-                    # Deskew
+                    # Step 4: Deskew (per page)
                     deskewed, angle = utils.deskew_image(
                         processing_image,
                         self.stage1_config.angle_range,
@@ -224,14 +256,14 @@ class TwoStageOCRPipeline:
                     )
 
                     # Save deskewed image
-                    deskew_dir = self.stage1_config.output_dir / "03_deskewed"
+                    deskew_dir = self.stage1_config.output_dir / "04_deskewed"
                     deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
                     utils.save_image(deskewed, deskew_path)
 
                     if self.stage1_config.verbose:
                         print(f"  Deskewed: {angle:.2f} degrees")
 
-                    # Table line detection
+                    # Step 5: Table line detection
                     h_lines, v_lines = utils.detect_table_lines(
                         deskewed,
                         threshold=self.stage1_config.threshold,
@@ -246,7 +278,7 @@ class TwoStageOCRPipeline:
                     )
 
                     # Save table line visualization
-                    lines_dir = self.stage1_config.output_dir / "04_table_lines"
+                    lines_dir = self.stage1_config.output_dir / "05_table_lines"
                     lines_path = lines_dir / f"{page_name}_table_lines.jpg"
                     vis_image = utils.visualize_detected_lines(deskewed, h_lines, v_lines)
                     utils.save_image(vis_image, lines_path)
@@ -265,7 +297,7 @@ class TwoStageOCRPipeline:
                     with open(lines_json_path, 'w') as f:
                         json.dump(lines_data, f, indent=2)
 
-                    # Table structure detection from detected lines
+                    # Step 6: Table structure detection from detected lines
                     table_structure = utils.detect_table_structure(
                         h_lines,  # Pass horizontal lines
                         v_lines,  # Pass vertical lines
@@ -274,7 +306,7 @@ class TwoStageOCRPipeline:
                     )
 
                     # Save table structure visualization
-                    structure_dir = self.stage1_config.output_dir / "05_table_structure"
+                    structure_dir = self.stage1_config.output_dir / "06_table_structure"
                     structure_path = structure_dir / f"{page_name}_table_structure.jpg"
                     structure_vis = utils.visualize_table_structure(deskewed, table_structure)
                     utils.save_image(structure_vis, structure_path)
@@ -292,7 +324,7 @@ class TwoStageOCRPipeline:
                     with open(structure_json_path, 'w') as f:
                         json.dump(table_structure, f, indent=2)
 
-                    # NEW: Crop deskewed image using detected table borders with padding
+                    # Step 7: Crop deskewed image using detected table borders with padding
                     cropped_table = utils.crop_to_table_borders(
                         deskewed, 
                         table_structure,
@@ -301,7 +333,7 @@ class TwoStageOCRPipeline:
                     )
 
                     # Save border-cropped table for Stage 2
-                    crop_dir = self.stage1_config.output_dir / "06_border_cropped"
+                    crop_dir = self.stage1_config.output_dir / "07_border_cropped"
                     crop_path = crop_dir / f"{page_name}_border_cropped.jpg"
                     utils.save_image(cropped_table, crop_path)
                     cropped_tables.append(crop_path)
@@ -316,7 +348,7 @@ class TwoStageOCRPipeline:
             print(
                 f"\n*** STAGE 1 COMPLETE: {len(cropped_tables)} cropped tables ready for Stage 2 ***"
             )
-            print(f"Output: {self.stage1_config.output_dir / '06_border_cropped'}")
+            print(f"Output: {self.stage1_config.output_dir / '07_border_cropped'}")
 
         return cropped_tables
 

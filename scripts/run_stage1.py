@@ -46,20 +46,20 @@ Examples:
     parser.add_argument(
         "input",
         nargs="?",
-        default="data/input/raw_images",
+        default=None,
         help=(
             "Input directory with raw images or single image file "
-            "(default: data/input/raw_images/)"
+            "(default: from config file or data/input/raw_images/)"
         ),
     )
 
     parser.add_argument(
         "-o",
         "--output",
-        default="data/output/stage1_initial_processing",
+        default=None,
         help=(
             "Output directory for Stage 1 results "
-            "(default: data/output/stage1_initial_processing/)"
+            "(default: from config file)"
         ),
     )
 
@@ -80,22 +80,22 @@ Examples:
     parser.add_argument(
         "--angle-range",
         type=int,
-        default=10,
-        help="Deskewing angle range in degrees (default: 10)",
+        default=None,
+        help="Deskewing angle range in degrees (default: from config file)",
     )
 
     parser.add_argument(
         "--angle-step",
         type=float,
-        default=0.2,
-        help="Deskewing angle step in degrees (default: 0.2)",
+        default=None,
+        help="Deskewing angle step in degrees (default: from config file)",
     )
 
     parser.add_argument(
         "--min-line-length",
         type=int,
-        default=40,
-        help="Minimum line length for table detection (default: 40)",
+        default=None,
+        help="Minimum line length for table detection (default: from config file)",
     )
 
     parser.add_argument(
@@ -114,30 +114,42 @@ Examples:
 
     args = parser.parse_args()
 
-    # Handle --test-images flag
+    # Create Stage 1 configuration
+    # Start with JSON config if provided, otherwise use defaults
+    stage1_config = get_stage1_config(args.config)
+
+    # Handle input path
     if args.test_images:
         input_path = Path("data/input/test_images")
-    else:
+    elif args.input is not None:
         input_path = Path(args.input)
+    else:
+        # Use config file's input_dir
+        input_path = stage1_config.input_dir
     
     # Validate input
     if not input_path.exists():
         print(f"❌ Error: Input path does not exist: {input_path}")
         sys.exit(1)
 
-    # Create Stage 1 configuration
-    # Start with JSON config if provided, otherwise use defaults
-    stage1_config = get_stage1_config(args.config)
-
-    # Override with command line arguments
-    stage1_config.input_dir = input_path  # Keep the actual input path
-    stage1_config.output_dir = Path(args.output)
+    # Override config with command line arguments only if provided
+    stage1_config.input_dir = input_path  # Always set the resolved input path
+    
+    if args.output is not None:
+        stage1_config.output_dir = Path(args.output)
+    
+    # Always override these flags
     stage1_config.verbose = args.verbose
     stage1_config.save_debug_images = args.debug
-    stage1_config.angle_range = args.angle_range
-    stage1_config.angle_step = args.angle_step
-    stage1_config.min_line_length = args.min_line_length
     stage1_config.enable_roi_detection = not args.disable_roi
+    
+    # Only override numeric parameters if provided
+    if args.angle_range is not None:
+        stage1_config.angle_range = args.angle_range
+    if args.angle_step is not None:
+        stage1_config.angle_step = args.angle_step
+    if args.min_line_length is not None:
+        stage1_config.min_line_length = args.min_line_length
 
     try:
         if args.verbose:
@@ -168,7 +180,7 @@ Examples:
             print(f"Results saved to: {stage1_config.output_dir}")
             print(
                 "Cropped tables ready for Stage 2: "
-                f"{stage1_config.output_dir / '06_border_cropped'}"
+                f"{stage1_config.output_dir / '07_border_cropped'}"
             )
             print()
             print("Next steps:")
@@ -177,7 +189,7 @@ Examples:
         else:
             print(
                 f"Stage 1 complete: {len(results)} cropped tables -> "
-                f"{stage1_config.output_dir / '06_border_cropped'}"
+                f"{stage1_config.output_dir / '07_border_cropped'}"
             )
 
         return True

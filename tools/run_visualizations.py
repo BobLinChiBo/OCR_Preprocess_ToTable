@@ -30,6 +30,11 @@ class VisualizationRunner:
         
         # V2 scripts are now the only supported version
         self.available_scripts = {
+            "mark-removal": {
+                "script": "visualize_mark_removal_v2.py",
+                "description": "Mark removal visualization (watermarks/stamps/artifacts)",
+                "default_args": ["--save-debug"],
+            },
             "page-split": {
                 "script": "visualize_page_split_v2.py",
                 "description": "Page splitting visualization",
@@ -492,7 +497,7 @@ Examples:
   python run_visualizations.py all --test-images
 
   # Pipeline mode: each stage uses previous stage's output as input
-  python run_visualizations.py page-split margin-removal deskew --test-images --pipeline
+  python run_visualizations.py mark-removal margin-removal page-split deskew --test-images --pipeline
 
   # Test new table structure detection
   python run_visualizations.py table-structure --test-images
@@ -549,39 +554,42 @@ Examples:
 
     # Per-script arguments (parsed manually)
     parser.add_argument(
-        "--deskew-args", nargs="*", dest="_ignore1", help="Arguments for deskew script"
+        "--mark-removal-args", nargs="*", dest="_ignore1", help="Arguments for mark-removal script"
+    )
+    parser.add_argument(
+        "--deskew-args", nargs="*", dest="_ignore2", help="Arguments for deskew script"
     )
     parser.add_argument(
         "--page-split-args",
         nargs="*",
-        dest="_ignore2",
+        dest="_ignore3",
         help="Arguments for page-split script",
     )
     parser.add_argument(
-        "--margin-removal-args", nargs="*", dest="_ignore3", help="Arguments for margin-removal script"
+        "--margin-removal-args", nargs="*", dest="_ignore4", help="Arguments for margin-removal script"
     )
     parser.add_argument(
         "--table-lines-args",
         nargs="*",
-        dest="_ignore4",
+        dest="_ignore5",
         help="Arguments for table-lines script",
     )
     parser.add_argument(
         "--table-crop-args",
         nargs="*",
-        dest="_ignore5",
+        dest="_ignore6",
         help="Arguments for table-crop script",
     )
     parser.add_argument(
         "--table-structure-args",
         nargs="*",
-        dest="_ignore6",
+        dest="_ignore7",
         help="Arguments for table-structure script",
     )
     parser.add_argument(
         "--pipeline-args",
         nargs="*",
-        dest="_ignore7",
+        dest="_ignore8",
         help="Arguments for pipeline script",
     )
 
