@@ -26,6 +26,8 @@ from .processors import (
     detect_table_structure,
     visualize_table_structure,
     crop_to_table_borders,
+    table_recovery,
+    cut_vertical_strips,
 )
 
 
@@ -46,7 +48,7 @@ class OCRPipeline:
         image = load_image(image_path)
 
         # Split into two pages
-        left_page, right_page = split_two_page_image(
+        right_page, left_page = split_two_page_image(
             image,
             search_ratio=self.config.search_ratio,
             line_len_frac=getattr(self.config, 'line_len_frac', 0.3),
@@ -57,7 +59,7 @@ class OCRPipeline:
         output_paths = []
 
         # Process each page
-        for i, page in enumerate([left_page, right_page], 1):
+        for page_name, page in [("left", left_page), ("right", right_page)]:
             # Margin removal (preprocessing step)
             processing_image = page
             if self.config.enable_margin_removal:
@@ -91,13 +93,16 @@ class OCRPipeline:
                 v_min_length_image_ratio=self.config.v_min_length_image_ratio,
                 v_min_length_relative_ratio=self.config.v_min_length_relative_ratio,
                 min_aspect_ratio=self.config.min_aspect_ratio,
+                max_h_length_ratio=self.config.max_h_length_ratio,
+                max_v_length_ratio=self.config.max_v_length_ratio,
+                close_line_distance=self.config.close_line_distance,
             )
 
             # Use deskewed image directly (table cropping is done in Stage 1)
             cropped = deskewed
 
             # Save result
-            output_name = f"{image_path.stem}_page_{i}.jpg"
+            output_name = f"{image_path.stem}_{page_name}.jpg"
             output_path = self.config.output_dir / output_name
             save_image(cropped, output_path)
             output_paths.append(output_path)
@@ -239,7 +244,7 @@ class TwoStageOCRPipeline:
                         print(f"  Margin removed from full image: {processing_image.shape}")
 
                 # Step 3: Split processed image into pages
-                left_page, right_page = split_two_page_image(
+                right_page, left_page = split_two_page_image(
                     processing_image,
                     search_ratio=self.stage1_config.search_ratio,
                     line_len_frac=getattr(self.stage1_config, 'line_len_frac', 0.3),
@@ -249,15 +254,15 @@ class TwoStageOCRPipeline:
 
                 # Save split pages
                 split_dir = self.stage1_config.output_dir / "03_split_pages"
-                for i, page in enumerate([left_page, right_page], 1):
-                    split_path = split_dir / f"{image_path.stem}_page_{i}.jpg"
+                for page_name, page in [("left", left_page), ("right", right_page)]:
+                    split_path = split_dir / f"{image_path.stem}_{page_name}.jpg"
                     save_image(page, split_path)
                     if self.stage1_config.verbose:
                         print(f"  Split page saved: {split_path.name}")
 
                 # Process each split page
-                for i, page in enumerate([left_page, right_page], 1):
-                    page_name = f"{image_path.stem}_page_{i}"
+                for page_suffix, page in [("left", left_page), ("right", right_page)]:
+                    page_name = f"{image_path.stem}_{page_suffix}"
                     processing_image = page
 
                     # Step 4: Deskew (per page)
@@ -288,6 +293,9 @@ class TwoStageOCRPipeline:
                         v_min_length_image_ratio=self.stage1_config.v_min_length_image_ratio,
                         v_min_length_relative_ratio=self.stage1_config.v_min_length_relative_ratio,
                         min_aspect_ratio=self.stage1_config.min_aspect_ratio,
+                        max_h_length_ratio=self.stage1_config.max_h_length_ratio,
+                        max_v_length_ratio=self.stage1_config.max_v_length_ratio,
+                        close_line_distance=self.stage1_config.close_line_distance,
                     )
 
                     # Save table line visualization
@@ -430,6 +438,9 @@ class TwoStageOCRPipeline:
                     v_min_length_image_ratio=self.stage2_config.v_min_length_image_ratio,
                     v_min_length_relative_ratio=self.stage2_config.v_min_length_relative_ratio,
                     min_aspect_ratio=self.stage2_config.min_aspect_ratio,
+                    max_h_length_ratio=self.stage2_config.max_h_length_ratio,
+                    max_v_length_ratio=self.stage2_config.max_v_length_ratio,
+                    close_line_distance=self.stage2_config.close_line_distance,
                 )
 
                 # Save refined line detection visualization
@@ -437,17 +448,109 @@ class TwoStageOCRPipeline:
                 lines_path = lines_dir / f"{base_name}_refined_table_lines.jpg"
                 vis_image = visualize_detected_lines(refined_deskewed, h_lines, v_lines)
                 save_image(vis_image, lines_path)
-
-                # Table fitting for publication-ready output
-                fitting_dir = self.stage2_config.output_dir / "03_fitted_tables"
-                fitted_path = fitting_dir / f"{base_name}_fitted.jpg"
-
-                # Use the refined deskewed image as the final result
-                save_image(refined_deskewed, fitted_path)
-                refined_tables.append(fitted_path)
+                
+                # Save line data to JSON for table recovery
+                lines_data_dir = lines_dir / "lines_data"
+                lines_data_dir.mkdir(parents=True, exist_ok=True)
+                lines_json_path = lines_data_dir / f"{base_name}_lines_data.json"
+                with open(lines_json_path, 'w') as f:
+                    json.dump({
+                        "horizontal_lines": [[int(x) for x in line] for line in h_lines],
+                        "vertical_lines": [[int(x) for x in line] for line in v_lines]
+                    }, f, indent=2)
 
                 if self.stage2_config.verbose:
-                    print(f"  Refined table: {fitted_path.name}")
+                    print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
+
+                # Step 3: Table structure detection from detected lines
+                table_structure, structure_analysis = detect_table_structure(
+                    h_lines,  # Pass horizontal lines
+                    v_lines,  # Pass vertical lines
+                    eps=getattr(self.stage2_config, 'table_detection_eps', 10),
+                    return_analysis=True
+                )
+
+                # Save table structure visualization
+                structure_dir = self.stage2_config.output_dir / "03_table_structure"
+                structure_path = structure_dir / f"{base_name}_table_structure.jpg"
+                structure_vis = visualize_table_structure(refined_deskewed, table_structure)
+                save_image(structure_vis, structure_path)
+
+                if self.stage2_config.verbose:
+                    xs = table_structure.get("xs", [])
+                    ys = table_structure.get("ys", [])
+                    cells = table_structure.get("cells", [])
+                    print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
+
+                # Save table structure data to JSON for reference
+                structure_data_dir = structure_dir / "structure_data"
+                structure_data_dir.mkdir(parents=True, exist_ok=True)
+                structure_json_path = structure_data_dir / f"{base_name}_structure_data.json"
+                with open(structure_json_path, 'w') as f:
+                    json.dump(table_structure, f, indent=2)
+
+                # Step 4: Table recovery (replaces border cropping)
+                recovered_result = table_recovery(
+                    lines_json_path=str(lines_json_path),
+                    structure_json_path=str(structure_json_path),
+                    coverage_ratio=getattr(self.stage2_config, 'table_recovery_coverage_ratio', 0.8),
+                    background_image=refined_deskewed,
+                    highlight_merged=True,
+                    show_grid=True,
+                    label_cells=True
+                )
+
+                # Save recovered table visualization as final result
+                recovery_dir = self.stage2_config.output_dir / "04_table_recovered"
+                recovery_path = recovery_dir / f"{base_name}_table_recovered.jpg"
+                save_image(recovered_result['visualization'], recovery_path)
+                
+                # Save recovered structure JSON
+                recovery_json_dir = recovery_dir / "recovery_data"
+                recovery_json_dir.mkdir(parents=True, exist_ok=True)
+                recovery_json_path = recovery_json_dir / f"{base_name}_recovered.json"
+                with open(recovery_json_path, 'w') as f:
+                    json.dump({
+                        'rows': recovered_result['rows'],
+                        'cols': recovered_result['cols'],
+                        'cells': recovered_result['cells']
+                    }, f, indent=2)
+                
+                refined_tables.append(recovery_path)
+
+                if self.stage2_config.verbose:
+                    n_cells = len(recovered_result['cells'])
+                    n_merged = sum(1 for cell in recovered_result['cells'] 
+                                 if cell['rowspan'] > 1 or cell['colspan'] > 1)
+                    print(f"  Table recovered: {n_cells} cells ({n_merged} merged)")
+                    print(f"  Saved: {recovery_path.name}")
+
+                # Step 5: Cut vertical strips (optional)
+                # Check for vertical strip cutting configuration
+                vertical_strip_config = getattr(self.stage2_config, 'vertical_strip_cutting', {})
+                if isinstance(vertical_strip_config, dict):
+                    strip_cutting_enabled = vertical_strip_config.get('enable', True)
+                    strip_padding = vertical_strip_config.get('padding', 20)
+                    strip_min_width = vertical_strip_config.get('min_width', 1)
+                else:
+                    # Fallback for flat config attributes
+                    strip_cutting_enabled = getattr(self.stage2_config, 'vertical_strip_cutting_enable', True)
+                    strip_padding = getattr(self.stage2_config, 'vertical_strip_cutting_padding', 20)
+                    strip_min_width = getattr(self.stage2_config, 'vertical_strip_cutting_min_width', 1)
+                
+                if strip_cutting_enabled:
+                    strips_result = cut_vertical_strips(
+                        image=refined_deskewed,
+                        structure_json_path=str(structure_json_path),
+                        padding=strip_padding,
+                        min_width=strip_min_width,
+                        output_dir=self.stage2_config.output_dir / "05_vertical_strips",
+                        base_name=base_name,
+                        verbose=self.stage2_config.verbose
+                    )
+                    
+                    if self.stage2_config.verbose:
+                        print(f"  Vertical strips: {strips_result['num_strips']} columns saved")
 
             except Exception as e:
                 print(f"Error refining {image_path}: {e}")
@@ -456,7 +559,12 @@ class TwoStageOCRPipeline:
             print(
                 f"\n*** STAGE 2 COMPLETE: {len(refined_tables)} publication-ready tables ***"
             )
-            print(f"Final output: {self.stage2_config.output_dir / '03_fitted_tables'}")
+            print(f"Final output: {self.stage2_config.output_dir / '04_table_recovered'}")
+            
+            # Check if vertical strip cutting was enabled
+            vertical_strip_config = getattr(self.stage2_config, 'vertical_strip_cutting', {})
+            if isinstance(vertical_strip_config, dict) and vertical_strip_config.get('enable', True):
+                print(f"Vertical strips: {self.stage2_config.output_dir / '05_vertical_strips'}")
 
         return refined_tables
 
@@ -489,7 +597,7 @@ class TwoStageOCRPipeline:
         print("\n*** COMPLETE PIPELINE FINISHED! ***")
         print(f"   {len(stage2_outputs)} publication-ready tables generated")
         print(
-            f"   Check final results in: {self.stage2_config.output_dir / '03_fitted_tables'}"
+            f"   Check final results in: {self.stage2_config.output_dir / '04_table_recovered'}"
         )
 
         return stage2_outputs

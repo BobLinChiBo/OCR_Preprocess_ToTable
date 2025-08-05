@@ -165,17 +165,29 @@ class Config:
 
         # Filter config_dict to only include fields that exist in this class
         filtered_config = {}
+        
+        # List of known nested config sections
+        nested_sections = [
+            "line_detection", "table_line_detection", "mark_removal", 
+            "page_splitting", "deskewing", "margin_removal", 
+            "inscribed_margin_removal", "table_detection", "table_recovery",
+            "vertical_strip_cutting"
+        ]
+        
         for key, value in config_dict.items():
             if key in field_names:
                 # Convert path strings to Path objects
                 if key.endswith("_dir") and isinstance(value, str):
                     value = Path(value)
                 filtered_config[key] = value
-            elif key == "line_detection" and isinstance(value, dict):
-                # Handle nested line_detection parameters
-                for line_key, line_value in value.items():
-                    if line_key in field_names:
-                        filtered_config[line_key] = line_value
+            elif key in nested_sections and isinstance(value, dict):
+                # Handle nested config sections
+                for nested_key, nested_value in value.items():
+                    if nested_key in field_names:
+                        filtered_config[nested_key] = nested_value
+                    # Special handling for mark_removal -> dilate_iter mapping
+                    elif key == "mark_removal" and nested_key == "dilate_iter" and "mark_removal_dilate_iter" in field_names:
+                        filtered_config["mark_removal_dilate_iter"] = nested_value
 
         return cls(**filtered_config)
 
@@ -185,7 +197,7 @@ class Stage1Config(Config):
     """Stage 1 Configuration: Initial Processing with aggressive parameters."""
 
     # Override defaults for Stage 1 - more aggressive initial detection
-    output_dir: Path = Path("data/output/stage1_initial_processing")
+    output_dir: Path = Path("data/output/stage1")
 
     # Stage 1 specific deskewing (wider range)
     angle_range: int = 10
@@ -291,6 +303,11 @@ class Stage1Config(Config):
                     "h_min_length_relative_ratio": line_det.get("h_min_length_relative_ratio"),
                     "v_min_length_image_ratio": line_det.get("v_min_length_image_ratio"),
                     "v_min_length_relative_ratio": line_det.get("v_min_length_relative_ratio"),
+                    
+                    # Post-processing parameters
+                    "max_h_length_ratio": line_det.get("max_h_length_ratio"),
+                    "max_v_length_ratio": line_det.get("max_v_length_ratio"),
+                    "close_line_distance": line_det.get("close_line_distance"),
                 }
             )
             del config_dict["table_line_detection"]
@@ -354,8 +371,8 @@ class Stage1Config(Config):
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
             margins = config_dict["roi_margins"]
-            config_dict["roi_margins_page_1"] = margins.get("page_1")
-            config_dict["roi_margins_page_2"] = margins.get("page_2")
+            config_dict["roi_margins_left"] = margins.get("left", margins.get("page_1"))
+            config_dict["roi_margins_right"] = margins.get("right", margins.get("page_2"))
             config_dict["roi_margins_default"] = margins.get("default")
             del config_dict["roi_margins"]
 
@@ -370,9 +387,9 @@ class Stage1Config(Config):
 class Stage2Config(Config):
     """Stage 2 Configuration: Refinement processing with precise parameters."""
 
-    # Stage 2 takes input from Stage 1 output
-    input_dir: Path = Path("data/output/stage1_initial_processing/07_border_cropped")
-    output_dir: Path = Path("data/output/stage2_refinement")
+    # Stage 2 takes input from Stage 1 output (default will be determined dynamically)
+    input_dir: Path = Path("data/output/stage1/07_border_cropped")
+    output_dir: Path = Path("data/output/stage2")
 
     # Stage 2 deskewing (fine-tuning)
     angle_range: int = 10
@@ -405,6 +422,17 @@ class Stage2Config(Config):
     inscribed_close_ksize: int = 15
     inscribed_close_iter: int = 1
 
+    # Stage 2 table detection parameters
+    table_detection_eps: int = 10
+    table_crop_padding: int = 20
+    
+    # Vertical strip cutting (optional)
+    vertical_strip_cutting: Optional[Dict[str, Any]] = None
+    
+    # Stage 2 table recovery parameters
+    table_recovery_coverage_ratio: float = 0.8
+    table_recovery_enabled: bool = True
+
     def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
         super().__post_init__()
@@ -416,9 +444,9 @@ class Stage2Config(Config):
         # Create Stage 2 subdirectories
         stage2_dirs = [
             "01_deskewed",
-            "02_margin_removed",
-            "03_table_lines",
-            "04_fitted_tables",
+            "02_table_lines",
+            "03_table_structure",
+            "04_table_recovered",
         ]
 
         for subdir in stage2_dirs:
@@ -455,6 +483,11 @@ class Stage2Config(Config):
                     "h_min_length_relative_ratio": line_det.get("h_min_length_relative_ratio"),
                     "v_min_length_image_ratio": line_det.get("v_min_length_image_ratio"),
                     "v_min_length_relative_ratio": line_det.get("v_min_length_relative_ratio"),
+                    
+                    # Post-processing parameters
+                    "max_h_length_ratio": line_det.get("max_h_length_ratio"),
+                    "max_v_length_ratio": line_det.get("max_v_length_ratio"),
+                    "close_line_distance": line_det.get("close_line_distance"),
                 }
             )
             del config_dict["table_line_detection"]
@@ -487,6 +520,28 @@ class Stage2Config(Config):
                 }
             )
             del config_dict["inscribed_margin_removal"]
+
+        # Handle table_detection specially
+        if "table_detection" in config_dict:
+            table_det = config_dict["table_detection"]
+            config_dict.update(
+                {
+                    "table_detection_eps": table_det.get("table_detection_eps"),
+                    "table_crop_padding": table_det.get("table_crop_padding"),
+                }
+            )
+            del config_dict["table_detection"]
+            
+        # Handle table_recovery specially
+        if "table_recovery" in config_dict:
+            table_rec = config_dict["table_recovery"]
+            config_dict.update(
+                {
+                    "table_recovery_coverage_ratio": table_rec.get("coverage_ratio", 0.8),
+                    "table_recovery_enabled": table_rec.get("enable", True),
+                }
+            )
+            del config_dict["table_recovery"]
 
         # Remove any unrecognized sections
         if "table_fitting" in config_dict:

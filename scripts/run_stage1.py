@@ -160,9 +160,10 @@ Examples:
             print("Parameters:")
             print(f"   - Angle range: ±{stage1_config.angle_range}°")
             print(f"   - Angle step: {stage1_config.angle_step}°")
-            print(f"   - Min line length: {stage1_config.min_line_length}px")
-            roi_status = "enabled" if stage1_config.enable_roi_detection else "disabled"
-            print(f"   - ROI detection: {roi_status}")
+            print(f"   - Max V length ratio: {stage1_config.max_v_length_ratio}")
+            print(f"   - Close line distance: {stage1_config.close_line_distance}px")
+            margin_status = "enabled" if stage1_config.enable_margin_removal else "disabled"
+            print(f"   - Margin removal: {margin_status}")
             debug_status = "enabled" if stage1_config.save_debug_images else "disabled"
             print(f"   - Debug images: {debug_status}")
             print()

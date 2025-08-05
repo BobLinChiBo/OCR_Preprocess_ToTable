@@ -1,24 +1,26 @@
 {
-  "input_dir": "data/output/stage1_initial_processing/07_border_cropped",
-  "output_dir": "data/output/stage2_refinement",
+  "output_dir": "data/output/stage2",
   "debug_dir": "data/debug/stage2_debug",
   "verbose": true,
   "save_debug_images": false,
   "deskewing": {
-    "angle_range": 10,
-    "angle_step": 0.2,
-    "min_angle_correction": 0.2
+    "angle_range": 5,
+    "angle_step": 0.1,
+    "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 45,
-    "horizontal_kernel_size": 8,
-    "vertical_kernel_size": 8,
-    "alignment_threshold": 2,
-    "h_min_length_image_ratio": 0.4,
-    "h_min_length_relative_ratio": 0.5,
-    "v_min_length_image_ratio": 0.4,
-    "v_min_length_relative_ratio": 0.5,
-    "min_aspect_ratio": 7
+    "threshold": 30,
+    "horizontal_kernel_size": 20,
+    "vertical_kernel_size": 30,
+    "alignment_threshold": 3,
+    "h_min_length_image_ratio": 0.2,
+    "h_min_length_relative_ratio": 0.7,
+    "v_min_length_image_ratio": 0.2,
+    "v_min_length_relative_ratio": 0.3,
+    "min_aspect_ratio": 7,
+    "max_h_length_ratio": 1.0,
+    "max_v_length_ratio": 1.0,
+    "close_line_distance": 45
   },
   "margin_removal": {
     "enable_margin_removal": false
@@ -27,5 +29,19 @@
     "inscribed_blur_ksize": 3,
     "inscribed_close_ksize": 15,
     "inscribed_close_iter": 1
+  },
+  "table_detection": {
+    "table_detection_eps": 10,
+    "table_detection_kernel_ratio": 0.05,
+    "enable_table_border_cropping": false
+  },
+  "table_recovery": {
+    "coverage_ratio": 0.2,
+    "enable": true
+  },
+  "vertical_strip_cutting": {
+    "enable": true,
+    "padding": 40,
+    "min_width": 1
   }
 }

@@ -30,7 +30,7 @@
     "v_min_length_relative_ratio": 0.3,
     "min_aspect_ratio": 3,
     "max_h_length_ratio": 1.0,
-    "max_v_length_ratio": 1.0,
+    "max_v_length_ratio": 0.97,
     "close_line_distance": 45
   },
   "margin_removal": {
@@ -50,7 +50,7 @@
   "table_detection": {
     "table_detection_eps": 10,
     "table_detection_kernel_ratio": 0.05,
-    "table_crop_padding": 20,
+    "table_crop_padding": 5,
     "enable_table_border_cropping": true
   }
 }

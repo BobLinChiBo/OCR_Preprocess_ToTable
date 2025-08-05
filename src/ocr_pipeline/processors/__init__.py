@@ -72,6 +72,18 @@ from .visualization import (
     visualize_detected_lines,
 )
 
+# Table recovery
+from .table_recovery import (
+    TableRecoveryProcessor,
+    table_recovery,
+)
+
+# Vertical strip cutting
+from .vertical_strip_cutter import (
+    VerticalStripCutterProcessor,
+    cut_vertical_strips,
+)
+
 __all__ = [
     # Base
     "BaseProcessor",
@@ -124,4 +136,12 @@ __all__ = [
     # Visualization
     "VisualizationProcessor",
     "visualize_detected_lines",
+    
+    # Table recovery
+    "TableRecoveryProcessor",
+    "table_recovery",
+    
+    # Vertical strip cutting
+    "VerticalStripCutterProcessor",
+    "cut_vertical_strips",
 ]

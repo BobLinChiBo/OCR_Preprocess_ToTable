@@ -181,7 +181,10 @@ Examples:
     stage1_config = get_stage1_config(args.stage1_config)
     if not args.stage2_only:
         stage1_config.input_dir = input_path
-        stage1_config.output_dir = base_output / "stage1_initial_processing"
+        # Don't override output_dir if it's already set in the config
+        # Only set it if user provides explicit output argument
+        if args.output != "data/output/":
+            stage1_config.output_dir = base_output / "stage1"
         stage1_config.verbose = args.verbose
         stage1_config.save_debug_images = args.debug
         stage1_config.angle_range = args.s1_angle_range
@@ -192,12 +195,15 @@ Examples:
     # Stage 2 configuration
     stage2_config = get_stage2_config(args.stage2_config)
     if not args.stage1_only:
+        # Set input dir to Stage 1's output
         stage2_config.input_dir = (
-            stage1_config.output_dir / "06_border_cropped"
+            stage1_config.output_dir / "07_border_cropped"
             if not args.stage2_only
-            else Path("data/output/stage1_initial_processing/06_border_cropped")
+            else stage2_config.input_dir  # Use config default when running stage2 only
         )
-        stage2_config.output_dir = base_output / "stage2_refinement"
+        # Only override output_dir if user provides explicit output argument
+        if args.output != "data/output/":
+            stage2_config.output_dir = base_output / "stage2"
         stage2_config.verbose = args.verbose
         stage2_config.save_debug_images = args.debug
         stage2_config.angle_range = args.s2_angle_range

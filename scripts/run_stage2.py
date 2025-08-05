@@ -34,9 +34,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run_stage2.py                                      # Use default Stage 1 output
+  python run_stage2.py                                      # Auto-detect Stage 1 output
   python run_stage2.py cropped_tables/                      # Process custom directory
-  python run_stage2.py stage1_output/06_border_cropped/     # Specific Stage 1 output
+  python run_stage2.py data/output/stage1/07_border_cropped # Specific Stage 1 output
   python run_stage2.py cropped/ -o refined/ --verbose       # Custom input/output
         """,
     )
@@ -44,20 +44,20 @@ Examples:
     parser.add_argument(
         "input",
         nargs="?",
-        default="data/output/stage1_initial_processing/07_border_cropped",
+        default=None,
         help=(
             "Input directory with cropped tables from Stage 1 "
-            "(default: data/output/stage1_initial_processing/07_border_cropped/)"
+            "(default: auto-detect from Stage 1 output)"
         ),
     )
 
     parser.add_argument(
         "-o",
         "--output",
-        default="data/output/stage2_refinement",
+        default=None,
         help=(
             "Output directory for Stage 2 results "
-            "(default: data/output/stage2_refinement/)"
+            "(default: from config file or data/output/stage2/)"
         ),
     )
 
@@ -105,8 +105,29 @@ Examples:
 
     args = parser.parse_args()
 
+    # Get Stage 1 config to find its output directory
+    from src.ocr_pipeline.config import get_stage1_config
+
+    # Determine input path
+    if args.input is None:
+        # Auto-detect from Stage 1 output
+        stage1_config = get_stage1_config()
+        input_path = stage1_config.output_dir / "07_border_cropped"
+        if not input_path.exists():
+            # Try legacy path
+            legacy_path = Path("data/output/stage1_initial_processing/07_border_cropped")
+            if legacy_path.exists():
+                input_path = legacy_path
+            else:
+                print("Error: Could not find Stage 1 output directory.")
+                print(f"  Looked in: {input_path}")
+                print(f"  Also tried: {legacy_path}")
+                print("Hint: Run Stage 1 first with: python run_stage1.py")
+                sys.exit(1)
+    else:
+        input_path = Path(args.input)
+    
     # Validate input
-    input_path = Path(args.input)
     if not input_path.exists():
         print(f"Error: Input directory does not exist: {input_path}")
         print("Hint: Run Stage 1 first with: python run_stage1.py")
@@ -133,7 +154,8 @@ Examples:
 
     # Override with command line arguments
     stage2_config.input_dir = input_path
-    stage2_config.output_dir = Path(args.output)
+    if args.output is not None:
+        stage2_config.output_dir = Path(args.output)
     stage2_config.verbose = args.verbose
     stage2_config.save_debug_images = args.debug
     stage2_config.angle_range = args.angle_range
@@ -167,14 +189,14 @@ Examples:
             print("\n*** STAGE 2 COMPLETED SUCCESSFULLY! ***")
             print(f"Generated {len(results)} publication-ready table images")
             print(f"Results saved to: {stage2_config.output_dir}")
-            print(f"Final tables: {stage2_config.output_dir / '04_fitted_tables'}")
+            print(f"Final tables: {stage2_config.output_dir / '04_table_recovered'}")
             print()
             print("Two-stage pipeline complete!")
             print(
                 "   Your tables are ready for use in publications, reports, or further analysis."
             )
         else:
-            output_path = stage2_config.output_dir / "04_fitted_tables"
+            output_path = stage2_config.output_dir / "04_table_recovered"
             print(f"Stage 2 complete: {len(results)} refined tables -> {output_path}")
 
         return True

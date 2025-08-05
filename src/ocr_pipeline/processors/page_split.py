@@ -30,7 +30,7 @@ class PageSplitProcessor(BaseProcessor):
             return_analysis: If True, returns detailed analysis information
             
         Returns:
-            tuple: (left_page, right_page) or (left_page, right_page, analysis) if return_analysis=True
+            tuple: (right_page, left_page) or (right_page, left_page, analysis) if return_analysis=True
         """
         self.validate_image(image)
         return split_two_page_image(
@@ -62,7 +62,7 @@ def split_two_page_image(
         return_analysis: If True, returns detailed analysis information
 
     Returns:
-        tuple: (left_page, right_page) or (left_page, right_page, analysis) if return_analysis=True
+        tuple: (right_page, left_page) or (right_page, left_page, analysis) if return_analysis=True
     """
     h, w = image.shape[:2]
     
@@ -87,7 +87,7 @@ def split_two_page_image(
         right_page = image[:, split_x:]
         
         if not return_analysis:
-            return left_page, right_page
+            return right_page, left_page
             
         # Build analysis for fallback case
         analysis = {
@@ -110,7 +110,7 @@ def split_two_page_image(
             "min_sum": 0,
             "avg_sum": 0,
         }
-        return left_page, right_page, analysis
+        return right_page, left_page, analysis
 
     # 3) contiguous-peak grouping
     segments, s = [], peaks[0]
@@ -127,7 +127,7 @@ def split_two_page_image(
         right_page = image[:, split_x:]
         
         if not return_analysis:
-            return left_page, right_page
+            return right_page, left_page
             
         # Build analysis for single segment case
         analysis = {
@@ -150,7 +150,7 @@ def split_two_page_image(
             "min_sum": 0,
             "avg_sum": 0,
         }
-        return left_page, right_page, analysis
+        return right_page, left_page, analysis
     
     (a1, b1), (a2, b2) = sorted(segs, key=lambda ab: ab[0])
     split_x = (b1 + a2) // 2
@@ -159,7 +159,7 @@ def split_two_page_image(
     right_page = image[:, split_x:]
     
     if not return_analysis:
-        return left_page, right_page
+        return right_page, left_page
     
     # Build full analysis dict for compatibility
     analysis = {
@@ -183,4 +183,4 @@ def split_two_page_image(
         "avg_sum": 0,
     }
     
-    return left_page, right_page, analysis
+    return right_page, left_page, analysis
