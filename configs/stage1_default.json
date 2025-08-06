@@ -4,53 +4,65 @@
   "debug_dir": "data/debug/stage1_debug",
   "verbose": true,
   "save_debug_images": false,
+  "save_intermediate_outputs": true,
   "mark_removal": {
-    "enable_mark_removal": true,
-    "dilate_iter": 2
+    "enable": false,
+    "dilate_iter": 2,
+    "kernel_size": 1,
+    "protect_table_lines": true,
+    "table_line_thickness": 5,
+    "table_detection_params": {
+      "threshold": 40,
+      "horizontal_kernel_size": 100,
+      "vertical_kernel_size": 100
+    }
+  },
+  "margin_removal": {
+    "enable": true,
+    "use_gradient_detection": true,
+    "gradient_threshold": 50,
+    "blur_ksize": 20,
+    "close_ksize": 30,
+    "close_iter": 5,
+    "erode_after_close": 0
   },
   "page_splitting": {
+    "enable": false,
     "search_ratio": 0.3,
     "line_len_frac": 0.3,
     "line_thick": 3,
     "peak_thr": 0.3
   },
   "deskewing": {
+    "enable": true,
     "angle_range": 5,
     "angle_step": 0.2,
     "min_angle_correction": 0.2
   },
   "table_line_detection": {
-    "threshold": 30,
-    "horizontal_kernel_size": 20,
-    "vertical_kernel_size": 30,
+    "threshold": 100,
+    "horizontal_kernel_size": 100,
+    "vertical_kernel_size": 100,
     "alignment_threshold": 3,
-    "h_min_length_image_ratio": 0.2,
-    "h_min_length_relative_ratio": 0.7,
-    "v_min_length_image_ratio": 0.2,
-    "v_min_length_relative_ratio": 0.3,
-    "min_aspect_ratio": 3,
+    "h_min_length_image_ratio": 0.1,
+    "h_min_length_relative_ratio": 0.5,
+    "v_min_length_image_ratio": 0.0,
+    "v_min_length_relative_ratio": 0.1,
+    "min_aspect_ratio": 2,
     "max_h_length_ratio": 1.0,
-    "max_v_length_ratio": 0.97,
-    "close_line_distance": 45
-  },
-  "margin_removal": {
-    "enable_margin_removal": true,
-    "blur_kernel_size": 9,
-    "black_threshold": 45,
-    "content_threshold": 180,
-    "morph_kernel_size": 30,
-    "min_content_area_ratio": 0.1,
-    "margin_padding": 10
-  },
-  "inscribed_margin_removal": {
-    "inscribed_blur_ksize": 7,
-    "inscribed_close_ksize": 30,
-    "inscribed_close_iter": 3
+    "max_v_length_ratio": 0.75,
+    "close_line_distance": 45,
+    "search_region_top": 100,
+    "search_region_bottom": 100,
+    "search_region_left": 0,
+    "search_region_right": 0,
+    "skew_tolerance": 3,
+    "skew_angle_step": 0.2
   },
   "table_detection": {
     "table_detection_eps": 10,
     "table_detection_kernel_ratio": 0.05,
     "table_crop_padding": 5,
-    "enable_table_border_cropping": true
+    "enable_table_cropping": true
   }
 }

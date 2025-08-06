@@ -1,5 +1,9 @@
 # V2 Visualization Scripts Migration Guide
 
+Complete guide for migrating from V1 to V2 visualization architecture, including architectural improvements and migration examples.
+
+> **📚 Documentation Navigation**: [← Documentation Index](README.md) | [Tools Documentation](../tools/README.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) →
+
 ## Overview
 
 The V2 visualization scripts represent a major architectural improvement that centralizes parameter handling and reduces maintenance burden. This guide helps you migrate from V1 to V2 scripts.
@@ -225,3 +229,7 @@ When `utils.py` functions change:
 1. Update only the processor wrapper
 2. No changes needed in visualization scripts
 3. Test with existing scripts to ensure compatibility
+
+---
+
+**Navigation**: [← Documentation Index](README.md) | [Tools Documentation](../tools/README.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) | [API Reference](API_REFERENCE.md) →

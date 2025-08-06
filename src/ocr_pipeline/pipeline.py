@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 from typing import List
+from datetime import datetime
 
 from .config import (
     Config,
@@ -22,13 +23,23 @@ from .processors import (
     deskew_image,
     detect_table_lines,
     remove_marks,
+    create_table_lines_mask,
     visualize_detected_lines,
     detect_table_structure,
     visualize_table_structure,
     crop_to_table_borders,
     table_recovery,
     cut_vertical_strips,
+    binarize_image,
+    TableDetectionProcessor,
+    DeskewProcessor,
+    PageSplitProcessor,
+    MarginRemovalProcessor,
+    MarkRemovalProcessor,
+    TableProcessingProcessor,
+    BinarizeProcessor,
 )
+from .processors.table_recovery_utils import get_major_vertical_boundaries
 
 
 class OCRPipeline:
@@ -96,6 +107,8 @@ class OCRPipeline:
                 max_h_length_ratio=self.config.max_h_length_ratio,
                 max_v_length_ratio=self.config.max_v_length_ratio,
                 close_line_distance=self.config.close_line_distance,
+                skew_tolerance=getattr(self.config, 'skew_tolerance', 0),
+                skew_angle_step=getattr(self.config, 'skew_angle_step', 0.2),
             )
 
             # Use deskewed image directly (table cropping is done in Stage 1)
@@ -152,6 +165,57 @@ class TwoStageOCRPipeline:
         # Lazy initialization - pipelines created only when needed
         self._stage1_pipeline = None
         self._stage2_pipeline = None
+        
+        # Initialize processors for debug mode
+        self.table_detector_s1 = TableDetectionProcessor(self.stage1_config)
+        self.table_detector_s2 = TableDetectionProcessor(self.stage2_config)
+        self.deskew_processor_s1 = DeskewProcessor(self.stage1_config)
+        self.deskew_processor_s2 = DeskewProcessor(self.stage2_config)
+        self.margin_processor_s1 = MarginRemovalProcessor(self.stage1_config)
+        self.margin_processor_s2 = MarginRemovalProcessor(self.stage2_config)
+        self.page_split_processor_s1 = PageSplitProcessor(self.stage1_config)
+        self.mark_removal_processor_s1 = MarkRemovalProcessor(self.stage1_config)
+        self.mark_removal_processor_s2 = MarkRemovalProcessor(self.stage2_config)
+        self.table_processing_processor_s1 = TableProcessingProcessor(self.stage1_config)
+        self.table_processing_processor_s2 = TableProcessingProcessor(self.stage2_config)
+        self.binarize_processor_s2 = BinarizeProcessor(self.stage2_config)
+        
+        # Generate single timestamp for entire pipeline run
+        self.run_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.debug_run_dir_s1 = None
+        self.debug_run_dir_s2 = None
+        
+        # Create debug directories if debug mode is enabled
+        if self.stage1_config.save_debug_images and self.stage1_config.debug_dir:
+            self.debug_run_dir_s1 = self.stage1_config.debug_dir / f"{self.run_timestamp}_run"
+            self.debug_run_dir_s1.mkdir(parents=True, exist_ok=True)
+            
+        if self.stage2_config.save_debug_images and self.stage2_config.debug_dir:
+            self.debug_run_dir_s2 = self.stage2_config.debug_dir / f"{self.run_timestamp}_run"
+            self.debug_run_dir_s2.mkdir(parents=True, exist_ok=True)
+    
+    def _save_run_info(self, stage: str, input_path: Path, num_images: int, status: str = "started"):
+        """Save metadata about the pipeline run."""
+        debug_dir = self.debug_run_dir_s1 if stage == "stage1" else self.debug_run_dir_s2
+        if not debug_dir:
+            return
+            
+        run_info = {
+            "timestamp": self.run_timestamp,
+            "stage": stage,
+            "input_path": str(input_path),
+            "num_images": num_images,
+            "status": status,
+            "config": {
+                "save_debug_images": True,
+                "debug_dir": str(debug_dir.parent),
+                "verbose": self.stage1_config.verbose if stage == "stage1" else self.stage2_config.verbose
+            }
+        }
+        
+        info_file = debug_dir / "run_info.json"
+        with open(info_file, "w") as f:
+            json.dump(run_info, f, indent=2)
 
     @property
     def stage1_pipeline(self) -> OCRPipeline:
@@ -201,6 +265,9 @@ class TwoStageOCRPipeline:
         if self.stage1_config.verbose:
             print(f"Found {len(image_files)} images to process")
 
+        # Save run info at start
+        self._save_run_info("stage1", input_path, len(image_files), "started")
+
         # Process each image through Stage 1 steps
         for image_path in image_files:
             try:
@@ -213,101 +280,256 @@ class TwoStageOCRPipeline:
 
                 # Step 1: Mark removal (on full image)
                 if self.stage1_config.enable_mark_removal:
-                    processing_image = remove_marks(
-                        processing_image,
-                        dilate_iter=self.stage1_config.mark_removal_dilate_iter
-                    )
+                    table_lines_mask = None
+                    
+                    # If table line protection is enabled, detect table lines first
+                    if self.stage1_config.mark_removal_protect_table_lines:
+                        h_lines, v_lines = detect_table_lines(
+                            processing_image,
+                            threshold=self.stage1_config.mark_removal_table_threshold,
+                            horizontal_kernel_size=self.stage1_config.mark_removal_table_h_kernel,
+                            vertical_kernel_size=self.stage1_config.mark_removal_table_v_kernel,
+                        )
+                        
+                        # Create mask from detected lines
+                        if h_lines or v_lines:
+                            table_lines_mask = create_table_lines_mask(
+                                processing_image.shape,
+                                h_lines,
+                                v_lines,
+                                line_thickness=self.stage1_config.mark_removal_table_line_thickness
+                            )
+                            if self.stage1_config.verbose:
+                                print(f"  Detected {len(h_lines)} horizontal and {len(v_lines)} vertical lines for protection")
+                    
+                    if self.stage1_config.save_debug_images:
+                        # Use processor for debug mode
+                        processing_image = self.mark_removal_processor_s1.process(
+                            processing_image,
+                            dilate_iter=self.stage1_config.mark_removal_dilate_iter,
+                            kernel_size=self.stage1_config.mark_removal_kernel_size,
+                            table_lines_mask=table_lines_mask
+                        )
+                        
+                        # Save debug images if debug directory is configured
+                        if self.debug_run_dir_s1:
+                            debug_subdir = self.debug_run_dir_s1 / "01_mark_removal" / image_path.stem
+                            self.mark_removal_processor_s1.save_debug_images_to_dir(debug_subdir)
+                    else:
+                        # Use direct function call for normal processing
+                        processing_image = remove_marks(
+                            processing_image,
+                            dilate_iter=self.stage1_config.mark_removal_dilate_iter,
+                            kernel_size=self.stage1_config.mark_removal_kernel_size,
+                            table_lines_mask=table_lines_mask
+                        )
                     
                     # Save marks-removed image
-                    marks_dir = self.stage1_config.output_dir / "01_marks_removed"
-                    marks_path = marks_dir / f"{image_path.stem}_marks_removed.jpg"
-                    save_image(processing_image, marks_path)
+                    if self.stage1_config.save_intermediate_outputs:
+                        marks_dir = self.stage1_config.output_dir / "01_marks_removed"
+                        marks_path = marks_dir / f"{image_path.stem}_marks_removed.jpg"
+                        save_image(processing_image, marks_path)
                     
                     if self.stage1_config.verbose:
                         print(f"  Marks removed from full image")
+                elif self.stage1_config.verbose:
+                    print(f"  Mark removal skipped (disabled)")
 
                 # Step 2: Margin removal (on cleaned full image)
                 if self.stage1_config.enable_margin_removal:
-                    processing_image = remove_margin_inscribed(
-                        processing_image,
-                        blur_ksize=getattr(self.stage1_config, 'inscribed_blur_ksize', 7),
-                        close_ksize=getattr(self.stage1_config, 'inscribed_close_ksize', 30),
-                        close_iter=getattr(self.stage1_config, 'inscribed_close_iter', 3),
-                    )
+                    # Get margin removal parameters from config
+                    margin_params = {
+                        'blur_ksize': getattr(self.stage1_config, 'margin_blur_ksize', 20),
+                        'close_ksize': getattr(self.stage1_config, 'margin_close_ksize', 30),
+                        'close_iter': getattr(self.stage1_config, 'margin_close_iter', 5),
+                        'erode_after_close': getattr(self.stage1_config, 'margin_erode_after_close', 0),
+                        'use_gradient_detection': getattr(self.stage1_config, 'margin_use_gradient_detection', False),
+                        'gradient_threshold': getattr(self.stage1_config, 'margin_gradient_threshold', 30),
+                    }
+                    
+                    if self.stage1_config.save_debug_images:
+                        # Use processor for debug mode
+                        processing_image = self.margin_processor_s1.process(
+                            processing_image,
+                            method="inscribed",
+                            **margin_params
+                        )
+                        
+                        # Save debug images if debug directory is configured
+                        if self.debug_run_dir_s1:
+                            debug_subdir = self.debug_run_dir_s1 / "02_margin_removal" / image_path.stem
+                            self.margin_processor_s1.save_debug_images_to_dir(debug_subdir)
+                    else:
+                        # Use direct function call for normal processing
+                        processing_image = remove_margin_inscribed(
+                            processing_image,
+                            **margin_params
+                        )
                     
                     # Save margin-removed image
-                    margin_dir = self.stage1_config.output_dir / "02_margin_removed"
-                    margin_path = margin_dir / f"{image_path.stem}_margin_removed.jpg"
-                    save_image(processing_image, margin_path)
+                    if self.stage1_config.save_intermediate_outputs:
+                        margin_dir = self.stage1_config.output_dir / "02_margin_removed"
+                        margin_path = margin_dir / f"{image_path.stem}_margin_removed.jpg"
+                        save_image(processing_image, margin_path)
                     
                     if self.stage1_config.verbose:
                         print(f"  Margin removed from full image: {processing_image.shape}")
+                elif self.stage1_config.verbose:
+                    print(f"  Margin removal skipped (disabled)")
 
                 # Step 3: Split processed image into pages
-                right_page, left_page = split_two_page_image(
-                    processing_image,
-                    search_ratio=self.stage1_config.search_ratio,
-                    line_len_frac=getattr(self.stage1_config, 'line_len_frac', 0.3),
-                    line_thick=getattr(self.stage1_config, 'line_thick', 3),
-                    peak_thr=getattr(self.stage1_config, 'peak_thr', 0.3),
-                )
+                if self.stage1_config.enable_page_splitting:
+                    if self.stage1_config.save_debug_images:
+                        # Use processor for debug mode
+                        right_page, left_page = self.page_split_processor_s1.process(
+                            processing_image,
+                            search_ratio=self.stage1_config.search_ratio,
+                            line_len_frac=getattr(self.stage1_config, 'line_len_frac', 0.3),
+                            line_thick=getattr(self.stage1_config, 'line_thick', 3),
+                            peak_thr=getattr(self.stage1_config, 'peak_thr', 0.3),
+                        )
+                        
+                        # Save debug images if debug directory is configured
+                        if self.debug_run_dir_s1:
+                            debug_subdir = self.debug_run_dir_s1 / "03_page_split" / image_path.stem
+                            self.page_split_processor_s1.save_debug_images_to_dir(debug_subdir)
+                    else:
+                        # Use direct function call for normal processing
+                        right_page, left_page = split_two_page_image(
+                            processing_image,
+                            search_ratio=self.stage1_config.search_ratio,
+                            line_len_frac=getattr(self.stage1_config, 'line_len_frac', 0.3),
+                            line_thick=getattr(self.stage1_config, 'line_thick', 3),
+                            peak_thr=getattr(self.stage1_config, 'peak_thr', 0.3),
+                        )
+                else:
+                    # If page splitting is disabled, treat the whole image as a single page
+                    right_page = None
+                    left_page = processing_image
+                    if self.stage1_config.verbose:
+                        print(f"  Page splitting skipped (disabled) - processing as single page")
 
                 # Save split pages
-                split_dir = self.stage1_config.output_dir / "03_split_pages"
-                for page_name, page in [("left", left_page), ("right", right_page)]:
-                    split_path = split_dir / f"{image_path.stem}_{page_name}.jpg"
-                    save_image(page, split_path)
-                    if self.stage1_config.verbose:
-                        print(f"  Split page saved: {split_path.name}")
+                if self.stage1_config.save_intermediate_outputs and self.stage1_config.enable_page_splitting:
+                    split_dir = self.stage1_config.output_dir / "03_split_pages"
+                    for page_name, page in [("left", left_page), ("right", right_page)]:
+                        split_path = split_dir / f"{image_path.stem}_{page_name}.jpg"
+                        save_image(page, split_path)
+                        if self.stage1_config.verbose:
+                            print(f"  Split page saved: {split_path.name}")
 
                 # Process each split page
-                for page_suffix, page in [("left", left_page), ("right", right_page)]:
+                if self.stage1_config.enable_page_splitting:
+                    pages_to_process = [("left", left_page), ("right", right_page)]
+                else:
+                    pages_to_process = [("full", left_page)]  # left_page contains the full image when splitting is disabled
+                
+                for page_suffix, page in pages_to_process:
                     page_name = f"{image_path.stem}_{page_suffix}"
                     processing_image = page
 
                     # Step 4: Deskew (per page)
-                    deskewed, angle = deskew_image(
-                        processing_image,
-                        self.stage1_config.angle_range,
-                        self.stage1_config.angle_step,
-                        self.stage1_config.min_angle_correction,
-                    )
+                    if self.stage1_config.enable_deskewing:
+                        if self.stage1_config.save_debug_images:
+                            # Use processor for debug mode
+                            deskewed, angle = self.deskew_processor_s1.process(
+                                processing_image,
+                                angle_range=self.stage1_config.angle_range,
+                                angle_step=self.stage1_config.angle_step,
+                                min_angle_correction=self.stage1_config.min_angle_correction,
+                            )
+                            
+                            # Save debug images if debug directory is configured
+                            if self.debug_run_dir_s1:
+                                debug_subdir = self.debug_run_dir_s1 / "04_deskew" / page_name
+                                self.deskew_processor_s1.save_debug_images_to_dir(debug_subdir)
+                        else:
+                            # Use direct function call for normal processing
+                            deskewed, angle = deskew_image(
+                                processing_image,
+                                self.stage1_config.angle_range,
+                                self.stage1_config.angle_step,
+                                self.stage1_config.min_angle_correction,
+                            )
 
-                    # Save deskewed image
-                    deskew_dir = self.stage1_config.output_dir / "04_deskewed"
-                    deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
-                    save_image(deskewed, deskew_path)
+                        # Save deskewed image
+                        if self.stage1_config.save_intermediate_outputs:
+                            deskew_dir = self.stage1_config.output_dir / "04_deskewed"
+                            deskew_path = deskew_dir / f"{page_name}_deskewed.jpg"
+                            save_image(deskewed, deskew_path)
 
-                    if self.stage1_config.verbose:
-                        print(f"  Deskewed: {angle:.2f} degrees")
+                        if self.stage1_config.verbose:
+                            print(f"  Deskewed: {angle:.2f} degrees")
+                    else:
+                        deskewed = processing_image
+                        if self.stage1_config.verbose:
+                            print(f"  Deskewing skipped (disabled)")
 
-                    # Step 5: Table line detection
-                    h_lines, v_lines = detect_table_lines(
-                        deskewed,
-                        threshold=self.stage1_config.threshold,
-                        horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
-                        vertical_kernel_size=self.stage1_config.vertical_kernel_size,
-                        alignment_threshold=self.stage1_config.alignment_threshold,
-                        h_min_length_image_ratio=self.stage1_config.h_min_length_image_ratio,
-                        h_min_length_relative_ratio=self.stage1_config.h_min_length_relative_ratio,
-                        v_min_length_image_ratio=self.stage1_config.v_min_length_image_ratio,
-                        v_min_length_relative_ratio=self.stage1_config.v_min_length_relative_ratio,
-                        min_aspect_ratio=self.stage1_config.min_aspect_ratio,
-                        max_h_length_ratio=self.stage1_config.max_h_length_ratio,
-                        max_v_length_ratio=self.stage1_config.max_v_length_ratio,
-                        close_line_distance=self.stage1_config.close_line_distance,
-                    )
+                    # Step 5: Table line detection (always enabled - generates required JSON)
+                    if self.stage1_config.save_debug_images:
+                        # Use processor for debug mode
+                        h_lines, v_lines = self.table_detector_s1.process(
+                            deskewed,
+                            threshold=self.stage1_config.threshold,
+                            horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
+                            vertical_kernel_size=self.stage1_config.vertical_kernel_size,
+                            alignment_threshold=self.stage1_config.alignment_threshold,
+                            h_min_length_image_ratio=self.stage1_config.h_min_length_image_ratio,
+                            h_min_length_relative_ratio=self.stage1_config.h_min_length_relative_ratio,
+                            v_min_length_image_ratio=self.stage1_config.v_min_length_image_ratio,
+                            v_min_length_relative_ratio=self.stage1_config.v_min_length_relative_ratio,
+                            min_aspect_ratio=self.stage1_config.min_aspect_ratio,
+                            max_h_length_ratio=self.stage1_config.max_h_length_ratio,
+                            max_v_length_ratio=self.stage1_config.max_v_length_ratio,
+                            close_line_distance=self.stage1_config.close_line_distance,
+                            search_region_top=self.stage1_config.search_region_top,
+                            search_region_bottom=self.stage1_config.search_region_bottom,
+                            search_region_left=self.stage1_config.search_region_left,
+                            search_region_right=self.stage1_config.search_region_right,
+                            skew_tolerance=getattr(self.stage1_config, 'skew_tolerance', 0),
+                            skew_angle_step=getattr(self.stage1_config, 'skew_angle_step', 0.2),
+                        )
+                        
+                        # Save debug images if debug directory is configured
+                        if self.debug_run_dir_s1:
+                            debug_subdir = self.debug_run_dir_s1 / "05_table_detection" / page_name
+                            self.table_detector_s1.save_debug_images_to_dir(debug_subdir)
+                    else:
+                        # Use direct function call for normal processing
+                        h_lines, v_lines = detect_table_lines(
+                            deskewed,
+                            threshold=self.stage1_config.threshold,
+                            horizontal_kernel_size=self.stage1_config.horizontal_kernel_size,
+                            vertical_kernel_size=self.stage1_config.vertical_kernel_size,
+                            alignment_threshold=self.stage1_config.alignment_threshold,
+                            h_min_length_image_ratio=self.stage1_config.h_min_length_image_ratio,
+                            h_min_length_relative_ratio=self.stage1_config.h_min_length_relative_ratio,
+                            v_min_length_image_ratio=self.stage1_config.v_min_length_image_ratio,
+                            v_min_length_relative_ratio=self.stage1_config.v_min_length_relative_ratio,
+                            min_aspect_ratio=self.stage1_config.min_aspect_ratio,
+                            max_h_length_ratio=self.stage1_config.max_h_length_ratio,
+                            max_v_length_ratio=self.stage1_config.max_v_length_ratio,
+                            close_line_distance=self.stage1_config.close_line_distance,
+                            search_region_top=self.stage1_config.search_region_top,
+                            search_region_bottom=self.stage1_config.search_region_bottom,
+                            search_region_left=self.stage1_config.search_region_left,
+                            search_region_right=self.stage1_config.search_region_right,
+                            skew_tolerance=getattr(self.stage1_config, 'skew_tolerance', 0),
+                            skew_angle_step=getattr(self.stage1_config, 'skew_angle_step', 0.2),
+                        )
 
                     # Save table line visualization
-                    lines_dir = self.stage1_config.output_dir / "05_table_lines"
-                    lines_path = lines_dir / f"{page_name}_table_lines.jpg"
-                    vis_image = visualize_detected_lines(deskewed, h_lines, v_lines)
-                    save_image(vis_image, lines_path)
+                    if self.stage1_config.save_intermediate_outputs or self.stage1_config.save_debug_images:
+                        lines_dir = self.stage1_config.output_dir / "05_table_lines"
+                        lines_path = lines_dir / f"{page_name}_table_lines.jpg"
+                        vis_image = visualize_detected_lines(deskewed, h_lines, v_lines)
+                        save_image(vis_image, lines_path)
 
                     if self.stage1_config.verbose:
                         print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
 
                     # Save lines data to JSON for next step
+                    lines_dir = self.stage1_config.output_dir / "05_table_lines"
                     lines_data_dir = lines_dir / "lines_data"
                     lines_data_dir.mkdir(parents=True, exist_ok=True)
                     lines_json_path = lines_data_dir / f"{page_name}_lines_data.json"
@@ -318,7 +540,7 @@ class TwoStageOCRPipeline:
                     with open(lines_json_path, 'w') as f:
                         json.dump(lines_data, f, indent=2)
 
-                    # Step 6: Table structure detection from detected lines
+                    # Step 6: Table structure detection (always enabled - generates required JSON)
                     table_structure, structure_analysis = detect_table_structure(
                         h_lines,  # Pass horizontal lines
                         v_lines,  # Pass vertical lines
@@ -327,10 +549,11 @@ class TwoStageOCRPipeline:
                     )
 
                     # Save table structure visualization
-                    structure_dir = self.stage1_config.output_dir / "06_table_structure"
-                    structure_path = structure_dir / f"{page_name}_table_structure.jpg"
-                    structure_vis = visualize_table_structure(deskewed, table_structure)
-                    save_image(structure_vis, structure_path)
+                    if (self.stage1_config.save_intermediate_outputs or self.stage1_config.save_debug_images) and table_structure.get("cells"):
+                        structure_dir = self.stage1_config.output_dir / "06_table_structure"
+                        structure_path = structure_dir / f"{page_name}_table_structure.jpg"
+                        structure_vis = visualize_table_structure(deskewed, table_structure)
+                        save_image(structure_vis, structure_path)
 
                     if self.stage1_config.verbose:
                         xs = table_structure.get("xs", [])
@@ -339,6 +562,7 @@ class TwoStageOCRPipeline:
                         print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
 
                     # Save table structure data to JSON for next step
+                    structure_dir = self.stage1_config.output_dir / "06_table_structure"
                     structure_data_dir = structure_dir / "structure_data"
                     structure_data_dir.mkdir(parents=True, exist_ok=True)
                     structure_json_path = structure_data_dir / f"{page_name}_structure_data.json"
@@ -346,12 +570,37 @@ class TwoStageOCRPipeline:
                         json.dump(table_structure, f, indent=2)
 
                     # Step 7: Crop deskewed image using detected table borders with padding
-                    cropped_table = crop_to_table_borders(
-                        deskewed, 
-                        table_structure,
-                        padding=getattr(self.stage1_config, 'table_crop_padding', 20),
-                        return_analysis=False
-                    )
+                    if self.stage1_config.enable_table_cropping and table_structure.get("cells"):
+                        if self.stage1_config.save_debug_images:
+                            # Use processor for debug mode
+                            cropped_table = self.table_processing_processor_s1.process(
+                                deskewed,
+                                table_structure,
+                                operation="crop",
+                                padding=getattr(self.stage1_config, 'table_crop_padding', 20),
+                                return_analysis=False
+                            )
+                            
+                            # Save debug images if debug directory is configured
+                            if self.debug_run_dir_s1:
+                                debug_subdir = self.debug_run_dir_s1 / "06_table_cropping" / page_name
+                                self.table_processing_processor_s1.save_debug_images_to_dir(debug_subdir)
+                        else:
+                            # Use direct function call for normal processing
+                            cropped_table = crop_to_table_borders(
+                                deskewed, 
+                                table_structure,
+                                padding=getattr(self.stage1_config, 'table_crop_padding', 20),
+                                return_analysis=False
+                            )
+                    else:
+                        # If cropping is disabled or no table structure detected, use the deskewed image as-is
+                        cropped_table = deskewed
+                        if self.stage1_config.verbose:
+                            if not self.stage1_config.enable_table_cropping:
+                                print(f"  Table cropping skipped (disabled)")
+                            else:
+                                print(f"  Table cropping skipped (no table structure detected)")
 
                     # Save border-cropped table for Stage 2
                     crop_dir = self.stage1_config.output_dir / "07_border_cropped"
@@ -370,6 +619,9 @@ class TwoStageOCRPipeline:
                 f"\n*** STAGE 1 COMPLETE: {len(cropped_tables)} cropped tables ready for Stage 2 ***"
             )
             print(f"Output: {self.stage1_config.output_dir / '07_border_cropped'}")
+
+        # Save run info at completion
+        self._save_run_info("stage1", input_path, len(image_files), "completed")
 
         return cropped_tables
 
@@ -401,6 +653,9 @@ class TwoStageOCRPipeline:
         if self.stage2_config.verbose:
             print(f"Found {len(image_files)} cropped tables from Stage 1")
 
+        # Save run info at start
+        self._save_run_info("stage2", input_dir, len(image_files), "started")
+
         refined_tables = []
 
         # Process each cropped table through Stage 2 refinement
@@ -414,42 +669,93 @@ class TwoStageOCRPipeline:
                 base_name = image_path.stem.replace("_cropped", "")
 
                 # Re-deskew for fine-tuning
-                refined_deskewed, _ = deskew_image(
-                    table_image,
-                    self.stage2_config.angle_range,
-                    self.stage2_config.angle_step,
-                    self.stage2_config.min_angle_correction,
-                )
+                if self.stage2_config.enable_deskewing:
+                    if self.stage2_config.save_debug_images:
+                        # Use processor for debug mode
+                        refined_deskewed, _ = self.deskew_processor_s2.process(
+                            table_image,
+                            angle_range=self.stage2_config.angle_range,
+                            angle_step=self.stage2_config.angle_step,
+                            min_angle_correction=self.stage2_config.min_angle_correction,
+                        )
+                        
+                        # Save debug images if debug directory is configured
+                        if self.debug_run_dir_s2:
+                            debug_subdir = self.debug_run_dir_s2 / "01_deskew" / base_name
+                            self.deskew_processor_s2.save_debug_images_to_dir(debug_subdir)
+                    else:
+                        # Use direct function call for normal processing
+                        refined_deskewed, _ = deskew_image(
+                            table_image,
+                            self.stage2_config.angle_range,
+                            self.stage2_config.angle_step,
+                            self.stage2_config.min_angle_correction,
+                        )
 
-                # Save refined deskewed
-                deskew_dir = self.stage2_config.output_dir / "01_deskewed"
-                deskew_path = deskew_dir / f"{base_name}_refined_deskewed.jpg"
-                save_image(refined_deskewed, deskew_path)
+                    # Save refined deskewed
+                    if self.stage2_config.save_intermediate_outputs:
+                        deskew_dir = self.stage2_config.output_dir / "01_deskewed"
+                        deskew_path = deskew_dir / f"{base_name}_refined_deskewed.jpg"
+                        save_image(refined_deskewed, deskew_path)
+                else:
+                    refined_deskewed = table_image
+                    if self.stage2_config.verbose:
+                        print(f"  Deskewing skipped (disabled)")
 
-                # Refined line detection with tighter parameters
-                h_lines, v_lines = detect_table_lines(
-                    refined_deskewed,
-                    threshold=self.stage2_config.threshold,
-                    horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
-                    vertical_kernel_size=self.stage2_config.vertical_kernel_size,
-                    alignment_threshold=self.stage2_config.alignment_threshold,
-                    h_min_length_image_ratio=self.stage2_config.h_min_length_image_ratio,
-                    h_min_length_relative_ratio=self.stage2_config.h_min_length_relative_ratio,
-                    v_min_length_image_ratio=self.stage2_config.v_min_length_image_ratio,
-                    v_min_length_relative_ratio=self.stage2_config.v_min_length_relative_ratio,
-                    min_aspect_ratio=self.stage2_config.min_aspect_ratio,
-                    max_h_length_ratio=self.stage2_config.max_h_length_ratio,
-                    max_v_length_ratio=self.stage2_config.max_v_length_ratio,
-                    close_line_distance=self.stage2_config.close_line_distance,
-                )
+                # Refined line detection (always enabled - generates required JSON)
+                if self.stage2_config.save_debug_images:
+                    # Use processor for debug mode
+                    h_lines, v_lines = self.table_detector_s2.process(
+                        refined_deskewed,
+                        threshold=self.stage2_config.threshold,
+                        horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
+                        vertical_kernel_size=self.stage2_config.vertical_kernel_size,
+                        alignment_threshold=self.stage2_config.alignment_threshold,
+                        h_min_length_image_ratio=self.stage2_config.h_min_length_image_ratio,
+                        h_min_length_relative_ratio=self.stage2_config.h_min_length_relative_ratio,
+                        v_min_length_image_ratio=self.stage2_config.v_min_length_image_ratio,
+                        v_min_length_relative_ratio=self.stage2_config.v_min_length_relative_ratio,
+                        min_aspect_ratio=self.stage2_config.min_aspect_ratio,
+                        max_h_length_ratio=self.stage2_config.max_h_length_ratio,
+                        max_v_length_ratio=self.stage2_config.max_v_length_ratio,
+                        close_line_distance=self.stage2_config.close_line_distance,
+                        skew_tolerance=getattr(self.stage2_config, 'skew_tolerance', 0),
+                        skew_angle_step=getattr(self.stage2_config, 'skew_angle_step', 0.2),
+                    )
+                    
+                    # Save debug images if debug directory is configured
+                    if self.debug_run_dir_s2:
+                        debug_subdir = self.debug_run_dir_s2 / "02_table_detection" / base_name
+                        self.table_detector_s2.save_debug_images_to_dir(debug_subdir)
+                else:
+                    # Use direct function call for normal processing
+                    h_lines, v_lines = detect_table_lines(
+                        refined_deskewed,
+                        threshold=self.stage2_config.threshold,
+                        horizontal_kernel_size=self.stage2_config.horizontal_kernel_size,
+                        vertical_kernel_size=self.stage2_config.vertical_kernel_size,
+                        alignment_threshold=self.stage2_config.alignment_threshold,
+                        h_min_length_image_ratio=self.stage2_config.h_min_length_image_ratio,
+                        h_min_length_relative_ratio=self.stage2_config.h_min_length_relative_ratio,
+                        v_min_length_image_ratio=self.stage2_config.v_min_length_image_ratio,
+                        v_min_length_relative_ratio=self.stage2_config.v_min_length_relative_ratio,
+                        min_aspect_ratio=self.stage2_config.min_aspect_ratio,
+                        max_h_length_ratio=self.stage2_config.max_h_length_ratio,
+                        max_v_length_ratio=self.stage2_config.max_v_length_ratio,
+                        close_line_distance=self.stage2_config.close_line_distance,
+                        skew_tolerance=getattr(self.stage2_config, 'skew_tolerance', 0),
+                        skew_angle_step=getattr(self.stage2_config, 'skew_angle_step', 0.2),
+                    )
 
                 # Save refined line detection visualization
-                lines_dir = self.stage2_config.output_dir / "02_table_lines"
-                lines_path = lines_dir / f"{base_name}_refined_table_lines.jpg"
-                vis_image = visualize_detected_lines(refined_deskewed, h_lines, v_lines)
-                save_image(vis_image, lines_path)
+                if self.stage2_config.save_intermediate_outputs or self.stage2_config.save_debug_images:
+                    lines_dir = self.stage2_config.output_dir / "02_table_lines"
+                    lines_path = lines_dir / f"{base_name}_refined_table_lines.jpg"
+                    vis_image = visualize_detected_lines(refined_deskewed, h_lines, v_lines)
+                    save_image(vis_image, lines_path)
                 
                 # Save line data to JSON for table recovery
+                lines_dir = self.stage2_config.output_dir / "02_table_lines"
                 lines_data_dir = lines_dir / "lines_data"
                 lines_data_dir.mkdir(parents=True, exist_ok=True)
                 lines_json_path = lines_data_dir / f"{base_name}_lines_data.json"
@@ -462,7 +768,7 @@ class TwoStageOCRPipeline:
                 if self.stage2_config.verbose:
                     print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
 
-                # Step 3: Table structure detection from detected lines
+                # Step 3: Table structure detection (always enabled - generates required JSON)
                 table_structure, structure_analysis = detect_table_structure(
                     h_lines,  # Pass horizontal lines
                     v_lines,  # Pass vertical lines
@@ -471,10 +777,11 @@ class TwoStageOCRPipeline:
                 )
 
                 # Save table structure visualization
-                structure_dir = self.stage2_config.output_dir / "03_table_structure"
-                structure_path = structure_dir / f"{base_name}_table_structure.jpg"
-                structure_vis = visualize_table_structure(refined_deskewed, table_structure)
-                save_image(structure_vis, structure_path)
+                if self.stage2_config.save_intermediate_outputs or self.stage2_config.save_debug_images:
+                    structure_dir = self.stage2_config.output_dir / "03_table_structure"
+                    structure_path = structure_dir / f"{base_name}_table_structure.jpg"
+                    structure_vis = visualize_table_structure(refined_deskewed, table_structure)
+                    save_image(structure_vis, structure_path)
 
                 if self.stage2_config.verbose:
                     xs = table_structure.get("xs", [])
@@ -483,22 +790,34 @@ class TwoStageOCRPipeline:
                     print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
 
                 # Save table structure data to JSON for reference
+                structure_dir = self.stage2_config.output_dir / "03_table_structure"
                 structure_data_dir = structure_dir / "structure_data"
                 structure_data_dir.mkdir(parents=True, exist_ok=True)
                 structure_json_path = structure_data_dir / f"{base_name}_structure_data.json"
                 with open(structure_json_path, 'w') as f:
                     json.dump(table_structure, f, indent=2)
 
-                # Step 4: Table recovery (replaces border cropping)
-                recovered_result = table_recovery(
-                    lines_json_path=str(lines_json_path),
-                    structure_json_path=str(structure_json_path),
-                    coverage_ratio=getattr(self.stage2_config, 'table_recovery_coverage_ratio', 0.8),
-                    background_image=refined_deskewed,
-                    highlight_merged=True,
-                    show_grid=True,
-                    label_cells=True
-                )
+                # Step 4: Table recovery (always enabled - generates required JSON)
+                if table_structure.get("cells"):
+                    recovered_result = table_recovery(
+                        lines_json_path=str(lines_json_path),
+                        structure_json_path=str(structure_json_path),
+                        coverage_ratio=getattr(self.stage2_config, 'table_recovery_coverage_ratio', 0.8),
+                        background_image=refined_deskewed,
+                        highlight_merged=True,
+                        show_grid=True,
+                        label_cells=True
+                    )
+                else:
+                    # If no table structure detected, create a simple result
+                    recovered_result = {
+                        'visualization': refined_deskewed,
+                        'rows': [],
+                        'cols': [],
+                        'cells': []
+                    }
+                    if self.stage2_config.verbose:
+                        print(f"  Table recovery skipped (no table structure detected)")
 
                 # Save recovered table visualization as final result
                 recovery_dir = self.stage2_config.output_dir / "04_table_recovered"
@@ -529,21 +848,32 @@ class TwoStageOCRPipeline:
                 # Check for vertical strip cutting configuration
                 vertical_strip_config = getattr(self.stage2_config, 'vertical_strip_cutting', {})
                 if isinstance(vertical_strip_config, dict):
-                    strip_cutting_enabled = vertical_strip_config.get('enable', True)
                     strip_padding = vertical_strip_config.get('padding', 20)
                     strip_min_width = vertical_strip_config.get('min_width', 1)
+                    use_longest_lines_only = vertical_strip_config.get('use_longest_lines_only', False)
+                    min_length_ratio = vertical_strip_config.get('min_length_ratio', 0.9)
                 else:
-                    # Fallback for flat config attributes
-                    strip_cutting_enabled = getattr(self.stage2_config, 'vertical_strip_cutting_enable', True)
-                    strip_padding = getattr(self.stage2_config, 'vertical_strip_cutting_padding', 20)
-                    strip_min_width = getattr(self.stage2_config, 'vertical_strip_cutting_min_width', 1)
+                    strip_padding = 20
+                    strip_min_width = 1
+                    use_longest_lines_only = False
+                    min_length_ratio = 0.9
                 
-                if strip_cutting_enabled:
+                if self.stage2_config.enable_vertical_strip_cutting and recovered_result.get("cells"):
+                    # Extract vertical lines from recovered table data
+                    # This gives us more accurate boundaries considering merged cells
+                    recovered_v_lines = get_major_vertical_boundaries(recovered_result)
+                    
+                    if self.stage2_config.verbose:
+                        print(f"  Extracted {len(recovered_v_lines)} vertical lines from recovered table")
+                    
                     strips_result = cut_vertical_strips(
                         image=refined_deskewed,
-                        structure_json_path=str(structure_json_path),
+                        structure_json_path=None,  # Don't use structure_json, let it be created from v_lines
                         padding=strip_padding,
                         min_width=strip_min_width,
+                        use_longest_lines_only=use_longest_lines_only,
+                        min_length_ratio=min_length_ratio,
+                        v_lines=recovered_v_lines,  # Use recovered lines
                         output_dir=self.stage2_config.output_dir / "05_vertical_strips",
                         base_name=base_name,
                         verbose=self.stage2_config.verbose
@@ -551,6 +881,68 @@ class TwoStageOCRPipeline:
                     
                     if self.stage2_config.verbose:
                         print(f"  Vertical strips: {strips_result['num_strips']} columns saved")
+                else:
+                    if self.stage2_config.verbose:
+                        print(f"  Vertical strip cutting skipped (disabled or no table structure)")
+                
+                # Step 6: Binarization of vertical strips (final step)
+                if self.stage2_config.enable_binarization:
+                    # Binarization only processes vertical strips
+                    strips_dir = self.stage2_config.output_dir / "05_vertical_strips"
+                    # Get all image files in the strips directory (both PNG and JPG)
+                    strip_files = []
+                    if strips_dir.exists():
+                        strip_files = list(strips_dir.glob("*.png")) + list(strips_dir.glob("*.jpg"))
+                    
+                    if strip_files:
+                        binarized_dir = self.stage2_config.output_dir / "06_binarized"
+                        binarized_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Process each vertical strip
+                        for strip_file in strip_files:
+                            strip_img = load_image(strip_file)
+                            
+                            if self.stage2_config.save_debug_images:
+                                # Use processor for debug mode
+                                binarized_strip = self.binarize_processor_s2.process(
+                                    strip_img,
+                                    method=self.stage2_config.binarization_method,
+                                    threshold=self.stage2_config.binarization_threshold,
+                                    adaptive_block_size=self.stage2_config.binarization_adaptive_block_size,
+                                    adaptive_c=self.stage2_config.binarization_adaptive_c,
+                                    invert=self.stage2_config.binarization_invert,
+                                    denoise=self.stage2_config.binarization_denoise,
+                                )
+                                
+                                # Save debug images if debug directory is configured
+                                if self.debug_run_dir_s2 and strip_file == strip_files[0]:  # Only save debug for first strip
+                                    debug_subdir = self.debug_run_dir_s2 / "06_binarization" / base_name
+                                    self.binarize_processor_s2.save_debug_images_to_dir(debug_subdir)
+                            else:
+                                # Use direct function call for normal processing
+                                binarized_strip = binarize_image(
+                                    strip_img,
+                                    method=self.stage2_config.binarization_method,
+                                    threshold=self.stage2_config.binarization_threshold,
+                                    adaptive_block_size=self.stage2_config.binarization_adaptive_block_size,
+                                    adaptive_c=self.stage2_config.binarization_adaptive_c,
+                                    invert=self.stage2_config.binarization_invert,
+                                    denoise=self.stage2_config.binarization_denoise,
+                                )
+                            
+                            # Save binarized strip
+                            binarized_strip_path = binarized_dir / strip_file.name
+                            save_image(binarized_strip, binarized_strip_path)
+                        
+                        if self.stage2_config.verbose:
+                            print(f"  Binarized {len(strip_files)} vertical strips using {self.stage2_config.binarization_method} method")
+                            print(f"  Saved to: {binarized_dir.name}")
+                    else:
+                        if self.stage2_config.verbose:
+                            print(f"  Binarization skipped (no vertical strips found)")
+                else:
+                    if self.stage2_config.verbose:
+                        print(f"  Binarization skipped (disabled)")
 
             except Exception as e:
                 print(f"Error refining {image_path}: {e}")
@@ -565,6 +957,13 @@ class TwoStageOCRPipeline:
             vertical_strip_config = getattr(self.stage2_config, 'vertical_strip_cutting', {})
             if isinstance(vertical_strip_config, dict) and vertical_strip_config.get('enable', True):
                 print(f"Vertical strips: {self.stage2_config.output_dir / '05_vertical_strips'}")
+            
+            # Check if binarization was enabled
+            if self.stage2_config.enable_binarization:
+                print(f"Binarized output: {self.stage2_config.output_dir / '06_binarized'}")
+
+        # Save run info at completion
+        self._save_run_info("stage2", input_dir, len(image_files), "completed")
 
         return refined_tables
 

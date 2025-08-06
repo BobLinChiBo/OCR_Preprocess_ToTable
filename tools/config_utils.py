@@ -197,20 +197,9 @@ def add_processor_specific_arguments(parser: argparse.ArgumentParser, processor_
     if processor_type == 'margin_removal':
         parser.add_argument(
             "--method",
-            choices=['inscribed', 'aggressive', 'bounding_box', 'smart', 'curved_black_background', 'hybrid', 'edge_transition', 'gradient'],
+            choices=['inscribed'],
             default='inscribed',
-            help="Margin removal method"
-        )
-        parser.add_argument(
-            "--expansion-factor",
-            type=float,
-            default=0.0,
-            help="Expansion factor for bounding box method (0.1 = 10%%)"
-        )
-        parser.add_argument(
-            "--use-min-area-rect",
-            action="store_true",
-            help="Use minimum area rectangle for bounding box method"
+            help="Margin removal method (only 'inscribed' is supported)"
         )
         parser.add_argument(
             "--padding-top",

@@ -1,29 +1,36 @@
 """Table line detection and structure analysis for OCR pipeline."""
 
-from typing import List, Tuple, Dict, Any, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import cv2
 import numpy as np
+
 from .base import BaseProcessor
 
 
 class TableDetectionProcessor(BaseProcessor):
     """Processor for detecting table lines and structure."""
-    
+
     def process(
-        self,
-        image: np.ndarray,
-        **kwargs
+        self, image: np.ndarray, **kwargs
     ) -> Tuple[List[Tuple[int, int, int, int]], List[Tuple[int, int, int, int]]]:
         """Detect table lines in an image.
-        
+
         Args:
             image: Input image
             **kwargs: Parameters for table line detection
-            
+
         Returns:
             Tuple of (horizontal_lines, vertical_lines)
         """
         self.validate_image(image)
+
+        # Clear previous debug images
+        self.clear_debug_images()
+
+        # Pass processor instance to detect_table_lines for debug saving
+        kwargs["_processor"] = self
+
         return detect_table_lines(image, **kwargs)
 
 
@@ -34,16 +41,24 @@ def detect_table_lines(
     vertical_kernel_size: int = 8,  # Morphological kernel height
     alignment_threshold: int = 3,  # Clustering threshold for line alignment
     # New separated parameters for horizontal lines
-    h_min_length_image_ratio: float = 0.3,  # Min horizontal length as ratio of image width
-    h_min_length_relative_ratio: float = 0.5,  # Min horizontal length relative to longest h-line
+    h_min_length_image_ratio: float = 0.0,  # Min horizontal length as ratio of image width
+    h_min_length_relative_ratio: float = 0.0,  # Min horizontal length relative to longest h-line
     # New separated parameters for vertical lines
-    v_min_length_image_ratio: float = 0.3,  # Min vertical length as ratio of image height
-    v_min_length_relative_ratio: float = 0.5,  # Min vertical length relative to longest v-line
-    min_aspect_ratio: int = 5,  # Min aspect ratio for line-like components
+    v_min_length_image_ratio: float = 0.0,  # Min vertical length as ratio of image height
+    v_min_length_relative_ratio: float = 0.0,  # Min vertical length relative to longest v-line
+    min_aspect_ratio: int = 2,  # Min aspect ratio for line-like components
     # New post-processing parameters
     max_h_length_ratio: float = 1.0,  # Max horizontal line length ratio (1.0 = disable filtering)
     max_v_length_ratio: float = 1.0,  # Max vertical line length ratio (1.0 = disable filtering)
     close_line_distance: int = 45,  # Distance for merging close lines (0 = disable)
+    # Search region parameters
+    search_region_top: int = 0,  # Pixels to ignore from top
+    search_region_bottom: int = 0,  # Pixels to ignore from bottom
+    search_region_left: int = 0,  # Pixels to ignore from left
+    search_region_right: int = 0,  # Pixels to ignore from right
+    # Skew tolerance parameters
+    skew_tolerance: float = 0,  # Maximum angle in degrees to tolerate for skewed lines
+    skew_angle_step: float = 0.2,  # Step size for angle search
     return_analysis: bool = False,
     # Keep old parameters for backwards compatibility
     hough_threshold: int = None,
@@ -74,14 +89,64 @@ def detect_table_lines(
         max_h_length_ratio: Maximum horizontal line length ratio (1.0 = disable filtering)
         max_v_length_ratio: Maximum vertical line length ratio (1.0 = disable filtering)
         close_line_distance: Distance for merging close parallel lines (0 = disable)
+        skew_tolerance: Maximum angle in degrees to tolerate for skewed lines (0 = disable)
+        skew_angle_step: Step size for angle search when skew_tolerance > 0
         return_analysis: If True, returns additional statistics
 
     Returns:
         tuple: (h_lines, v_lines) or (h_lines, v_lines, analysis) if return_analysis=True
     """
+    # Get processor instance if available for debug saving
+    processor = kwargs.get("_processor", None)
+
     # Convert to grayscale if needed
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     img_h, img_w = gray.shape
+
+    # Apply search region by cropping if specified
+    if (
+        search_region_top > 0
+        or search_region_bottom > 0
+        or search_region_left > 0
+        or search_region_right > 0
+    ):
+        # Calculate crop boundaries
+        y1 = search_region_top
+        y2 = img_h - search_region_bottom
+        x1 = search_region_left
+        x2 = img_w - search_region_right
+
+        # Ensure valid bounds
+        y1 = max(0, min(y1, img_h))
+        y2 = max(0, min(y2, img_h))
+        x1 = max(0, min(x1, img_w))
+        x2 = max(0, min(x2, img_w))
+
+        if y2 > y1 and x2 > x1:
+            # Save debug image showing search region before cropping
+            if processor:
+                search_vis = (
+                    cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                    if len(gray.shape) == 2
+                    else gray.copy()
+                )
+                cv2.rectangle(search_vis, (x1, y1), (x2 - 1, y2 - 1), (0, 255, 0), 2)
+                processor.save_debug_image("search_region", search_vis)
+
+            # Crop the image to the search region
+            gray = gray[y1:y2, x1:x2]
+
+            # Store offsets for later coordinate adjustment
+            y1_offset = y1
+            x1_offset = x1
+        else:
+            # Invalid search region, use full image
+            y1_offset = 0
+            x1_offset = 0
+    else:
+        # No offset needed if no search region
+        y1_offset = 0
+        x1_offset = 0
 
     # Invert image (make dark lines white)
     gray_inv = cv2.bitwise_not(gray)
@@ -89,11 +154,58 @@ def detect_table_lines(
     # Binary thresholding
     _, binary = cv2.threshold(gray_inv, threshold, 255, cv2.THRESH_BINARY)
 
+    # Save debug image
+    if processor:
+        processor.save_debug_image("binary_threshold", binary)
+
     # Morphological opening to extract lines
-    kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_size))
-    kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_size, 1))
-    vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v, iterations=1)
-    horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_h, iterations=1)
+    if skew_tolerance > 0:
+        # Multi-angle detection for skewed lines
+        vertical_lines = np.zeros_like(binary)
+        horizontal_lines = np.zeros_like(binary)
+        
+        # Generate angles to test
+        angles = np.arange(-skew_tolerance, skew_tolerance + skew_angle_step, skew_angle_step)
+        
+        for angle in angles:
+            # Get rotation matrix
+            rows, cols = binary.shape
+            center = (cols // 2, rows // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            
+            # Rotate the binary image
+            rotated = cv2.warpAffine(binary, M, (cols, rows), flags=cv2.INTER_NEAREST)
+            
+            # Apply morphological operations on rotated image
+            kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_size))
+            kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_size, 1))
+            v_lines_rot = cv2.morphologyEx(rotated, cv2.MORPH_OPEN, kernel_v, iterations=1)
+            h_lines_rot = cv2.morphologyEx(rotated, cv2.MORPH_OPEN, kernel_h, iterations=1)
+            
+            # Rotate back to original orientation
+            M_inv = cv2.getRotationMatrix2D(center, -angle, 1.0)
+            v_lines_back = cv2.warpAffine(v_lines_rot, M_inv, (cols, rows), flags=cv2.INTER_NEAREST)
+            h_lines_back = cv2.warpAffine(h_lines_rot, M_inv, (cols, rows), flags=cv2.INTER_NEAREST)
+            
+            # Accumulate results using bitwise OR
+            vertical_lines = cv2.bitwise_or(vertical_lines, v_lines_back)
+            horizontal_lines = cv2.bitwise_or(horizontal_lines, h_lines_back)
+        
+        # Clean up accumulated results with a small morphological closing
+        kernel_cleanup = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        vertical_lines = cv2.morphologyEx(vertical_lines, cv2.MORPH_CLOSE, kernel_cleanup, iterations=1)
+        horizontal_lines = cv2.morphologyEx(horizontal_lines, cv2.MORPH_CLOSE, kernel_cleanup, iterations=1)
+    else:
+        # Standard single-angle detection
+        kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_size))
+        kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_kernel_size, 1))
+        vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_v, iterations=1)
+        horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_h, iterations=1)
+
+    # Save morphological operation results
+    if processor:
+        processor.save_debug_image("vertical_morph", vertical_lines)
+        processor.save_debug_image("horizontal_morph", horizontal_lines)
 
     def extract_and_merge_lines(
         line_img,
@@ -238,6 +350,46 @@ def detect_table_lines(
 
     # Step 2: Merge close parallel lines (if enabled)
     h_lines, v_lines = merge_close_parallel_lines(h_lines, v_lines, close_line_distance)
+
+    # Save debug image showing filtered lines
+    if processor:
+        # Create visualization of filtered lines
+        filtered_vis = np.zeros_like(gray)
+        for x1, y1, x2, y2 in h_lines:
+            cv2.line(filtered_vis, (x1, y1), (x2, y2), 255, 2)
+        for x1, y1, x2, y2 in v_lines:
+            cv2.line(filtered_vis, (x1, y1), (x2, y2), 255, 2)
+        processor.save_debug_image("filtered_lines", filtered_vis)
+
+        # Create connected components visualization
+        components_vis = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        # Color code connected components
+        colors = [
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (255, 255, 0),
+            (255, 0, 255),
+            (0, 255, 255),
+        ]
+        for i, (x1, y1, x2, y2) in enumerate(h_lines[:20]):  # Show first 20 lines
+            color = colors[i % len(colors)]
+            cv2.line(components_vis, (x1, y1), (x2, y2), color, 3)
+        for i, (x1, y1, x2, y2) in enumerate(v_lines[:20]):  # Show first 20 lines
+            color = colors[i % len(colors)]
+            cv2.line(components_vis, (x1, y1), (x2, y2), color, 3)
+        processor.save_debug_image("connected_components", components_vis)
+
+    # Adjust line coordinates if search region was used
+    if y1_offset > 0 or x1_offset > 0:
+        h_lines = [
+            (x1 + x1_offset, y1 + y1_offset, x2 + x1_offset, y2 + y1_offset)
+            for x1, y1, x2, y2 in h_lines
+        ]
+        v_lines = [
+            (x1 + x1_offset, y1 + y1_offset, x2 + x1_offset, y2 + y1_offset)
+            for x1, y1, x2, y2 in v_lines
+        ]
 
     if not return_analysis:
         return h_lines, v_lines
@@ -451,21 +603,21 @@ def detect_table_structure(
     # Extract unique positions
     x_positions = []
     y_positions = []
-    
+
     for x1, y1, x2, y2 in v_lines:
         x_positions.append(x1)
-        
+
     for x1, y1, x2, y2 in h_lines:
         y_positions.append(y1)
-    
+
     # Cluster positions
     xs = cluster_line_positions(x_positions, eps)
     ys = cluster_line_positions(y_positions, eps)
-    
+
     # Sort positions
     xs = sorted(xs)
     ys = sorted(ys)
-    
+
     result = {
         "xs": xs,
         "ys": ys,
@@ -473,10 +625,10 @@ def detect_table_structure(
         "num_rows": len(ys) - 1 if len(ys) > 1 else 0,
         "num_cols": len(xs) - 1 if len(xs) > 1 else 0,
     }
-    
+
     if not return_analysis:
         return result
-    
+
     analysis = {
         "h_lines_count": len(h_lines),
         "v_lines_count": len(v_lines),
@@ -485,7 +637,7 @@ def detect_table_structure(
         "clustering_eps": eps,
         "detected_cells": len(result["cells"]),
     }
-    
+
     return result, analysis
 
 

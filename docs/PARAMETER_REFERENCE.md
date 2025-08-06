@@ -1,6 +1,8 @@
 # OCR Pipeline Parameter Reference
 
-Complete reference guide for all configurable parameters in the simplified OCR table extraction pipeline.
+Complete reference guide for all configurable parameters in the OCR Table Extraction Pipeline.
+
+> **📚 Documentation Navigation**: [← Documentation Index](README.md) | [Configuration Guide](../configs/README.md) | [Debug Mode Guide](DEBUG_MODE_GUIDE.md) →
 
 ## Table of Contents
 
@@ -421,3 +423,7 @@ Line detection uses a connected components method to identify table structure by
 - **Consistent Layout**: Can use more specialized parameters
 
 This parameter reference should be used in conjunction with the visualization tools in the `tools/` directory to systematically optimize the pipeline for your specific document types.
+
+---
+
+**Navigation**: [← Documentation Index](README.md) | [Configuration Guide](../configs/README.md) | [Debug Mode Guide](DEBUG_MODE_GUIDE.md) | [Tools Documentation](../tools/README.md) →

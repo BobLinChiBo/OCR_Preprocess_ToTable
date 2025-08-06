@@ -594,17 +594,22 @@ def remove_margin_inscribed_optimized(
         return crop, analysis
         
     except RuntimeError as e:
-        # Fallback to aggressive optimized method if inscribed fails
+        # Fallback - return original image if inscribed method fails
         if return_analysis:
-            fallback_result = remove_margin_aggressive_optimized(
-                image, return_analysis=True
-            )
-            fallback_crop, fallback_analysis = fallback_result
-            fallback_analysis["method"] = "inscribed_optimized_fallback_to_aggressive"
-            fallback_analysis["fallback_reason"] = str(e)
-            return fallback_crop, fallback_analysis
+            analysis = {
+                "method": "inscribed_rectangle_optimized",
+                "success": False,
+                "error": str(e),
+                "original_shape": image.shape,
+                "cropped_shape": image.shape,
+                "crop_bounds": (0, 0, image.shape[1], image.shape[0]),
+                "area_retention": 1.0,
+                "fallback_reason": str(e),
+            }
+            return image, analysis
         else:
-            return remove_margin_aggressive_optimized(image)
+            # Return original image if method fails
+            return image
     except Exception as e:
         # Handle any other errors gracefully
         if return_analysis:

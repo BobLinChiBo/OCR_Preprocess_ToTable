@@ -31,7 +31,16 @@ def save_image(image: np.ndarray, output_path: Path) -> None:
     Args:
         image: Image array to save
         output_path: Path where to save the image
+        
+    Raises:
+        ValueError: If image is None or empty
     """
+    if image is None:
+        raise ValueError(f"Cannot save None as image to {output_path}")
+    
+    if image.size == 0:
+        raise ValueError(f"Cannot save empty image to {output_path}")
+    
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), image)
 

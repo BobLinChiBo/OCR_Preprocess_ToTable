@@ -31,12 +31,20 @@ class DeskewProcessor(BaseProcessor):
             tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
         """
         self.validate_image(image)
+        
+        # Clear previous debug images
+        self.clear_debug_images()
+        
+        # Pass processor instance for debug saving
+        kwargs['_processor'] = self
+        
         return deskew_image(
             image,
             angle_range=angle_range,
             angle_step=angle_step,
             min_angle_correction=min_angle_correction,
-            return_analysis_data=return_analysis_data
+            return_analysis_data=return_analysis_data,
+            **kwargs
         )
 
 
@@ -46,6 +54,7 @@ def deskew_image(
     angle_step: float = 0.5,
     min_angle_correction: float = 0.5,
     return_analysis_data: bool = False,
+    **kwargs
 ) -> tuple:
     """Deskew image using optimized coarse-to-fine histogram variance optimization.
 
@@ -68,9 +77,17 @@ def deskew_image(
     Returns:
         tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
     """
+    # Get processor instance if available for debug saving
+    processor = kwargs.get('_processor', None)
+    
     # Convert to binary for optimal histogram analysis
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    
+    # Save debug images
+    if processor:
+        processor.save_debug_image('gray_input', gray)
+        processor.save_debug_image('binary_threshold', binary)
 
     def histogram_variance_score(
         binary_img: np.ndarray, angle: float, use_fast_interpolation: bool = True
@@ -144,6 +161,44 @@ def deskew_image(
     # Find best fine angle
     best_fine_idx = np.argmax(fine_scores)
     best_angle = fine_angles[best_fine_idx]
+    
+    # Create angle histogram visualization
+    if processor:
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        
+        # Coarse search plot
+        ax1.plot(coarse_angles[:len(coarse_scores)], coarse_scores, 'b-', label='Coarse Search')
+        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.1f}°')
+        ax1.set_xlabel('Angle (degrees)')
+        ax1.set_ylabel('Variance Score')
+        ax1.set_title('Coarse Angle Search')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Fine search plot
+        ax2.plot(fine_angles, fine_scores, 'g-', label='Fine Search')
+        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f}°')
+        ax2.set_xlabel('Angle (degrees)')
+        ax2.set_ylabel('Variance Score')
+        ax2.set_title('Fine Angle Search')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Convert plot to image
+        fig.canvas.draw()
+        # Use the correct method name for getting the buffer
+        plot_img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+        plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+        # Convert RGBA to BGR
+        plot_img = cv2.cvtColor(plot_img, cv2.COLOR_RGBA2BGR)
+        processor.save_debug_image('angle_histogram', plot_img)
+        plt.close(fig)
 
     # Apply rotation only if significant
     if abs(best_angle) < min_angle_correction:
@@ -183,6 +238,22 @@ def deskew_image(
         flags=cv2.INTER_CUBIC,  # High quality for final result
         borderMode=cv2.BORDER_REPLICATE,
     )
+    
+    # Create rotation comparison visualization
+    if processor:
+        # Create side-by-side comparison
+        comparison = np.zeros((h, w * 2 + 20, 3), dtype=np.uint8)
+        comparison[:, :w] = image if len(image.shape) == 3 else cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        comparison[:, w+20:] = deskewed if len(deskewed.shape) == 3 else cv2.cvtColor(deskewed, cv2.COLOR_GRAY2BGR)
+        
+        # Add divider line
+        comparison[:, w:w+20] = 255
+        
+        # Add text labels
+        cv2.putText(comparison, f"Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        processor.save_debug_image('rotation_comparison', comparison)
 
     if return_analysis_data:
         # Create comprehensive analysis data for visualization

@@ -1,6 +1,8 @@
-# CLAUDE.md
+# CLAUDE.md - AI Assistant Integration Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and other AI assistants when working with code in this repository.
+
+> **📚 Documentation Navigation**: [← Documentation Index](README.md) | [API Reference](API_REFERENCE.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) →
 
 ## Overview
 
@@ -227,3 +229,7 @@ The project uses a V2 visualization architecture with processor wrappers:
 - **Management Tools**: `check_results.py`, `config_utils.py` - Result and config management
 
 The tools/ directory provides comprehensive visualization and analysis capabilities - refer to `tools/README.md` for detailed usage guidance.
+
+---
+
+**Navigation**: [← Documentation Index](README.md) | [API Reference](API_REFERENCE.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) | [Tools Documentation](../tools/README.md) →

@@ -1,120 +1,306 @@
 # Configuration Guide
 
-This directory contains default configuration files for the simplified OCR pipeline.
+Complete guide to configuring and customizing the OCR Table Extraction Pipeline for optimal results on your document types.
 
-## Configuration Files
+## 📋 Quick Reference
 
-### stage1_default.json
+| Configuration File | Purpose | Key Features |
+|-------------------|---------|-------------|
+| **stage1_default.json** | Initial processing parameters | Page splitting, deskewing, margin removal, table detection |
+| **stage2_default.json** | Refinement parameters | Fine-tuning, table recovery, column extraction |
 
-Default configuration for Stage 1 (Initial Processing). Key parameters:
+## 🔧 Stage 1 Configuration (Initial Processing)
 
-- **page_splitting**: Controls how double-page scans are split
-- **deskewing**: Parameters for correcting image rotation
-- **margin_removal**: Settings for removing document margins and background
-- **line_detection**: Connected components method for table structure detection
+### Processing Pipeline Order
 
-### stage2_default.json
+```
+Input → Mark Removal → Margin Removal → Page Splitting → Deskewing → Table Detection → Table Cropping → Output
+```
 
-Default configuration for Stage 2 (Refinement Processing). Key parameters:
+#### Step-by-Step Processing
 
-- **deskewing**: Fine-tuning rotation correction on cropped tables
-- **line_detection**: Refined parameters for precise table structure detection
-- **margin_removal**: Disabled (images already processed in Stage 1)
+1. **Mark Removal** (`mark_removal`)
+   - **Purpose**: Remove watermarks, stamps, and document artifacts
+   - **Method**: Otsu thresholding with content protection
+   - **Key Parameter**: `dilate_iter` (2) - Controls mark detection sensitivity
 
-## Usage
+2. **Margin Removal** (`margin_removal`) - **NEW: Inscribed Rectangle Method (Default)**
+   - **Purpose**: Remove document margins and background
+   - **Method**: Paper mask detection + largest inscribed rectangle
+   - **Alternative**: Gradient detection method available
+   - **Key Parameters**: 
+     - `blur_ksize` (5) - Noise reduction
+     - `close_ksize` (25) - Mask refinement
+     - `close_iter` (2) - Morphology iterations
 
-### From Python Code
+3. **Page Splitting** (`page_splitting`) - **NEW: V2 Algorithm**  
+   - **Purpose**: Separate double-page scanned documents
+   - **Method**: Enhanced vertical line detection with peak analysis
+   - **Key Parameters**:
+     - `search_ratio` (0.5) - Search area (center 50%)
+     - `line_len_frac` (0.3) - Minimum line length
+     - `peak_thr` (0.3) - Detection sensitivity
+
+4. **Deskewing** (`deskewing`)
+   - **Purpose**: Correct image rotation/skew
+   - **Method**: Hough line transform with angle histogram
+   - **Key Parameters**:
+     - `angle_range` (5) - Maximum rotation to detect (±degrees)
+     - `min_angle_correction` (0.1) - Minimum angle to apply
+
+5. **Table Detection** (`table_detection`) - **Connected Components Method**
+   - **Purpose**: Detect table structure and boundaries
+   - **Method**: Morphological operations + component analysis  
+   - **Key Parameters**:
+     - `threshold` (40) - Binary threshold for line detection
+     - `horizontal_kernel_size` (10) - Horizontal line kernel
+     - `vertical_kernel_size` (10) - Vertical line kernel
+
+6. **Table Cropping** (`table_detection.enable_table_cropping`)
+   - **Purpose**: Extract table regions with padding
+   - **Method**: Border-based extraction using detected bounds
+
+## 🚀 Usage
+
+### Command Line Usage
+
+```bash
+# Use default configurations (recommended for most cases)
+python scripts/run_complete.py your_images/ --verbose
+
+# Use custom Stage 1 configuration
+python scripts/run_complete.py your_images/ --stage1-config my_custom.json --verbose
+
+# Use custom configurations for both stages
+python scripts/run_complete.py your_images/ \
+    --stage1-config custom_stage1.json \
+    --stage2-config custom_stage2.json \
+    --verbose
+
+# Debug mode with custom config
+python scripts/run_complete.py your_images/ \
+    --stage1-config academic_papers.json \
+    --debug --verbose
+```
+
+### Programmatic Usage
 
 ```python
-import json
-from pathlib import Path
-from src.ocr_pipeline.config import Config
+from src.ocr_pipeline import TwoStageOCRPipeline
+from src.ocr_pipeline.config import Stage1Config, Stage2Config
 
-# Load from JSON
-with open("configs/stage1_default.json") as f:
-    config_data = json.load(f)
+# Load configurations
+stage1_config = Stage1Config.from_json("configs/stage1_default.json")
+stage2_config = Stage2Config.from_json("configs/stage2_default.json")
 
-# Create config object with overrides
-config = Config(
-    input_dir=Path(config_data["input_dir"]),
-    verbose=config_data["verbose"],
-    threshold=config_data["threshold"]
-    # ... other parameters
-)
+# Customize for your document type
+stage1_config.angle_range = 15  # Wider rotation range
+stage1_config.threshold = 25    # More sensitive line detection
+
+# Initialize and run pipeline
+pipeline = TwoStageOCRPipeline(stage1_config, stage2_config)
+result = pipeline.process_complete("document.jpg", "output/")
 ```
 
-### From Command Line
+## 🎛️ Key Configuration Parameters
+
+### Essential Parameters by Document Type
+
+#### Academic Papers (Clean Scans)
+```json
+{
+  "angle_range": 3,           // Conservative rotation range
+  "threshold": 45,            // Higher threshold for clean lines  
+  "search_ratio": 0.3,        // Narrow search for centered binding
+  "min_angle_correction": 0.2 // Less sensitive rotation
+}
+```
+
+#### Historical Documents (Poor Quality)
+```json
+{
+  "angle_range": 20,          // Wide rotation range
+  "threshold": 20,            // Lower threshold for faint lines
+  "search_ratio": 0.8,        // Wide search for varied layouts
+  "min_angle_correction": 0.05 // More sensitive rotation
+}
+```
+
+#### Mixed Document Collections  
+```json
+{
+  "angle_range": 5,           // Moderate rotation range
+  "threshold": 40,            // Standard threshold
+  "search_ratio": 0.5,        // Standard search area
+  "min_angle_correction": 0.1 // Standard sensitivity
+}
+```
+
+## 🔄 Margin Removal Methods
+
+The pipeline offers multiple margin removal approaches:
+
+### Inscribed Rectangle Method (Default - Recommended)
+```json
+"margin_removal": {
+  "enable": true,
+  "use_gradient_detection": false,  // Use inscribed method
+  "blur_ksize": 5,                  // Noise reduction
+  "close_ksize": 25,                // Mask refinement  
+  "close_iter": 2,                  // Morphology iterations
+  "erode_after_close": 0            // Additional erosion
+}
+```
+
+**Best for**: Most document types, especially those with clear paper boundaries
+**Algorithm**: Paper mask detection + largest inscribed rectangle extraction
+
+### Gradient Detection Method (Alternative)
+```json  
+"margin_removal": {
+  "enable": true,
+  "use_gradient_detection": true,   // Switch to gradient method
+  "gradient_threshold": 30          // Edge sensitivity (20-40 range)
+}
+```
+
+**Best for**: Documents with subtle or thin margins
+**Algorithm**: Gradient magnitude analysis for margin boundary detection
+
+## 📝 Document Type-Specific Configurations
+
+### Creating Custom Configurations
 
 ```bash
-# Use default configurations
-python scripts/run_stage1.py data/input/ --verbose
+# Start with default configuration
+cp configs/stage1_default.json configs/my_document_type.json
 
-# Custom output directory
-python scripts/run_stage1.py data/input/ -o custom_output/stage1/
+# Edit for your specific needs
+# - Adjust parameters based on visualization tool analysis
+# - Test with representative samples
+# - Document your changes
 
-# With debug mode
-python scripts/run_stage1.py data/input/ --debug --verbose
+# Use your custom configuration  
+python scripts/run_complete.py images/ --stage1-config configs/my_document_type.json
 ```
 
-## Configuration Parameters
+### Configuration Templates
 
-### Common Parameters
+#### High-Quality Scans (Aggressive Processing)
+```json
+{
+  "verbose": true,
+  "mark_removal": {"enable": true, "dilate_iter": 3},
+  "margin_removal": {"enable": true, "close_ksize": 35},
+  "deskewing": {"angle_range": 2, "min_angle_correction": 0.3},
+  "table_detection": {"threshold": 50}
+}
+```
 
-- `input_dir`: Input directory path
-- `output_dir`: Output directory path
-- `debug_dir`: Debug output directory (optional)
-- `verbose`: Enable detailed logging
-- `save_debug_images`: Save intermediate images for debugging
+#### Poor Quality Scans (Sensitive Processing)  
+```json
+{
+  "verbose": true,
+  "margin_removal": {"enable": true, "blur_ksize": 9, "close_ksize": 20},
+  "deskewing": {"angle_range": 15, "min_angle_correction": 0.05},
+  "table_detection": {"threshold": 25, "horizontal_kernel_size": 15}
+}
+```
 
-### Page Splitting Parameters
+#### Fast Processing (Speed Optimized)
+```json
+{
+  "verbose": false,
+  "save_debug_images": false,
+  "deskewing": {"angle_step": 0.5},
+  "table_detection": {"horizontal_kernel_size": 15, "vertical_kernel_size": 15}
+}
+```
 
-- `gutter_search_start`: Start position for gutter detection (0.0-1.0)
-- `gutter_search_end`: End position for gutter detection (0.0-1.0)
-- `min_gutter_width`: Minimum gutter width in pixels
+## 🧪 Parameter Optimization Workflow
 
-### Deskewing Parameters
-
-- `angle_range`: Maximum angle range to search (degrees)
-- `angle_step`: Angle increment for search (degrees)
-- `min_angle_correction`: Minimum angle to apply correction (degrees)
-
-### Margin Removal Parameters
-
-- `enable_margin_removal`: Enable margin removal preprocessing
-- `black_threshold`: Threshold for identifying background pixels
-- `content_threshold`: Threshold for identifying content pixels
-- `morph_kernel_size`: Morphological operation kernel size
-
-### Line Detection Parameters
-
-- `threshold`: Binary threshold for line detection
-- `horizontal_kernel_size`: Kernel size for horizontal line detection
-- `vertical_kernel_size`: Kernel size for vertical line detection
-- `alignment_threshold`: Maximum pixel deviation for line alignment
-
-### Stage-Specific Differences
-
-**Stage 1 (Initial Processing)**:
-- Full margin removal enabled for content area detection
-- Connected components method for robust line detection
-- Processing of raw scanned document images
-
-**Stage 2 (Refinement)**:
-- Margin removal disabled (images already processed)
-- Refined line detection parameters for cropped tables
-- Focus on precision over robustness
-
-## Customization
-
-Create custom configuration files by copying and modifying the defaults:
-
+### 1. Analyze Your Documents
 ```bash
-cp configs/stage1_default.json configs/my_custom_config.json
-# Edit my_custom_config.json as needed
+# Use visualization tools to understand your document characteristics
+python tools/visualize_page_split_v2.py sample_document.jpg
+python tools/visualize_table_lines_v2.py sample_document.jpg  
+python tools/visualize_margin_removal_v2.py sample_document.jpg --compare
 ```
 
-Then use your custom configuration:
-
+### 2. Create Test Configuration
 ```bash
-python scripts/run_stage1.py data/input/ --config configs/my_custom_config.json
+# Copy default and modify based on analysis
+cp configs/stage1_default.json configs/test_config.json
+# Edit test_config.json with your parameter adjustments
 ```
+
+### 3. Test and Iterate
+```bash
+# Test with single representative image
+python scripts/run_complete.py sample_image.jpg --stage1-config configs/test_config.json --debug --verbose
+
+# Check debug outputs in data/debug/ to verify improvements
+# Iterate on parameters until satisfied
+```
+
+### 4. Validate with Batch
+```bash
+# Test on small batch of representative images
+python scripts/run_complete.py test_batch/ --stage1-config configs/test_config.json --verbose
+
+# If results are good, use for full dataset
+```
+
+## ⚙️ Advanced Configuration Options
+
+### Enable/Disable Processing Steps
+
+Most processing steps can be enabled or disabled:
+
+```json
+{
+  "mark_removal": {"enable": false},      // Skip mark removal
+  "page_splitting": {"enable": false},    // Process as single page  
+  "deskewing": {"enable": false},         // Skip rotation correction
+  "table_detection": {
+    "enable_table_cropping": false       // Detect but don't crop tables
+  }
+}
+```
+
+> **📖 Complete Step Control**: See [Enable/Disable Steps Guide](../docs/enable_disable_steps.md) for detailed information about which steps can be customized.
+
+### Debug and Development Options
+
+```json
+{
+  "verbose": true,                        // Detailed console output
+  "save_debug_images": true,              // Save intermediate images  
+  "debug_dir": "custom_debug_location"    // Custom debug directory
+}
+```
+
+## 📚 Additional Resources
+
+- **[Parameter Reference](../docs/PARAMETER_REFERENCE.md)**: Complete documentation of all 50+ parameters
+- **[Quick Start Guide](../docs/QUICK_START.md)**: Step-by-step setup and first processing
+- **[Troubleshooting Guide](../docs/TROUBLESHOOTING.md)**: Solutions to common configuration issues
+- **[Tools Documentation](../tools/README.md)**: Visualization tools for parameter optimization
+
+## 🎯 Best Practices
+
+### Configuration Management
+1. **Start with Defaults**: Use built-in configurations for initial testing
+2. **Document Changes**: Keep notes on what works for different document types  
+3. **Version Control**: Track configuration files with your project
+4. **Test Systematically**: Change one parameter at a time when optimizing
+
+### Parameter Tuning Strategy
+1. **Visual First**: Use visualization tools to understand your documents
+2. **Representative Samples**: Test with diverse, representative images
+3. **Incremental Changes**: Make small parameter adjustments and measure impact
+4. **Batch Validation**: Confirm parameter choices work across your full dataset
+
+---
+
+**Navigation**: [← Main README](../README.md) | [Documentation Index](../docs/README.md) | [Parameter Reference →](../docs/PARAMETER_REFERENCE.md)

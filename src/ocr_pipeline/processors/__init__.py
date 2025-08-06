@@ -30,13 +30,6 @@ from .deskew import (
 from .margin_removal import (
     MarginRemovalProcessor,
     remove_margin_inscribed,
-    remove_margin_aggressive,
-    remove_margin_bounding_box,
-    remove_margin_smart,
-    remove_margins_gradient,
-    remove_margins_edge_transition,
-    remove_margins_hybrid,
-    remove_curved_black_background,
     paper_mask,
     largest_inside_rect,
 )
@@ -64,6 +57,7 @@ from .mark_removal import (
     MarkRemovalProcessor,
     remove_marks,
     build_protect_mask,
+    create_table_lines_mask,
 )
 
 # Visualization
@@ -82,6 +76,12 @@ from .table_recovery import (
 from .vertical_strip_cutter import (
     VerticalStripCutterProcessor,
     cut_vertical_strips,
+)
+
+# Binarization
+from .binarize import (
+    BinarizeProcessor,
+    binarize_image,
 )
 
 __all__ = [
@@ -104,13 +104,6 @@ __all__ = [
     # Margin removal
     "MarginRemovalProcessor",
     "remove_margin_inscribed",
-    "remove_margin_aggressive",
-    "remove_margin_bounding_box",
-    "remove_margin_smart",
-    "remove_margins_gradient",
-    "remove_margins_edge_transition",
-    "remove_margins_hybrid",
-    "remove_curved_black_background",
     "paper_mask",
     "largest_inside_rect",
     
@@ -132,6 +125,7 @@ __all__ = [
     "MarkRemovalProcessor",
     "remove_marks",
     "build_protect_mask",
+    "create_table_lines_mask",
     
     # Visualization
     "VisualizationProcessor",
@@ -144,4 +138,8 @@ __all__ = [
     # Vertical strip cutting
     "VerticalStripCutterProcessor",
     "cut_vertical_strips",
+    
+    # Binarization
+    "BinarizeProcessor",
+    "binarize_image",
 ]

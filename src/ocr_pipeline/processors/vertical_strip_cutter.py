@@ -148,6 +148,9 @@ def cut_vertical_strips(
     structure_json_path: str = None,
     padding: int = 20,
     min_width: int = 1,
+    use_longest_lines_only: bool = False,
+    min_length_ratio: float = 0.9,
+    v_lines: List[Tuple[int, int, int, int]] = None,
     output_dir: Path = None,
     base_name: str = None,
     verbose: bool = False,
@@ -162,6 +165,9 @@ def cut_vertical_strips(
         structure_json_path: Path to JSON file containing structure data
         padding: Horizontal padding in pixels to add to each strip
         min_width: Minimum column width to keep (skip very thin strips)
+        use_longest_lines_only: If True, use only the longest vertical lines
+        min_length_ratio: Minimum length ratio relative to longest line (0.0-1.0)
+        v_lines: List of vertical lines (x1, y1, x2, y2) for filtering
         output_dir: Directory to save strip images
         base_name: Base name for output files
         verbose: Whether to print progress messages
@@ -173,6 +179,45 @@ def cut_vertical_strips(
     
     # Create a minimal config for verbose output
     config = Config(verbose=verbose) if verbose else None
+    
+    # If we need to filter lines and v_lines is provided
+    if use_longest_lines_only and v_lines is not None and len(v_lines) > 0:
+        # Calculate line lengths
+        line_lengths = []
+        for x1, y1, x2, y2 in v_lines:
+            length = abs(y2 - y1)  # Vertical line length
+            line_lengths.append((length, (x1, y1, x2, y2)))
+        
+        # Find the maximum length
+        max_length = max(line_lengths, key=lambda x: x[0])[0]
+        
+        # Filter lines based on min_length_ratio
+        min_length = max_length * min_length_ratio
+        filtered_lines = []
+        
+        for length, line in line_lengths:
+            if length >= min_length:
+                filtered_lines.append(line)
+        
+        if verbose:
+            print(f"  Filtering vertical lines: {len(v_lines)} -> {len(filtered_lines)} lines")
+            print(f"  Using lines >= {min_length_ratio:.0%} of max length ({max_length}px)")
+        
+        # Extract unique x positions from filtered lines
+        x_positions = []
+        for x1, y1, x2, y2 in filtered_lines:
+            x_positions.append(x1)
+        
+        # Sort and remove duplicates (with small tolerance)
+        x_positions = sorted(set(x_positions))
+        
+        # Create structure_data with filtered xs
+        if structure_data is None:
+            structure_data = {}
+        structure_data['xs'] = x_positions
+        
+        if verbose:
+            print(f"  Extracted {len(x_positions)} unique x-positions from filtered lines")
     
     processor = VerticalStripCutterProcessor(config=config)
     return processor.process(

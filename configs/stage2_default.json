@@ -3,27 +3,28 @@
   "debug_dir": "data/debug/stage2_debug",
   "verbose": true,
   "save_debug_images": false,
+  "save_intermediate_outputs": true,
   "deskewing": {
+    "enable": true,
     "angle_range": 5,
     "angle_step": 0.1,
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 30,
-    "horizontal_kernel_size": 20,
-    "vertical_kernel_size": 30,
+    "threshold": 50,
+    "horizontal_kernel_size": 80,
+    "vertical_kernel_size": 40,
     "alignment_threshold": 3,
-    "h_min_length_image_ratio": 0.2,
+    "h_min_length_image_ratio": 0.1,
     "h_min_length_relative_ratio": 0.7,
     "v_min_length_image_ratio": 0.2,
     "v_min_length_relative_ratio": 0.3,
     "min_aspect_ratio": 7,
     "max_h_length_ratio": 1.0,
     "max_v_length_ratio": 1.0,
-    "close_line_distance": 45
-  },
-  "margin_removal": {
-    "enable_margin_removal": false
+    "close_line_distance": 45,
+    "skew_tolerance": 0,
+    "skew_angle_step": 0.2
   },
   "inscribed_margin_removal": {
     "inscribed_blur_ksize": 3,
@@ -33,15 +34,25 @@
   "table_detection": {
     "table_detection_eps": 10,
     "table_detection_kernel_ratio": 0.05,
-    "enable_table_border_cropping": false
+    "enable_table_cropping": false
   },
   "table_recovery": {
-    "coverage_ratio": 0.2,
-    "enable": true
+    "coverage_ratio": 0.2
   },
   "vertical_strip_cutting": {
     "enable": true,
-    "padding": 40,
-    "min_width": 1
+    "padding": 5,
+    "min_width": 1,
+    "use_longest_lines_only": true,
+    "min_length_ratio": 0.9
+  },
+  "binarization": {
+    "enable": true,
+    "method": "otsu",
+    "threshold": 127,
+    "adaptive_block_size": 11,
+    "adaptive_c": 2,
+    "invert": false,
+    "denoise": false
   }
 }

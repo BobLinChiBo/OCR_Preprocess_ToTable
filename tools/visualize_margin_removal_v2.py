@@ -276,10 +276,8 @@ def process_image_single_method(
         if use_optimized:
             # Import optimized utils
             from src.ocr_pipeline import utils_optimized
-            if method == "bounding_box":
-                result = utils_optimized.remove_margin_bounding_box_optimized(image, **processing_params)
-            else:
-                result = utils_optimized.remove_margin_aggressive_optimized(image, **processing_params)
+            # Only inscribed method is supported
+            result = utils_optimized.remove_margin_inscribed_optimized(image, **processing_params)
         else:
             # Use standard processor
             result = processor.process(image, method=method, **processing_params)

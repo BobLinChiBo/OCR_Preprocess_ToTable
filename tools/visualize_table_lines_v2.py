@@ -131,7 +131,6 @@ def process_image(
     image_path: Path,
     processor: TableLineProcessor,
     output_dir: Path,
-    save_debug: bool = False,
     command_args: Dict[str, Any] = None,
     config_source: str = "default",
 ) -> Dict[str, Any]:
@@ -166,8 +165,8 @@ def process_image(
             "overlay": str(overlay_path),
         }
         
-        # Save debug visualizations if requested
-        if save_debug and 'filtering_steps' in line_info:
+        # Always save debug visualizations
+        if 'filtering_steps' in line_info:
             debug_dir = output_dir / "debug" / base_name
             debug_dir.mkdir(parents=True, exist_ok=True)
             
@@ -269,14 +268,9 @@ def main():
         help="Output directory for visualizations",
     )
     parser.add_argument(
-        "--save-debug",
-        action="store_true",
-        help="Save debug visualizations",
-    )
-    parser.add_argument(
         "--show-filtering-steps",
         action="store_true",
-        help="Show intermediate filtering steps (implies --save-debug)",
+        help="Show intermediate filtering steps in debug output",
     )
     
     # Add configuration arguments
@@ -285,9 +279,7 @@ def main():
     
     args = parser.parse_args()
     
-    # Handle show-filtering-steps
-    if args.show_filtering_steps:
-        args.save_debug = True
+    # Debug outputs are now always saved
     
     # Determine which images to process
     if args.input_dir:
@@ -348,7 +340,6 @@ def main():
             image_path,
             processor,
             output_dir,
-            args.save_debug,
             command_args,
             config_source,
         )
