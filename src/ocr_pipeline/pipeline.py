@@ -23,6 +23,7 @@ from .processors import (
     deskew_image,
     detect_table_lines,
     remove_marks,
+    remove_tags,
     create_table_lines_mask,
     visualize_detected_lines,
     detect_table_structure,
@@ -36,8 +37,10 @@ from .processors import (
     PageSplitProcessor,
     MarginRemovalProcessor,
     MarkRemovalProcessor,
+    TagRemovalProcessor,
     TableProcessingProcessor,
     BinarizeProcessor,
+    StrokeEnhancementProcessor,
 )
 from .processors.table_recovery_utils import get_major_vertical_boundaries
 
@@ -87,9 +90,11 @@ class OCRPipeline:
             # Deskew
             deskewed, _ = deskew_image(
                 processing_image,
-                self.config.angle_range,
-                self.config.angle_step,
-                self.config.min_angle_correction,
+                coarse_range=self.config.coarse_range,
+                coarse_step=self.config.coarse_step,
+                fine_range=self.config.fine_range,
+                fine_step=self.config.fine_step,
+                min_angle_correction=self.config.min_angle_correction,
             )
 
             # Detect table lines
@@ -175,10 +180,12 @@ class TwoStageOCRPipeline:
         self.margin_processor_s2 = MarginRemovalProcessor(self.stage2_config)
         self.page_split_processor_s1 = PageSplitProcessor(self.stage1_config)
         self.mark_removal_processor_s1 = MarkRemovalProcessor(self.stage1_config)
+        self.tag_removal_processor_s1 = TagRemovalProcessor(self.stage1_config)
         self.mark_removal_processor_s2 = MarkRemovalProcessor(self.stage2_config)
         self.table_processing_processor_s1 = TableProcessingProcessor(self.stage1_config)
         self.table_processing_processor_s2 = TableProcessingProcessor(self.stage2_config)
         self.binarize_processor_s2 = BinarizeProcessor(self.stage2_config)
+        self.stroke_enhancement_processor_s2 = StrokeEnhancementProcessor(self.stage2_config)
         
         # Generate single timestamp for entire pipeline run
         self.run_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -242,8 +249,13 @@ class TwoStageOCRPipeline:
             List of cropped table image paths ready for Stage 2
         """
         if self.stage1_config.verbose:
-            print("*** STARTING STAGE 1: INITIAL PROCESSING ***")
-            print("=" * 50)
+            if self.stage1_config.save_debug_images:
+                print("*** STARTING STAGE 1: INITIAL PROCESSING (DEBUG MODE) ***")
+                print("=" * 58)
+                print(f"Debug images will be saved to: {self.debug_run_dir_s1}")
+            else:
+                print("*** STARTING STAGE 1: INITIAL PROCESSING ***")
+                print("=" * 50)
 
         # Process images through complete Stage 1 pipeline
         input_path = input_path or self.stage1_config.input_dir
@@ -331,9 +343,13 @@ class TwoStageOCRPipeline:
                         save_image(processing_image, marks_path)
                     
                     if self.stage1_config.verbose:
-                        print(f"  Marks removed from full image")
+                        if self.stage1_config.save_debug_images:
+                            print(f"  [DEBUG] Marks removed from full image (saving debug images)")
+                        else:
+                            print(f"  Marks removed from full image")
                 elif self.stage1_config.verbose:
-                    print(f"  Mark removal skipped (disabled)")
+                    if self.stage1_config.verbose:
+                        print(f"  Mark removal skipped (disabled)")
 
                 # Step 2: Margin removal (on cleaned full image)
                 if self.stage1_config.enable_margin_removal:
@@ -373,9 +389,13 @@ class TwoStageOCRPipeline:
                         save_image(processing_image, margin_path)
                     
                     if self.stage1_config.verbose:
-                        print(f"  Margin removed from full image: {processing_image.shape}")
+                        if self.stage1_config.save_debug_images:
+                            print(f"  [DEBUG] Margin removed from full image: {processing_image.shape} (saving debug images)")
+                        else:
+                            print(f"  Margin removed from full image: {processing_image.shape}")
                 elif self.stage1_config.verbose:
-                    print(f"  Margin removal skipped (disabled)")
+                    if self.stage1_config.verbose:
+                        print(f"  Margin removal skipped (disabled)")
 
                 # Step 3: Split processed image into pages
                 if self.stage1_config.enable_page_splitting:
@@ -428,14 +448,63 @@ class TwoStageOCRPipeline:
                     page_name = f"{image_path.stem}_{page_suffix}"
                     processing_image = page
 
+                    # Step 3.5: Tag removal (per page) - for genealogical documents
+                    if self.stage1_config.enable_tag_removal:
+                        if self.stage1_config.save_debug_images:
+                            # Use processor for debug mode
+                            processing_image = self.tag_removal_processor_s1.process(
+                                processing_image,
+                                thresh_dark=self.stage1_config.tag_removal_thresh_dark,
+                                row_sum_thresh=self.stage1_config.tag_removal_row_sum_thresh,
+                                dark_ratio=self.stage1_config.tag_removal_dark_ratio,
+                                min_area=self.stage1_config.tag_removal_min_area,
+                                max_area=self.stage1_config.tag_removal_max_area,
+                                min_aspect=self.stage1_config.tag_removal_min_aspect,
+                                max_aspect=self.stage1_config.tag_removal_max_aspect,
+                            )
+                            
+                            # Save debug images if debug directory is configured
+                            if self.debug_run_dir_s1:
+                                debug_subdir = self.debug_run_dir_s1 / "03b_tag_removal" / page_name
+                                self.tag_removal_processor_s1.save_debug_images_to_dir(debug_subdir)
+                        else:
+                            # Use direct function call for normal processing
+                            processing_image = remove_tags(
+                                processing_image,
+                                thresh_dark=self.stage1_config.tag_removal_thresh_dark,
+                                row_sum_thresh=self.stage1_config.tag_removal_row_sum_thresh,
+                                dark_ratio=self.stage1_config.tag_removal_dark_ratio,
+                                min_area=self.stage1_config.tag_removal_min_area,
+                                max_area=self.stage1_config.tag_removal_max_area,
+                                min_aspect=self.stage1_config.tag_removal_min_aspect,
+                                max_aspect=self.stage1_config.tag_removal_max_aspect,
+                            )
+                        
+                        # Save tags-removed image
+                        if self.stage1_config.save_intermediate_outputs:
+                            tags_dir = self.stage1_config.output_dir / "03b_tags_removed"
+                            tags_path = tags_dir / f"{page_name}_tags_removed.jpg"
+                            save_image(processing_image, tags_path)
+                        
+                        if self.stage1_config.verbose:
+                            if self.stage1_config.save_debug_images:
+                                print(f"    [DEBUG] Generation tags removed: {page_name} (saving debug images)")
+                            else:
+                                print(f"    Generation tags removed: {page_name}")
+                    elif self.stage1_config.verbose:
+                        print(f"    Tag removal skipped (disabled): {page_name}")
+
                     # Step 4: Deskew (per page)
                     if self.stage1_config.enable_deskewing:
                         if self.stage1_config.save_debug_images:
                             # Use processor for debug mode
                             deskewed, angle = self.deskew_processor_s1.process(
                                 processing_image,
-                                angle_range=self.stage1_config.angle_range,
-                                angle_step=self.stage1_config.angle_step,
+                                method=self.stage1_config.deskew_method,
+                                coarse_range=self.stage1_config.coarse_range,
+                                coarse_step=self.stage1_config.coarse_step,
+                                fine_range=self.stage1_config.fine_range,
+                                fine_step=self.stage1_config.fine_step,
                                 min_angle_correction=self.stage1_config.min_angle_correction,
                             )
                             
@@ -447,9 +516,11 @@ class TwoStageOCRPipeline:
                             # Use direct function call for normal processing
                             deskewed, angle = deskew_image(
                                 processing_image,
-                                self.stage1_config.angle_range,
-                                self.stage1_config.angle_step,
-                                self.stage1_config.min_angle_correction,
+                                coarse_range=self.stage1_config.coarse_range,
+                                coarse_step=self.stage1_config.coarse_step,
+                                fine_range=self.stage1_config.fine_range,
+                                fine_step=self.stage1_config.fine_step,
+                                min_angle_correction=self.stage1_config.min_angle_correction,
                             )
 
                         # Save deskewed image
@@ -459,7 +530,10 @@ class TwoStageOCRPipeline:
                             save_image(deskewed, deskew_path)
 
                         if self.stage1_config.verbose:
-                            print(f"  Deskewed: {angle:.2f} degrees")
+                            if self.stage1_config.save_debug_images:
+                                print(f"  [DEBUG] Deskewed: {angle:.2f} degrees using {self.stage1_config.deskew_method} method (saving debug images)")
+                            else:
+                                print(f"  Deskewed: {angle:.2f} degrees")
                     else:
                         deskewed = processing_image
                         if self.stage1_config.verbose:
@@ -526,7 +600,10 @@ class TwoStageOCRPipeline:
                         save_image(vis_image, lines_path)
 
                     if self.stage1_config.verbose:
-                        print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
+                        if self.stage1_config.save_debug_images:
+                            print(f"  [DEBUG] Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical (saving visualizations)")
+                        else:
+                            print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
 
                     # Save lines data to JSON for next step
                     lines_dir = self.stage1_config.output_dir / "05_table_lines"
@@ -559,7 +636,10 @@ class TwoStageOCRPipeline:
                         xs = table_structure.get("xs", [])
                         ys = table_structure.get("ys", [])
                         cells = table_structure.get("cells", [])
-                        print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
+                        if self.stage1_config.save_debug_images:
+                            print(f"  [DEBUG] Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid (saving visualization)")
+                        else:
+                            print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
 
                     # Save table structure data to JSON for next step
                     structure_dir = self.stage1_config.output_dir / "06_table_structure"
@@ -619,6 +699,8 @@ class TwoStageOCRPipeline:
                 f"\n*** STAGE 1 COMPLETE: {len(cropped_tables)} cropped tables ready for Stage 2 ***"
             )
             print(f"Output: {self.stage1_config.output_dir / '07_border_cropped'}")
+            if self.stage1_config.save_debug_images and self.debug_run_dir_s1:
+                print(f"Debug images saved to: {self.debug_run_dir_s1}")
 
         # Save run info at completion
         self._save_run_info("stage1", input_path, len(image_files), "completed")
@@ -636,8 +718,13 @@ class TwoStageOCRPipeline:
             List of final refined table image paths
         """
         if self.stage2_config.verbose:
-            print("\n*** STARTING STAGE 2: REFINEMENT PROCESSING ***")
-            print("=" * 50)
+            if self.stage2_config.save_debug_images:
+                print("\n*** STARTING STAGE 2: REFINEMENT PROCESSING (DEBUG MODE) ***")
+                print("=" * 61)
+                print(f"Debug images will be saved to: {self.debug_run_dir_s2}")
+            else:
+                print("\n*** STARTING STAGE 2: REFINEMENT PROCESSING ***")
+                print("=" * 50)
 
         input_dir = input_dir or self.stage2_config.input_dir
 
@@ -674,8 +761,11 @@ class TwoStageOCRPipeline:
                         # Use processor for debug mode
                         refined_deskewed, _ = self.deskew_processor_s2.process(
                             table_image,
-                            angle_range=self.stage2_config.angle_range,
-                            angle_step=self.stage2_config.angle_step,
+                            method=self.stage2_config.deskew_method,
+                            coarse_range=self.stage2_config.coarse_range,
+                            coarse_step=self.stage2_config.coarse_step,
+                            fine_range=self.stage2_config.fine_range,
+                            fine_step=self.stage2_config.fine_step,
                             min_angle_correction=self.stage2_config.min_angle_correction,
                         )
                         
@@ -687,9 +777,11 @@ class TwoStageOCRPipeline:
                         # Use direct function call for normal processing
                         refined_deskewed, _ = deskew_image(
                             table_image,
-                            self.stage2_config.angle_range,
-                            self.stage2_config.angle_step,
-                            self.stage2_config.min_angle_correction,
+                            coarse_range=self.stage2_config.coarse_range,
+                            coarse_step=self.stage2_config.coarse_step,
+                            fine_range=self.stage2_config.fine_range,
+                            fine_step=self.stage2_config.fine_step,
+                            min_angle_correction=self.stage2_config.min_angle_correction,
                         )
 
                     # Save refined deskewed
@@ -766,7 +858,10 @@ class TwoStageOCRPipeline:
                     }, f, indent=2)
 
                 if self.stage2_config.verbose:
-                    print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
+                    if self.stage2_config.save_debug_images:
+                        print(f"  [DEBUG] Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical (saving visualizations)")
+                    else:
+                        print(f"  Table lines: {len(h_lines)} horizontal, {len(v_lines)} vertical")
 
                 # Step 3: Table structure detection (always enabled - generates required JSON)
                 table_structure, structure_analysis = detect_table_structure(
@@ -787,7 +882,10 @@ class TwoStageOCRPipeline:
                     xs = table_structure.get("xs", [])
                     ys = table_structure.get("ys", [])
                     cells = table_structure.get("cells", [])
-                    print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
+                    if self.stage2_config.save_debug_images:
+                        print(f"  [DEBUG] Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid (saving visualization)")
+                    else:
+                        print(f"  Table structure: {len(cells)} cells in {len(xs)}x{len(ys)} grid")
 
                 # Save table structure data to JSON for reference
                 structure_dir = self.stage2_config.output_dir / "03_table_structure"
@@ -912,6 +1010,10 @@ class TwoStageOCRPipeline:
                                     adaptive_c=self.stage2_config.binarization_adaptive_c,
                                     invert=self.stage2_config.binarization_invert,
                                     denoise=self.stage2_config.binarization_denoise,
+                                    enhance_strokes=self.stage2_config.stroke_enhancement_enable,
+                                    stroke_kernel_size=self.stage2_config.stroke_enhancement_kernel_size,
+                                    stroke_iterations=self.stage2_config.stroke_enhancement_iterations,
+                                    stroke_kernel_shape=self.stage2_config.stroke_enhancement_kernel_shape,
                                 )
                                 
                                 # Save debug images if debug directory is configured
@@ -928,6 +1030,10 @@ class TwoStageOCRPipeline:
                                     adaptive_c=self.stage2_config.binarization_adaptive_c,
                                     invert=self.stage2_config.binarization_invert,
                                     denoise=self.stage2_config.binarization_denoise,
+                                    enhance_strokes=self.stage2_config.stroke_enhancement_enable,
+                                    stroke_kernel_size=self.stage2_config.stroke_enhancement_kernel_size,
+                                    stroke_iterations=self.stage2_config.stroke_enhancement_iterations,
+                                    stroke_kernel_shape=self.stage2_config.stroke_enhancement_kernel_shape,
                                 )
                             
                             # Save binarized strip
@@ -961,6 +1067,9 @@ class TwoStageOCRPipeline:
             # Check if binarization was enabled
             if self.stage2_config.enable_binarization:
                 print(f"Binarized output: {self.stage2_config.output_dir / '06_binarized'}")
+            
+            if self.stage2_config.save_debug_images and self.debug_run_dir_s2:
+                print(f"Debug images saved to: {self.debug_run_dir_s2}")
 
         # Save run info at completion
         self._save_run_info("stage2", input_dir, len(image_files), "completed")

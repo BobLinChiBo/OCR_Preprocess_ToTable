@@ -4,6 +4,7 @@ from typing import Tuple, Dict, Any, Optional
 import cv2
 import numpy as np
 from .base import BaseProcessor
+from .stroke_enhancement import enhance_strokes
 
 
 class BinarizeProcessor(BaseProcessor):
@@ -17,6 +18,10 @@ class BinarizeProcessor(BaseProcessor):
         adaptive_block_size: int = 11,
         adaptive_c: int = 2,
         invert: bool = False,
+        enhance_strokes: bool = False,
+        stroke_kernel_size: int = 2,
+        stroke_iterations: int = 1,
+        stroke_kernel_shape: str = "ellipse",
         **kwargs
     ) -> np.ndarray:
         """Binarize an image using various thresholding methods.
@@ -28,6 +33,10 @@ class BinarizeProcessor(BaseProcessor):
             adaptive_block_size: Block size for adaptive method (must be odd)
             adaptive_c: Constant subtracted from mean for adaptive method
             invert: If True, invert the binary image (white text on black background)
+            enhance_strokes: If True, apply stroke enhancement before binarization
+            stroke_kernel_size: Size of morphological kernel for stroke enhancement
+            stroke_iterations: Number of dilation iterations for stroke enhancement
+            stroke_kernel_shape: Shape of kernel for stroke enhancement ("ellipse", "rect", "cross")
             
         Returns:
             np.ndarray: Binarized image
@@ -47,6 +56,10 @@ class BinarizeProcessor(BaseProcessor):
             adaptive_block_size=adaptive_block_size,
             adaptive_c=adaptive_c,
             invert=invert,
+            enhance_strokes=enhance_strokes,
+            stroke_kernel_size=stroke_kernel_size,
+            stroke_iterations=stroke_iterations,
+            stroke_kernel_shape=stroke_kernel_shape,
             **kwargs
         )
     
@@ -70,6 +83,10 @@ def binarize_image(
     adaptive_block_size: int = 11,
     adaptive_c: int = 2,
     invert: bool = False,
+    enhance_strokes: bool = False,
+    stroke_kernel_size: int = 2,
+    stroke_iterations: int = 1,
+    stroke_kernel_shape: str = "ellipse",
     **kwargs
 ) -> np.ndarray:
     """Binarize image using various thresholding methods.
@@ -88,6 +105,10 @@ def binarize_image(
         adaptive_block_size: Size of pixel neighborhood for adaptive method (must be odd)
         adaptive_c: Constant subtracted from weighted mean for adaptive method
         invert: If True, invert the binary image (white text on black background)
+        enhance_strokes: If True, apply stroke enhancement before binarization
+        stroke_kernel_size: Size of morphological kernel for stroke enhancement
+        stroke_iterations: Number of dilation iterations for stroke enhancement
+        stroke_kernel_shape: Shape of kernel for stroke enhancement ("ellipse", "rect", "cross")
         
     Returns:
         np.ndarray: Binary image (0 or 255 values only)
@@ -105,6 +126,21 @@ def binarize_image(
     if processor:
         processor.save_debug_image('01_grayscale_input', gray)
     
+    # Apply stroke enhancement if requested
+    if enhance_strokes:
+        from .stroke_enhancement import enhance_strokes as enhance_strokes_func
+        gray = enhance_strokes_func(
+            gray,
+            kernel_size=stroke_kernel_size,
+            iterations=stroke_iterations,
+            kernel_shape=stroke_kernel_shape,
+            _processor=processor  # Pass processor for debug saving
+        )
+        
+        # Save enhanced image for debug
+        if processor:
+            processor.save_debug_image('02_stroke_enhanced', gray)
+    
     # Apply the selected binarization method
     if method.lower() == "otsu":
         # Otsu's method automatically finds optimal threshold
@@ -114,7 +150,7 @@ def binarize_image(
         if processor:
             # Calculate and save histogram for debug
             hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-            processor.save_debug_image('02_otsu_threshold', binary)
+            processor.save_debug_image('03_otsu_threshold', binary)
             
     elif method.lower() == "adaptive":
         # Adaptive thresholding adjusts threshold based on local neighborhood
@@ -135,7 +171,7 @@ def binarize_image(
         )
         
         if processor:
-            processor.save_debug_image('02_adaptive_threshold', binary)
+            processor.save_debug_image('03_adaptive_threshold', binary)
             
     elif method.lower() == "fixed":
         # Simple fixed threshold
@@ -143,7 +179,7 @@ def binarize_image(
         _, binary = cv2.threshold(gray, threshold, 255, thresh_type)
         
         if processor:
-            processor.save_debug_image('02_fixed_threshold', binary)
+            processor.save_debug_image('03_fixed_threshold', binary)
             
     else:
         raise ValueError(f"Unknown binarization method: {method}. Use 'otsu', 'adaptive', or 'fixed'")
@@ -155,10 +191,10 @@ def binarize_image(
         binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
         
         if processor:
-            processor.save_debug_image('03_denoised', binary)
+            processor.save_debug_image('04_denoised', binary)
     
     # Save final result for debug
     if processor:
-        processor.save_debug_image('04_final_binary', binary)
+        processor.save_debug_image('05_final_binary', binary)
     
     return binary

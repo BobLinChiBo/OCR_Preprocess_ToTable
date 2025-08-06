@@ -6,14 +6,17 @@
   "save_intermediate_outputs": true,
   "deskewing": {
     "enable": true,
-    "angle_range": 5,
-    "angle_step": 0.1,
+    "method": "radon",
+    "coarse_range": 5,
+    "coarse_step": 0.5,
+    "fine_range": 2.0,
+    "fine_step": 0.1,
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 50,
-    "horizontal_kernel_size": 80,
-    "vertical_kernel_size": 40,
+    "threshold": 30,
+    "horizontal_kernel_size": 50,
+    "vertical_kernel_size": 50,
     "alignment_threshold": 3,
     "h_min_length_image_ratio": 0.1,
     "h_min_length_relative_ratio": 0.7,
@@ -23,7 +26,7 @@
     "max_h_length_ratio": 1.0,
     "max_v_length_ratio": 1.0,
     "close_line_distance": 45,
-    "skew_tolerance": 0,
+    "skew_tolerance": 4,
     "skew_angle_step": 0.2
   },
   "inscribed_margin_removal": {
@@ -47,12 +50,18 @@
     "min_length_ratio": 0.9
   },
   "binarization": {
-    "enable": true,
+    "enable": false,
     "method": "otsu",
     "threshold": 127,
     "adaptive_block_size": 11,
     "adaptive_c": 2,
     "invert": false,
-    "denoise": false
+    "denoise": false,
+    "stroke_enhancement": {
+      "enable": false,
+      "kernel_size": 2,
+      "iterations": 1,
+      "kernel_shape": "ellipse"
+    }
   }
 }

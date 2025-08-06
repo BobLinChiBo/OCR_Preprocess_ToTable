@@ -60,6 +60,14 @@ from .mark_removal import (
     create_table_lines_mask,
 )
 
+# Tag removal
+from .tag_removal import (
+    TagRemovalProcessor,
+    remove_tags,
+    find_tag_band,
+    detect_tags_in_band,
+)
+
 # Visualization
 from .visualization import (
     VisualizationProcessor,
@@ -82,6 +90,12 @@ from .vertical_strip_cutter import (
 from .binarize import (
     BinarizeProcessor,
     binarize_image,
+)
+
+# Stroke enhancement
+from .stroke_enhancement import (
+    StrokeEnhancementProcessor,
+    enhance_strokes,
 )
 
 __all__ = [
@@ -127,6 +141,12 @@ __all__ = [
     "build_protect_mask",
     "create_table_lines_mask",
     
+    # Tag removal
+    "TagRemovalProcessor",
+    "remove_tags",
+    "find_tag_band",
+    "detect_tags_in_band",
+    
     # Visualization
     "VisualizationProcessor",
     "visualize_detected_lines",
@@ -142,4 +162,8 @@ __all__ = [
     # Binarization
     "BinarizeProcessor",
     "binarize_image",
+    
+    # Stroke enhancement
+    "StrokeEnhancementProcessor",
+    "enhance_strokes",
 ]

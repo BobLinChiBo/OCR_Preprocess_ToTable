@@ -5,6 +5,21 @@ import cv2
 import numpy as np
 from .base import BaseProcessor
 
+try:
+    from skimage import transform
+    from skimage.transform import radon, rotate
+    from skimage.feature import canny
+    from skimage import img_as_float
+    RADON_AVAILABLE = True
+except ImportError:
+    RADON_AVAILABLE = False
+    
+try:
+    from deskew import determine_skew
+    DESKEW_LIBRARY_AVAILABLE = True
+except ImportError:
+    DESKEW_LIBRARY_AVAILABLE = False
+
 
 class DeskewProcessor(BaseProcessor):
     """Processor for deskewing images."""
@@ -12,18 +27,31 @@ class DeskewProcessor(BaseProcessor):
     def process(
         self,
         image: np.ndarray,
+        method: str = "histogram_variance",
         angle_range: int = 15,
         angle_step: float = 0.5,
+        coarse_range: float = None,
+        coarse_step: float = 1.0,
+        fine_range: float = 2.0,
+        fine_step: float = None,
         min_angle_correction: float = 0.5,
         return_analysis_data: bool = False,
         **kwargs
     ) -> tuple:
-        """Deskew an image using histogram variance optimization.
+        """Deskew an image using the specified method.
         
         Args:
             image: Input image to deskew
-            angle_range: Maximum rotation angle in degrees (±)
-            angle_step: Step size for fine search in degrees
+            method: Deskewing method ("radon", "histogram_variance", or "deskew_library")
+                   - "radon": Uses Canny edge detection + Radon transform (recommended)
+                   - "histogram_variance": Optimized coarse-to-fine histogram variance
+                   - "deskew_library": Legacy method using deskew library
+            angle_range: Maximum rotation angle in degrees (±) - legacy parameter, use coarse_range instead
+            angle_step: Step size for fine search in degrees - legacy parameter, use fine_step instead
+            coarse_range: Coarse search range in degrees (±). If None, uses angle_range
+            coarse_step: Step size for coarse search in degrees (default: 1.0 for histogram, 0.5 for radon)
+            fine_range: Fine search range around best coarse angle in degrees (±) (default: 2.0)
+            fine_step: Step size for fine search in degrees. If None, uses angle_step (default: 0.5 for histogram, 0.2 for radon)
             min_angle_correction: Minimum angle threshold to apply correction
             return_analysis_data: If True, return additional analysis data
             
@@ -38,20 +66,52 @@ class DeskewProcessor(BaseProcessor):
         # Pass processor instance for debug saving
         kwargs['_processor'] = self
         
-        return deskew_image(
-            image,
-            angle_range=angle_range,
-            angle_step=angle_step,
-            min_angle_correction=min_angle_correction,
-            return_analysis_data=return_analysis_data,
-            **kwargs
-        )
+        # Handle legacy parameters for backward compatibility
+        if coarse_range is None:
+            coarse_range = angle_range
+        if fine_step is None:
+            fine_step = angle_step
+        
+        if method == "radon":
+            return radon_method(
+                image,
+                coarse_range=coarse_range,
+                coarse_step=coarse_step if coarse_step != 1.0 else 0.5,  # Default 0.5 for radon
+                fine_range=fine_range,
+                fine_step=fine_step if fine_step is not None else 0.2,  # Default 0.2 for radon
+                min_angle_correction=min_angle_correction,
+                return_analysis_data=return_analysis_data,
+                **kwargs
+            )
+        elif method == "deskew_library":
+            # Legacy method kept for backward compatibility
+            return deskew_library_method(
+                image,
+                min_angle_correction=min_angle_correction,
+                return_analysis_data=return_analysis_data,
+                **kwargs
+            )
+        elif method == "histogram_variance":
+            return deskew_image(
+                image,
+                coarse_range=coarse_range,
+                coarse_step=coarse_step,
+                fine_range=fine_range,
+                fine_step=fine_step if fine_step is not None else 0.5,  # Default 0.5 for histogram
+                min_angle_correction=min_angle_correction,
+                return_analysis_data=return_analysis_data,
+                **kwargs
+            )
+        else:
+            raise ValueError(f"Unknown deskewing method: {method}. Available methods: 'radon', 'histogram_variance', 'deskew_library'")
 
 
 def deskew_image(
     image: np.ndarray,
-    angle_range: int = 15,
-    angle_step: float = 0.5,
+    coarse_range: float = 15,
+    coarse_step: float = 1.0,
+    fine_range: float = 2.0,
+    fine_step: float = 0.5,
     min_angle_correction: float = 0.5,
     return_analysis_data: bool = False,
     **kwargs
@@ -70,8 +130,10 @@ def deskew_image(
 
     Args:
         image: Input image to deskew
-        angle_range: Maximum rotation angle in degrees (±)
-        angle_step: Step size for fine search in degrees
+        coarse_range: Coarse search range in degrees (±)
+        coarse_step: Step size for coarse search in degrees
+        fine_range: Fine search range around best coarse angle in degrees (±)
+        fine_step: Step size for fine search in degrees
         min_angle_correction: Minimum angle threshold to apply correction
         return_analysis_data: If True, return additional analysis data for visualization
     Returns:
@@ -121,9 +183,8 @@ def deskew_image(
     h, w = binary.shape
     small_binary = cv2.resize(binary, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
 
-    # Coarse search with 1-degree steps
-    coarse_step = 1.0
-    coarse_angles = np.arange(-angle_range, angle_range + coarse_step, coarse_step)
+    # Coarse search with configurable range and step
+    coarse_angles = np.arange(-coarse_range, coarse_range + coarse_step, coarse_step)
     coarse_scores = []
 
     for angle in coarse_angles:
@@ -147,11 +208,10 @@ def deskew_image(
     best_coarse_angle = coarse_angles[best_coarse_idx]
 
     # Phase 2: Fine search around best coarse candidate on full resolution
-    # Search ±2 degrees around best coarse angle with original step size
-    fine_range = 2.0
-    fine_start = max(-angle_range, best_coarse_angle - fine_range)
-    fine_end = min(angle_range, best_coarse_angle + fine_range)
-    fine_angles = np.arange(fine_start, fine_end + angle_step, angle_step)
+    # Search within fine_range around best coarse angle with fine_step
+    fine_start = max(-coarse_range, best_coarse_angle - fine_range)
+    fine_end = min(coarse_range, best_coarse_angle + fine_range)
+    fine_angles = np.arange(fine_start, fine_end + fine_step, fine_step)
 
     fine_scores = []
     for angle in fine_angles:
@@ -286,3 +346,332 @@ def deskew_image(
         return deskewed, best_angle, analysis_data
 
     return deskewed, best_angle
+
+
+def radon_method(
+    image: np.ndarray,
+    coarse_range: float = 5.0,
+    coarse_step: float = 0.5,
+    fine_range: float = 1.0,
+    fine_step: float = 0.2,
+    min_angle_correction: float = 0.5,
+    return_analysis_data: bool = False,
+    **kwargs
+) -> tuple:
+    """Deskew image using Radon transform on edge-detected image with coarse-to-fine search.
+    
+    This method uses Canny edge detection followed by Radon transform
+    to find the optimal rotation angle for text alignment.
+    
+    Args:
+        image: Input image to deskew
+        coarse_range: Coarse search range in degrees (±)
+        coarse_step: Step size for coarse search in degrees
+        fine_range: Fine search range around best coarse angle in degrees (±)
+        fine_step: Step size for fine search in degrees
+        min_angle_correction: Minimum angle threshold to apply correction
+        return_analysis_data: If True, return additional analysis data
+        
+    Returns:
+        tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
+    """
+    if not RADON_AVAILABLE:
+        raise ImportError("scikit-image is not available. Install with: pip install scikit-image")
+    
+    # Get processor instance if available for debug saving
+    processor = kwargs.get('_processor', None)
+    
+    # Convert to grayscale for skew detection
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    
+    # Save debug images
+    if processor:
+        processor.save_debug_image('gray_input', gray)
+    
+    # 1. Edge detection (Canny gives clean lines for Radon)
+    edges = canny(img_as_float(gray), sigma=1.0)
+    
+    # Save edge detection debug image
+    if processor:
+        edges_vis = (edges * 255).astype(np.uint8)
+        processor.save_debug_image('canny_edges', edges_vis)
+    
+    # 2. Coarse Radon scan
+    coarse_angles = np.arange(-coarse_range, coarse_range + coarse_step, coarse_step)
+    coarse_scores = []
+    
+    # Debug: Print the actual search range only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        print(f"    [DEBUG] Radon coarse search: {coarse_angles[0]:.1f}° to {coarse_angles[-1]:.1f}° (range: ±{coarse_range}°, step: {coarse_step}°)")
+    
+    for a in coarse_angles:
+        sinogram = radon(edges, [a], circle=False)
+        # Higher variance == more energy in fewer bins -> better alignment
+        coarse_scores.append(np.var(sinogram))
+    
+    # Find best coarse angle
+    best_coarse_idx = int(np.argmax(coarse_scores))
+    best_coarse_angle = coarse_angles[best_coarse_idx]
+    
+    # 3. Fine Radon scan around best coarse angle
+    fine_start = max(-coarse_range, best_coarse_angle - fine_range)
+    fine_end = min(coarse_range, best_coarse_angle + fine_range)
+    fine_angles = np.arange(fine_start, fine_end + fine_step, fine_step)
+    fine_scores = []
+    
+    for a in fine_angles:
+        sinogram = radon(edges, [a], circle=False)
+        fine_scores.append(np.var(sinogram))
+    
+    # Find best fine angle
+    best_fine_idx = int(np.argmax(fine_scores))
+    best_angle = fine_angles[best_fine_idx]
+    
+    # Create angle histogram visualization
+    if processor:
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        
+        # Coarse search plot
+        ax1.plot(coarse_angles, coarse_scores, 'b-', label='Coarse Radon Search')
+        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.2f}°')
+        ax1.set_xlabel('Angle (degrees)')
+        ax1.set_ylabel('Variance Score')
+        ax1.set_title('Coarse Radon Transform Search')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Fine search plot
+        ax2.plot(fine_angles, fine_scores, 'g-', label='Fine Radon Search')
+        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f}°')
+        ax2.set_xlabel('Angle (degrees)')
+        ax2.set_ylabel('Variance Score')
+        ax2.set_title('Fine Radon Transform Search')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Convert plot to image
+        fig.canvas.draw()
+        plot_img = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+        plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+        # Convert RGBA to BGR
+        plot_img = cv2.cvtColor(plot_img, cv2.COLOR_RGBA2BGR)
+        processor.save_debug_image('radon_angle_histogram', plot_img)
+        plt.close(fig)
+    
+    # Apply rotation only if significant
+    if abs(best_angle) < min_angle_correction:
+        if return_analysis_data:
+            all_angles = list(coarse_angles) + list(fine_angles)
+            all_scores = coarse_scores + fine_scores
+            analysis_data = {
+                "has_lines": True,
+                "rotation_angle": 0.0,
+                "angles": all_angles,
+                "scores": all_scores,
+                "coarse_angles": list(coarse_angles),
+                "coarse_scores": coarse_scores,
+                "fine_angles": list(fine_angles),
+                "fine_scores": fine_scores,
+                "best_score": max(all_scores),
+                "confidence": 1.0,
+                "will_rotate": False,
+                "method": "radon",
+                "gray": gray,
+                "binary": edges_vis if processor else None,
+                "line_count": len(all_angles),
+                "angle_std": np.std(all_scores),
+            }
+            return image, 0.0, analysis_data
+        return image, 0.0
+    
+    # 3. Rotate (negative of detected angle to deskew)
+    # Convert to float for rotation if needed
+    if image.dtype == np.uint8:
+        img_for_rotation = image.astype(np.float64) / 255.0
+    else:
+        img_for_rotation = image.astype(np.float64)
+    
+    # Apply rotation using scikit-image rotate
+    deskewed = rotate(img_for_rotation, -best_angle, resize=False, mode="edge")
+    
+    # Convert back to original format
+    if image.dtype == np.uint8:
+        deskewed = (deskewed * 255).astype(np.uint8)
+    else:
+        deskewed = deskewed.astype(image.dtype)
+    
+    # Create rotation comparison visualization
+    if processor:
+        h, w = image.shape[:2]
+        # Create side-by-side comparison
+        comparison = np.zeros((h, w * 2 + 20, 3), dtype=np.uint8)
+        orig_bgr = image if len(image.shape) == 3 else cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        desk_bgr = deskewed if len(deskewed.shape) == 3 else cv2.cvtColor(deskewed, cv2.COLOR_GRAY2BGR)
+        
+        comparison[:, :w] = orig_bgr
+        comparison[:, w+20:] = desk_bgr
+        
+        # Add divider line
+        comparison[:, w:w+20] = 255
+        
+        # Add text labels
+        cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        processor.save_debug_image('rotation_comparison', comparison)
+    
+    if return_analysis_data:
+        # Calculate confidence based on score distribution
+        all_angles = list(coarse_angles) + list(fine_angles)
+        all_scores = coarse_scores + fine_scores
+        score_std = np.std(all_scores)
+        best_score = max(all_scores)
+        confidence = min(1.0, best_score / (np.mean(all_scores) + score_std + 1e-6))
+        
+        analysis_data = {
+            "has_lines": True,
+            "rotation_angle": best_angle,
+            "angles": all_angles,
+            "scores": all_scores,
+            "coarse_angles": list(coarse_angles),
+            "coarse_scores": coarse_scores,
+            "fine_angles": list(fine_angles),
+            "fine_scores": fine_scores,
+            "best_score": best_score,
+            "confidence": confidence,
+            "will_rotate": True,
+            "method": "radon",
+            "gray": gray,
+            "binary": edges_vis if processor else None,
+            "line_count": len(all_angles),
+            "angle_std": score_std,
+        }
+        return deskewed, best_angle, analysis_data
+    
+    return deskewed, best_angle
+
+
+def deskew_library_method(
+    image: np.ndarray,
+    min_angle_correction: float = 0.5,
+    return_analysis_data: bool = False,
+    **kwargs
+) -> tuple:
+    """Legacy deskew method using the deskew library (moments + Radon hybrid).
+    
+    This method is kept for backward compatibility.
+    
+    Args:
+        image: Input image to deskew
+        min_angle_correction: Minimum angle threshold to apply correction
+        return_analysis_data: If True, return additional analysis data
+        
+    Returns:
+        tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
+    """
+    if not DESKEW_LIBRARY_AVAILABLE:
+        raise ImportError("deskew library is not available. Install with: pip install deskew")
+    
+    # Get processor instance if available for debug saving
+    processor = kwargs.get('_processor', None)
+    
+    # Convert to grayscale for skew detection
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    
+    # Save debug images
+    if processor:
+        processor.save_debug_image('gray_input', gray)
+    
+    # Detect skew angle using deskew library
+    detected_angle = determine_skew(gray)
+    
+    # Handle case where no angle is detected (returns None)
+    if detected_angle is None:
+        detected_angle = 0.0
+    
+    # Apply rotation only if significant
+    if abs(detected_angle) < min_angle_correction:
+        if return_analysis_data:
+            analysis_data = {
+                "has_lines": True,
+                "rotation_angle": 0.0,
+                "angles": [detected_angle],
+                "scores": [1.0],
+                "best_score": 1.0,
+                "confidence": 1.0,
+                "will_rotate": False,
+                "method": "deskew_library",
+                "gray": gray,
+                "binary": None,
+                "line_count": 1,
+                "angle_std": 0.0,
+            }
+            return image, 0.0, analysis_data
+        return image, 0.0
+    
+    # Apply rotation using scikit-image for high quality
+    # Note: scikit-image expects values in [0,1] for float images
+    if image.dtype == np.uint8:
+        img_for_rotation = image.astype(np.float64) / 255.0
+    else:
+        img_for_rotation = image.astype(np.float64)
+    
+    # Rotate the image (negative angle because deskew library returns clockwise positive)
+    rotated = transform.rotate(
+        img_for_rotation, 
+        -detected_angle, 
+        resize=False,  # Keep same size
+        mode='edge',   # Fill with edge values
+        preserve_range=False  # Output in [0,1] range
+    )
+    
+    # Convert back to original format
+    if image.dtype == np.uint8:
+        deskewed = (rotated * 255).astype(np.uint8)
+    else:
+        deskewed = rotated.astype(image.dtype)
+    
+    # Create rotation comparison visualization
+    if processor:
+        h, w = image.shape[:2]
+        # Create side-by-side comparison
+        comparison = np.zeros((h, w * 2 + 20, 3), dtype=np.uint8)
+        orig_bgr = image if len(image.shape) == 3 else cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        desk_bgr = deskewed if len(deskewed.shape) == 3 else cv2.cvtColor(deskewed, cv2.COLOR_GRAY2BGR)
+        
+        comparison[:, :w] = orig_bgr
+        comparison[:, w+20:] = desk_bgr
+        
+        # Add divider line
+        comparison[:, w:w+20] = 255
+        
+        # Add text labels
+        cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({detected_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        processor.save_debug_image('rotation_comparison', comparison)
+    
+    if return_analysis_data:
+        analysis_data = {
+            "has_lines": True,
+            "rotation_angle": detected_angle,
+            "angles": [detected_angle],
+            "scores": [1.0],
+            "best_score": 1.0,
+            "confidence": 1.0 if detected_angle is not None else 0.0,
+            "will_rotate": True,
+            "method": "deskew_library",
+            "gray": gray,
+            "binary": None,
+            "line_count": 1,
+            "angle_std": 0.0,
+        }
+        return deskewed, detected_angle, analysis_data
+    
+    return deskewed, detected_angle

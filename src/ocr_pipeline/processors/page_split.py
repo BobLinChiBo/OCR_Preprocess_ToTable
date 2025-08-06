@@ -173,43 +173,95 @@ def split_two_page_image(
 
     # 4) choose the two segments nearest the centre
     segs = sorted(segments, key=lambda ab: abs(((ab[0]+ab[1])//2) - centre))[:2]
-    if len(segs) < 2:  # If only one segment found, use center fallback
-        split_x = centre
-        left_page = image[:, :split_x]
-        right_page = image[:, split_x:]
-        
-        # Save split visualization for single segment
-        if processor:
-            vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-            cv2.line(vis, (split_x, 0), (split_x, h), (0, 0, 255), 3)
-            cv2.putText(vis, 'FALLBACK: Single Segment', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            processor.save_debug_image('split_visualization', vis)
-        
-        if not return_analysis:
-            return right_page, left_page
+    if len(segs) < 2:  # If only one segment found, split at that vertical line
+        if len(segs) == 1 and segments:
+            # Use the single detected vertical line as the split point
+            seg_start, seg_end = segs[0]
+            split_x = (seg_start + seg_end) // 2
+            segment_width = seg_end - seg_start + 1
             
-        # Build analysis for single segment case
-        analysis = {
-            "gutter_x": split_x,
-            "gutter_strength": 0.5,
-            "gutter_width": 1,
-            "search_start": margin,
-            "search_end": w - margin,
-            "segments": segments,
-            "selected_segment": segments[0] if segments else None,
-            "fallback_used": True,
-            "meets_min_width": False,
-            "has_two_pages": False,
-            "col_dark": None,
-            "darkmask": None,
-            "thresh": None,
-            "widest_segment_width": 1,
-            # Legacy compatibility fields
-            "vertical_sums": None,
-            "min_sum": 0,
-            "avg_sum": 0,
-        }
-        return right_page, left_page, analysis
+            # Determine if this is likely a gutter or edge based on position
+            # If within middle 60% of image, likely a gutter; otherwise might be edge
+            is_likely_gutter = margin < split_x < (w - margin)
+            
+            left_page = image[:, :split_x]
+            right_page = image[:, split_x:]
+            
+            # Save split visualization for single segment
+            if processor:
+                vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                # Draw the detected segment
+                cv2.rectangle(vis, (seg_start, 0), (seg_end, h), (0, 255, 0), 2)
+                # Draw the split line
+                cv2.line(vis, (split_x, 0), (split_x, h), (0, 0, 255), 3)
+                split_type = 'Single Vertical Line Split' if is_likely_gutter else 'Edge Detection Split'
+                cv2.putText(vis, split_type, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(vis, f'Split at: {split_x}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                processor.save_debug_image('split_visualization', vis)
+            
+            if not return_analysis:
+                return right_page, left_page
+                
+            # Build analysis for single segment case with actual detected values
+            analysis = {
+                "gutter_x": split_x,
+                "gutter_strength": window[split_x - margin] / window.max() if (margin <= split_x < w - margin and window.max() > 0) else 0.5,
+                "gutter_width": segment_width,
+                "search_start": margin,
+                "search_end": w - margin,
+                "segments": segments,
+                "selected_segment": segs[0],
+                "fallback_used": False,  # We're using the detected line, not fallback
+                "meets_min_width": segment_width >= 3,
+                "has_two_pages": is_likely_gutter,
+                "col_dark": None,
+                "darkmask": None,
+                "thresh": None,
+                "widest_segment_width": max(b - a + 1 for a, b in segments) if segments else 0,
+                # Legacy compatibility fields
+                "vertical_sums": None,
+                "min_sum": 0,
+                "avg_sum": 0,
+            }
+            return right_page, left_page, analysis
+        else:
+            # No segments at all, use center fallback
+            split_x = centre
+            left_page = image[:, :split_x]
+            right_page = image[:, split_x:]
+            
+            # Save split visualization for no segments case
+            if processor:
+                vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+                cv2.line(vis, (split_x, 0), (split_x, h), (0, 0, 255), 3)
+                cv2.putText(vis, 'FALLBACK: No Segments Found', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                processor.save_debug_image('split_visualization', vis)
+            
+            if not return_analysis:
+                return right_page, left_page
+                
+            # Build analysis for fallback case
+            analysis = {
+                "gutter_x": split_x,
+                "gutter_strength": 0.0,
+                "gutter_width": 0,
+                "search_start": margin,
+                "search_end": w - margin,
+                "segments": [],
+                "selected_segment": None,
+                "fallback_used": True,
+                "meets_min_width": False,
+                "has_two_pages": False,
+                "col_dark": None,
+                "darkmask": None,
+                "thresh": None,
+                "widest_segment_width": 0,
+                # Legacy compatibility fields
+                "vertical_sums": None,
+                "min_sum": 0,
+                "avg_sum": 0,
+            }
+            return right_page, left_page, analysis
     
     (a1, b1), (a2, b2) = sorted(segs, key=lambda ab: ab[0])
     split_x = (b1 + a2) // 2

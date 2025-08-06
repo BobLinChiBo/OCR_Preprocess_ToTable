@@ -22,8 +22,13 @@ class Config:
     peak_thr: float = 0.3  # Peak threshold (30% of max response)
 
     # Deskewing
-    angle_range: int = 5
-    angle_step: float = 0.1
+    deskew_method: str = "histogram_variance"  # "histogram_variance" or "deskew_library"
+    angle_range: Optional[int] = None  # Legacy parameter for backward compatibility
+    angle_step: Optional[float] = None  # Legacy parameter for backward compatibility
+    coarse_range: float = 5
+    coarse_step: float = 0.5
+    fine_range: float = 2.0
+    fine_step: float = 0.1
     min_angle_correction: float = 0.1
 
     # Table line detection (new connected components method)
@@ -111,9 +116,22 @@ class Config:
             raise ValueError(
                 f"peak_thr must be between 0 and 1, got {self.peak_thr}"
             )
-        if self.angle_range <= 0:
+        # Deskewing validation
+        if self.deskew_method not in ["histogram_variance", "deskew_library", "radon"]:
+            raise ValueError(f"deskew_method must be 'histogram_variance', 'deskew_library', or 'radon', got '{self.deskew_method}'")
+        # Validate new parameters
+        if self.coarse_range <= 0:
+            raise ValueError(f"coarse_range must be positive, got {self.coarse_range}")
+        if self.coarse_step <= 0:
+            raise ValueError(f"coarse_step must be positive, got {self.coarse_step}")
+        if self.fine_range <= 0:
+            raise ValueError(f"fine_range must be positive, got {self.fine_range}")
+        if self.fine_step <= 0:
+            raise ValueError(f"fine_step must be positive, got {self.fine_step}")
+        # Validate legacy parameters if provided
+        if self.angle_range is not None and self.angle_range <= 0:
             raise ValueError(f"angle_range must be positive, got {self.angle_range}")
-        if self.angle_step <= 0:
+        if self.angle_step is not None and self.angle_step <= 0:
             raise ValueError(f"angle_step must be positive, got {self.angle_step}")
         if self.threshold <= 0:
             raise ValueError(f"threshold must be positive, got {self.threshold}")
@@ -202,14 +220,19 @@ class Stage1Config(Config):
     # Note: Table line detection and structure detection are always enabled
     # as they generate JSON files required by downstream processes
     enable_mark_removal: bool = True
+    enable_tag_removal: bool = False
     enable_margin_removal: bool = True
     enable_page_splitting: bool = True
     enable_deskewing: bool = True
     enable_table_cropping: bool = True
 
     # Stage 1 specific deskewing (wider range)
-    angle_range: int = 10
-    angle_step: float = 0.2
+    angle_range: Optional[int] = None  # Legacy parameter
+    angle_step: Optional[float] = None  # Legacy parameter
+    coarse_range: float = 5
+    coarse_step: float = 0.5
+    fine_range: float = 1.0
+    fine_step: float = 0.2
     min_angle_correction: float = 0.2
 
     # Stage 1 table line detection - more permissive
@@ -247,6 +270,15 @@ class Stage1Config(Config):
     mark_removal_table_h_kernel: int = 20
     mark_removal_table_v_kernel: int = 30
 
+    # Stage 1 tag removal parameters - for genealogical documents
+    tag_removal_thresh_dark: int = 110
+    tag_removal_row_sum_thresh: int = 200
+    tag_removal_dark_ratio: float = 0.7
+    tag_removal_min_area: int = 2000
+    tag_removal_max_area: int = 60000
+    tag_removal_min_aspect: float = 0.3
+    tag_removal_max_aspect: float = 1.8
+
     # Stage 1 margin removal parameters
     margin_blur_ksize: int = 20
     margin_close_ksize: int = 30
@@ -268,6 +300,7 @@ class Stage1Config(Config):
             "01_marks_removed",
             "02_margin_removed",
             "03_split_pages",
+            "03b_tags_removed",
             "04_deskewed",
             "05_table_lines",
             "06_table_structure",
@@ -299,8 +332,13 @@ class Stage1Config(Config):
             config_dict.update(
                 {
                     "enable_deskewing": deskew.get("enable", True),
+                    "deskew_method": deskew.get("method", "histogram_variance"),
                     "angle_range": deskew.get("angle_range"),
                     "angle_step": deskew.get("angle_step"),
+                    "coarse_range": deskew.get("coarse_range"),
+                    "coarse_step": deskew.get("coarse_step"),
+                    "fine_range": deskew.get("fine_range"),
+                    "fine_step": deskew.get("fine_step"),
                     "min_angle_correction": deskew.get("min_angle_correction"),
                 }
             )
@@ -363,6 +401,23 @@ class Stage1Config(Config):
                     }
                 )
             del config_dict["mark_removal"]
+
+        # Handle tag_removal configuration
+        if "tag_removal" in config_dict:
+            tag = config_dict["tag_removal"]
+            config_dict.update(
+                {
+                    "enable_tag_removal": tag.get("enable", False),
+                    "tag_removal_thresh_dark": tag.get("thresh_dark", 110),
+                    "tag_removal_row_sum_thresh": tag.get("row_sum_thresh", 200),
+                    "tag_removal_dark_ratio": tag.get("dark_ratio", 0.7),
+                    "tag_removal_min_area": tag.get("min_area", 2000),
+                    "tag_removal_max_area": tag.get("max_area", 60000),
+                    "tag_removal_min_aspect": tag.get("min_aspect", 0.3),
+                    "tag_removal_max_aspect": tag.get("max_aspect", 1.8),
+                }
+            )
+            del config_dict["tag_removal"]
 
         # Handle margin_removal configuration
         if "margin_removal" in config_dict:
@@ -439,9 +494,13 @@ class Stage2Config(Config):
     enable_vertical_strip_cutting: bool = True
 
     # Stage 2 deskewing (fine-tuning)
-    angle_range: int = 10
-    angle_step: float = 0.2
-    min_angle_correction: float = 0.2
+    angle_range: Optional[int] = None  # Legacy parameter
+    angle_step: Optional[float] = None  # Legacy parameter
+    coarse_range: float = 5
+    coarse_step: float = 0.5
+    fine_range: float = 1.0
+    fine_step: float = 0.1
+    min_angle_correction: float = 0.1
 
     # Stage 2 table line detection - more precise
     threshold: int = 45  # Higher threshold for more precise detection
@@ -491,6 +550,12 @@ class Stage2Config(Config):
     binarization_adaptive_c: int = 2  # For adaptive method
     binarization_invert: bool = False  # Invert black/white if needed
     binarization_denoise: bool = False  # Apply morphological denoising
+    
+    # Stroke enhancement parameters
+    stroke_enhancement_enable: bool = False  # Enable stroke enhancement before binarization
+    stroke_enhancement_kernel_size: int = 2  # Size of morphological kernel
+    stroke_enhancement_iterations: int = 1   # Number of dilation iterations
+    stroke_enhancement_kernel_shape: str = "ellipse"  # Shape of kernel: "ellipse", "rect", "cross"
 
     def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
@@ -522,8 +587,13 @@ class Stage2Config(Config):
             config_dict.update(
                 {
                     "enable_deskewing": deskew.get("enable", True),
+                    "deskew_method": deskew.get("method", "histogram_variance"),
                     "angle_range": deskew.get("angle_range"),
                     "angle_step": deskew.get("angle_step"),
+                    "coarse_range": deskew.get("coarse_range"),
+                    "coarse_step": deskew.get("coarse_step"),
+                    "fine_range": deskew.get("fine_range"),
+                    "fine_step": deskew.get("fine_step"),
                     "min_angle_correction": deskew.get("min_angle_correction"),
                 }
             )
@@ -605,6 +675,11 @@ class Stage2Config(Config):
                     "binarization_adaptive_c": binarize.get("adaptive_c", 2),
                     "binarization_invert": binarize.get("invert", False),
                     "binarization_denoise": binarize.get("denoise", False),
+                    # Stroke enhancement parameters from nested config
+                    "stroke_enhancement_enable": binarize.get("stroke_enhancement", {}).get("enable", False),
+                    "stroke_enhancement_kernel_size": binarize.get("stroke_enhancement", {}).get("kernel_size", 2),
+                    "stroke_enhancement_iterations": binarize.get("stroke_enhancement", {}).get("iterations", 1),
+                    "stroke_enhancement_kernel_shape": binarize.get("stroke_enhancement", {}).get("kernel_shape", "ellipse"),
                 }
             )
             del config_dict["binarization"]
@@ -624,6 +699,10 @@ class Stage2Config(Config):
 
 def get_default_config(config_path: Optional[Path] = None) -> Config:
     """Get default configuration, optionally from JSON file."""
+    # Convert string to Path if needed
+    if config_path is not None and not isinstance(config_path, Path):
+        config_path = Path(config_path)
+        
     if config_path and config_path.exists():
         return Config.from_json(config_path)
     return Config()
@@ -631,6 +710,10 @@ def get_default_config(config_path: Optional[Path] = None) -> Config:
 
 def get_stage1_config(config_path: Optional[Path] = None) -> Stage1Config:
     """Get Stage 1 configuration, optionally from JSON file."""
+    # Convert string to Path if needed
+    if config_path is not None and not isinstance(config_path, Path):
+        config_path = Path(config_path)
+        
     if config_path is None:
         # Try default config path
         default_path = Path("configs/stage1_default.json")
@@ -644,6 +727,10 @@ def get_stage1_config(config_path: Optional[Path] = None) -> Stage1Config:
 
 def get_stage2_config(config_path: Optional[Path] = None) -> Stage2Config:
     """Get Stage 2 configuration, optionally from JSON file."""
+    # Convert string to Path if needed
+    if config_path is not None and not isinstance(config_path, Path):
+        config_path = Path(config_path)
+        
     if config_path is None:
         # Try default config path
         default_path = Path("configs/stage2_default.json")
