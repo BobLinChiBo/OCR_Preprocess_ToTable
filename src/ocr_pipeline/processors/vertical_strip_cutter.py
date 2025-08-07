@@ -71,7 +71,15 @@ class VerticalStripCutterProcessor(BaseProcessor):
         
         xs = structure_data.get("xs", [])
         if not xs or len(xs) < 2:
-            raise ValueError("Structure data must contain 'xs' array with at least 2 values")
+            # Return empty result instead of raising an error
+            if self.config and self.config.verbose:
+                print(f"    WARNING: Structure data has insufficient 'xs' values ({len(xs)} found, need at least 2)")
+            return {
+                "strips": [],
+                "num_strips": 0,
+                "xs": xs,
+                "message": f"Insufficient 'xs' values in structure data: {len(xs)} found, need at least 2"
+            }
         
         # Convert image to PIL format for easier manipulation
         if image.dtype != np.uint8:
@@ -180,6 +188,17 @@ def cut_vertical_strips(
     # Create a minimal config for verbose output
     config = Config(verbose=verbose) if verbose else None
     
+    # Handle case where v_lines is provided but empty
+    if v_lines is not None and len(v_lines) == 0:
+        if verbose:
+            print(f"  WARNING: No vertical lines provided for strip cutting")
+        return {
+            "strips": [],
+            "num_strips": 0,
+            "xs": [],
+            "message": "No vertical lines provided"
+        }
+    
     # If we need to filter lines and v_lines is provided
     if use_longest_lines_only and v_lines is not None and len(v_lines) > 0:
         # Calculate line lengths
@@ -211,6 +230,18 @@ def cut_vertical_strips(
         # Sort and remove duplicates (with small tolerance)
         x_positions = sorted(set(x_positions))
         
+        # Check if we have enough x-positions to create strips
+        if len(x_positions) < 2:
+            if verbose:
+                print(f"  WARNING: Insufficient x-positions for vertical strips ({len(x_positions)} found, need at least 2)")
+            # Return empty result instead of causing an error
+            return {
+                "strips": [],
+                "num_strips": 0,
+                "xs": x_positions,
+                "message": f"Insufficient vertical boundaries: {len(x_positions)} x-positions found, need at least 2"
+            }
+        
         # Create structure_data with filtered xs
         if structure_data is None:
             structure_data = {}
@@ -218,6 +249,33 @@ def cut_vertical_strips(
         
         if verbose:
             print(f"  Extracted {len(x_positions)} unique x-positions from filtered lines")
+    elif v_lines is not None and len(v_lines) > 0:
+        # v_lines provided but not filtering by length - use all lines
+        x_positions = []
+        for x1, y1, x2, y2 in v_lines:
+            x_positions.append(x1)
+        
+        # Sort and remove duplicates
+        x_positions = sorted(set(x_positions))
+        
+        # Check if we have enough x-positions
+        if len(x_positions) < 2:
+            if verbose:
+                print(f"  WARNING: Insufficient x-positions for vertical strips ({len(x_positions)} found, need at least 2)")
+            return {
+                "strips": [],
+                "num_strips": 0,
+                "xs": x_positions,
+                "message": f"Insufficient vertical boundaries: {len(x_positions)} x-positions found, need at least 2"
+            }
+        
+        # Create structure_data with xs
+        if structure_data is None:
+            structure_data = {}
+        structure_data['xs'] = x_positions
+        
+        if verbose:
+            print(f"  Using all {len(v_lines)} vertical lines: {len(x_positions)} unique x-positions")
     
     processor = VerticalStripCutterProcessor(config=config)
     return processor.process(

@@ -191,6 +191,10 @@ Examples:
         stage1_config.angle_step = args.s1_angle_step
         stage1_config.min_line_length = args.s1_min_line_length
         stage1_config.enable_roi_detection = not args.disable_roi
+        
+        # Auto-disable optimization if debug mode is enabled
+        if stage1_config.save_debug_images:
+            stage1_config._disable_optimization_for_debug()
 
     # Stage 2 configuration
     stage2_config = get_stage2_config(args.stage2_config)
@@ -210,6 +214,10 @@ Examples:
         stage2_config.angle_step = args.s2_angle_step
         stage2_config.min_line_length = args.s2_min_line_length
         stage2_config.max_line_gap = args.s2_max_line_gap
+        
+        # Auto-disable optimization if debug mode is enabled
+        if stage2_config.save_debug_images:
+            stage2_config._disable_optimization_for_debug()
 
     try:
         if args.verbose:
@@ -259,8 +267,19 @@ Examples:
                 print(f"Final Results: {stage2_config.output_dir / '04_fitted_tables'}")
 
         else:
-            # Run complete two-stage pipeline
-            results = pipeline.run_complete_pipeline(input_path)
+            # Check if optimization is enabled in config
+            use_optimized = (
+                hasattr(stage1_config, 'parallel_processing') and stage1_config.parallel_processing
+            ) or (
+                hasattr(stage1_config, 'memory_mode') and stage1_config.memory_mode
+            )
+            
+            if use_optimized:
+                # Use optimized batch processing
+                results = pipeline.run_batch_optimized(input_path)
+            else:
+                # Run standard two-stage pipeline
+                results = pipeline.run_complete_pipeline(input_path)
 
             if args.verbose:
                 print("\n*** COMPLETE PIPELINE FINISHED! ***")

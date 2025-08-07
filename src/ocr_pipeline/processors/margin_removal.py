@@ -350,6 +350,18 @@ def remove_margin_inscribed(
         # Step 3: Crop the original image
         crop = image[y1 : y2 + 1, x1 : x2 + 1]
         
+        # Debug: Print the result only in debug mode
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+            h, w = image.shape[:2]
+            margins_removed = {
+                'top': y1,
+                'bottom': h - y2 - 1,
+                'left': x1,
+                'right': w - x2 - 1
+            }
+            total_removed = margins_removed['top'] + margins_removed['bottom'] + margins_removed['left'] + margins_removed['right']
+            print(f"    [DEBUG] Margin removal: Removed {total_removed}px total (T:{margins_removed['top']} B:{margins_removed['bottom']} L:{margins_removed['left']} R:{margins_removed['right']})")
+        
         # Save final cropped result
         if processor:
             processor.save_debug_image('11_final_cropped_result', crop)

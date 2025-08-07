@@ -88,6 +88,12 @@ class Config:
     save_debug_images: bool = False
     save_intermediate_outputs: bool = True  # Save outputs of each processing step
     verbose: bool = False
+    
+    # Parallel processing options
+    parallel_processing: bool = True  # Enable/disable parallel processing
+    max_workers: Optional[int] = None  # Max worker processes (None = CPU count - 1)
+    batch_size: int = 4  # Number of images per batch for memory management
+    memory_mode: bool = True  # Use memory-efficient processing (avoid disk I/O)
 
     def __post_init__(self) -> None:
         """Ensure paths are Path objects and validate parameters."""
@@ -96,8 +102,32 @@ class Config:
         if self.debug_dir:
             self.debug_dir = Path(self.debug_dir)
 
+        # Auto-disable optimization in debug mode for clean debug output
+        if self.save_debug_images:
+            self._disable_optimization_for_debug()
+
         # Validate parameters
         self._validate_parameters()
+    
+    def _disable_optimization_for_debug(self) -> None:
+        """Disable parallel processing and optimization when debug mode is active.
+        
+        This ensures clean, sequential debug output without file conflicts
+        from multiple threads writing debug images simultaneously.
+        """
+        if self.parallel_processing or self.memory_mode or self.max_workers != 1 or self.batch_size != 1:
+            if self.verbose:
+                print("\n[DEBUG MODE] Disabling optimization for clean debug output:")
+                print("  - Setting parallel_processing = False")
+                print("  - Setting memory_mode = False")
+                print("  - Setting max_workers = 1")
+                print("  - Setting batch_size = 1")
+                print("  This ensures debug images are saved sequentially without conflicts.\n")
+            
+            self.parallel_processing = False
+            self.memory_mode = False
+            self.max_workers = 1
+            self.batch_size = 1
 
     def _validate_parameters(self) -> None:
         """Validate configuration parameters."""
@@ -116,9 +146,17 @@ class Config:
             raise ValueError(
                 f"peak_thr must be between 0 and 1, got {self.peak_thr}"
             )
-        # Deskewing validation
+        # Deskewing validation with dependency checking
+        from .processors.deskew import DeskewProcessor
+        available_methods = DeskewProcessor.get_available_methods()
         if self.deskew_method not in ["histogram_variance", "deskew_library", "radon"]:
             raise ValueError(f"deskew_method must be 'histogram_variance', 'deskew_library', or 'radon', got '{self.deskew_method}'")
+        
+        # Validate method availability and provide warning if fallback will be used
+        validated_method = DeskewProcessor.validate_and_fallback_method(self.deskew_method)
+        if validated_method != self.deskew_method:
+            # Update the config to use the fallback method
+            self.deskew_method = validated_method
         # Validate new parameters
         if self.coarse_range <= 0:
             raise ValueError(f"coarse_range must be positive, got {self.coarse_range}")
@@ -463,6 +501,19 @@ class Stage1Config(Config):
                 }
             )
             del config_dict["table_detection"]
+        
+        # Handle optimization section
+        if "optimization" in config_dict:
+            opt = config_dict["optimization"]
+            config_dict.update(
+                {
+                    "parallel_processing": opt.get("parallel_processing", True),
+                    "max_workers": opt.get("max_workers"),
+                    "batch_size": opt.get("batch_size", 4),
+                    "memory_mode": opt.get("memory_mode", True),
+                }
+            )
+            del config_dict["optimization"]
 
         # Handle roi_margins specially
         if "roi_margins" in config_dict:
@@ -652,6 +703,19 @@ class Stage2Config(Config):
                 }
             )
             del config_dict["table_detection"]
+        
+        # Handle optimization section
+        if "optimization" in config_dict:
+            opt = config_dict["optimization"]
+            config_dict.update(
+                {
+                    "parallel_processing": opt.get("parallel_processing", True),
+                    "max_workers": opt.get("max_workers"),
+                    "batch_size": opt.get("batch_size", 4),
+                    "memory_mode": opt.get("memory_mode", True),
+                }
+            )
+            del config_dict["optimization"]
             
         # Handle table_recovery specially
         if "table_recovery" in config_dict:

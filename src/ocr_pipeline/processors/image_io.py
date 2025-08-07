@@ -55,10 +55,10 @@ def get_image_files(directory: Path) -> List[Path]:
         List of paths to image files, sorted
     """
     extensions = [".jpg", ".jpeg", ".png", ".tiff", ".bmp"]
-    image_files = []
+    image_files = set()  # Use set to avoid duplicates on case-insensitive filesystems
 
     for ext in extensions:
-        image_files.extend(directory.glob(f"*{ext}"))
-        image_files.extend(directory.glob(f"*{ext.upper()}"))
+        image_files.update(directory.glob(f"*{ext}"))
+        image_files.update(directory.glob(f"*{ext.upper()}"))
 
     return sorted(image_files)

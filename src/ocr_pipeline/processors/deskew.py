@@ -24,6 +24,50 @@ except ImportError:
 class DeskewProcessor(BaseProcessor):
     """Processor for deskewing images."""
     
+    @staticmethod
+    def get_available_methods():
+        """Get list of available deskewing methods based on installed dependencies."""
+        methods = ['histogram_variance']  # Always available
+        if RADON_AVAILABLE:
+            methods.append('radon')
+        if DESKEW_LIBRARY_AVAILABLE:
+            methods.append('deskew_library')
+        return methods
+    
+    @staticmethod
+    def validate_and_fallback_method(method: str) -> str:
+        """Validate the requested method and provide fallback if unavailable.
+        
+        Args:
+            method: Requested deskewing method
+            
+        Returns:
+            str: Valid method to use (original or fallback)
+        """
+        available_methods = DeskewProcessor.get_available_methods()
+        
+        if method in available_methods:
+            return method
+        
+        # Provide fallback with warning
+        fallback_method = 'histogram_variance'  # Always available
+        
+        # Construct warning message
+        if method == 'radon' and not RADON_AVAILABLE:
+            print(f"Warning: Radon method requested but scikit-image is not installed. "
+                  f"Falling back to '{fallback_method}' method. "
+                  f"Install scikit-image with: pip install scikit-image>=0.19.0")
+        elif method == 'deskew_library' and not DESKEW_LIBRARY_AVAILABLE:
+            print(f"Warning: Deskew library method requested but deskew is not installed. "
+                  f"Falling back to '{fallback_method}' method. "
+                  f"Install deskew with: pip install deskew")
+        else:
+            print(f"Warning: Unknown deskewing method '{method}'. "
+                  f"Falling back to '{fallback_method}' method. "
+                  f"Available methods: {', '.join(available_methods)}")
+        
+        return fallback_method
+    
     def process(
         self,
         image: np.ndarray,
@@ -63,6 +107,9 @@ class DeskewProcessor(BaseProcessor):
         # Clear previous debug images
         self.clear_debug_images()
         
+        # Validate method and provide fallback if necessary
+        method = self.validate_and_fallback_method(method)
+        
         # Pass processor instance for debug saving
         kwargs['_processor'] = self
         
@@ -73,6 +120,20 @@ class DeskewProcessor(BaseProcessor):
             fine_step = angle_step
         
         if method == "radon":
+            # Double-check availability (should already be validated)
+            if not RADON_AVAILABLE:
+                # This should not happen due to validation, but add safety check
+                print("Error: Radon method selected but scikit-image is not available. Using histogram_variance instead.")
+                return deskew_image(
+                    image,
+                    coarse_range=coarse_range,
+                    coarse_step=coarse_step,
+                    fine_range=fine_range,
+                    fine_step=fine_step if fine_step is not None else 0.5,
+                    min_angle_correction=min_angle_correction,
+                    return_analysis_data=return_analysis_data,
+                    **kwargs
+                )
             return radon_method(
                 image,
                 coarse_range=coarse_range,
@@ -85,6 +146,19 @@ class DeskewProcessor(BaseProcessor):
             )
         elif method == "deskew_library":
             # Legacy method kept for backward compatibility
+            if not DESKEW_LIBRARY_AVAILABLE:
+                # This should not happen due to validation, but add safety check
+                print("Error: Deskew library method selected but deskew is not available. Using histogram_variance instead.")
+                return deskew_image(
+                    image,
+                    coarse_range=coarse_range,
+                    coarse_step=coarse_step,
+                    fine_range=fine_range,
+                    fine_step=fine_step if fine_step is not None else 0.5,
+                    min_angle_correction=min_angle_correction,
+                    return_analysis_data=return_analysis_data,
+                    **kwargs
+                )
             return deskew_library_method(
                 image,
                 min_angle_correction=min_angle_correction,
@@ -221,6 +295,10 @@ def deskew_image(
     # Find best fine angle
     best_fine_idx = np.argmax(fine_scores)
     best_angle = fine_angles[best_fine_idx]
+    
+    # Debug: Print the result only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        print(f"    [DEBUG] Histogram deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
     
     # Create angle histogram visualization
     if processor:
@@ -400,9 +478,7 @@ def radon_method(
     coarse_angles = np.arange(-coarse_range, coarse_range + coarse_step, coarse_step)
     coarse_scores = []
     
-    # Debug: Print the actual search range only in debug mode
-    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
-        print(f"    [DEBUG] Radon coarse search: {coarse_angles[0]:.1f}° to {coarse_angles[-1]:.1f}° (range: ±{coarse_range}°, step: {coarse_step}°)")
+    # Will print debug result after finding best angle
     
     for a in coarse_angles:
         sinogram = radon(edges, [a], circle=False)
@@ -426,6 +502,10 @@ def radon_method(
     # Find best fine angle
     best_fine_idx = int(np.argmax(fine_scores))
     best_angle = fine_angles[best_fine_idx]
+    
+    # Debug: Print the result only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        print(f"    [DEBUG] Radon deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
     
     # Create angle histogram visualization
     if processor:

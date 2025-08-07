@@ -1,32 +1,32 @@
 {
   "output_dir": "data/output/stage2",
-  "debug_dir": "data/debug/stage2_debug",
+  "debug_dir": "data/debug",
   "verbose": true,
   "save_debug_images": false,
   "save_intermediate_outputs": true,
   "deskewing": {
     "enable": true,
     "method": "radon",
-    "coarse_range": 5,
+    "coarse_range": 3,
     "coarse_step": 0.5,
-    "fine_range": 2.0,
+    "fine_range": 1.0,
     "fine_step": 0.1,
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 30,
-    "horizontal_kernel_size": 50,
-    "vertical_kernel_size": 50,
+    "threshold": 120,
+    "horizontal_kernel_size": 70,
+    "vertical_kernel_size": 70,
     "alignment_threshold": 3,
     "h_min_length_image_ratio": 0.1,
     "h_min_length_relative_ratio": 0.7,
-    "v_min_length_image_ratio": 0.2,
+    "v_min_length_image_ratio": 0.1,
     "v_min_length_relative_ratio": 0.3,
     "min_aspect_ratio": 7,
     "max_h_length_ratio": 1.0,
     "max_v_length_ratio": 1.0,
     "close_line_distance": 45,
-    "skew_tolerance": 4,
+    "skew_tolerance": 3,
     "skew_angle_step": 0.2
   },
   "inscribed_margin_removal": {
@@ -63,5 +63,11 @@
       "iterations": 1,
       "kernel_shape": "ellipse"
     }
+  },
+  "optimization": {
+    "parallel_processing": true,
+    "max_workers": null,
+    "batch_size": 8,
+    "memory_mode": true
   }
 }

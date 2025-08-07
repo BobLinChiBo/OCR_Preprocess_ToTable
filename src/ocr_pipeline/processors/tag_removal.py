@@ -229,6 +229,17 @@ def remove_tags(
             -1,
         )
         removed_rects.append((x, y_global, w, h))
+    
+    # Debug: Print the result only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        if boxes:
+            band_height = bottom - top
+            print(f"    [DEBUG] Tag removal: Removed {len(boxes)} generation tags from band [{top}:{bottom}] (height: {band_height}px)")
+        else:
+            if band_rows is not None:
+                print(f"    [DEBUG] Tag removal: No tags found in detected band [{top}:{bottom}]")
+            else:
+                print(f"    [DEBUG] Tag removal: No tag band detected (image may not contain generation tags)")
 
     # Save final result
     if processor:

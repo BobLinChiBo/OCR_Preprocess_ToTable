@@ -131,6 +131,10 @@ def split_two_page_image(
         left_page = image[:, :split_x]
         right_page = image[:, split_x:]
         
+        # Debug: Print the result only in debug mode
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+            print(f"    [DEBUG] Page split: Center fallback at x={split_x} (no vertical lines detected)")
+        
         # Save split visualization even for fallback
         if processor:
             vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
@@ -268,6 +272,11 @@ def split_two_page_image(
     
     left_page = image[:, :split_x]
     right_page = image[:, split_x:]
+    
+    # Debug: Print the result only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        gutter_width = a2 - b1
+        print(f"    [DEBUG] Page split: Gutter at x={split_x} (width: {gutter_width}px, {len(segments)} vertical lines detected)")
     
     # Save final split visualization
     if processor:

@@ -1,6 +1,7 @@
 """Table recovery processor for reconstructing table structure with merged cells."""
 
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -204,7 +205,9 @@ def recover_table_impl(
             width=3,
         )
     canvas.save(out_img)
-    print(f"Recovered {len(merged)} merged cells -> {out_json}, {out_img}")
+    # Only show debug info if explicitly requested
+    if os.environ.get('DEBUG_TABLE_RECOVERY'):
+        print(f"Recovered {len(merged)} merged cells -> {out_json}, {out_img}")
 
 
 class TableRecoveryProcessor(BaseProcessor):

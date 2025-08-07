@@ -150,6 +150,10 @@ Examples:
         stage1_config.angle_step = args.angle_step
     if args.min_line_length is not None:
         stage1_config.min_line_length = args.min_line_length
+    
+    # Auto-disable optimization if debug mode is enabled
+    if stage1_config.save_debug_images:
+        stage1_config._disable_optimization_for_debug()
 
     try:
         if args.verbose:

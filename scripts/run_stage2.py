@@ -162,6 +162,10 @@ Examples:
     stage2_config.angle_step = args.angle_step
     stage2_config.min_line_length = args.min_line_length
     stage2_config.max_line_gap = args.max_line_gap
+    
+    # Auto-disable optimization if debug mode is enabled
+    if stage2_config.save_debug_images:
+        stage2_config._disable_optimization_for_debug()
 
     try:
         if args.verbose:

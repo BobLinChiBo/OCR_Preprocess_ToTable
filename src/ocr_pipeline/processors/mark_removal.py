@@ -132,6 +132,21 @@ def remove_marks(
     # Produce final: keep gray under protect, paint rest white
     clean = np.full_like(gray, 255, dtype=np.uint8)
     clean[protect > 0] = gray[protect > 0]
+    
+    # Debug: Print the result only in debug mode
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+        # Calculate statistics about what was removed
+        total_pixels = gray.shape[0] * gray.shape[1]
+        protected_pixels = np.sum(protect > 0)
+        removed_pixels = total_pixels - protected_pixels
+        removal_percent = (removed_pixels / total_pixels) * 100
+        
+        # Count connected components that were removed (marks/artifacts)
+        removed_mask = (protect == 0) & (gray < 250)  # Dark pixels that weren't protected
+        num_labels, labels = cv2.connectedComponents(removed_mask.astype(np.uint8))
+        num_marks = num_labels - 1  # Subtract background
+        
+        print(f"    [DEBUG] Mark removal: Removed {num_marks} marks/artifacts ({removal_percent:.1f}% of image cleaned)")
 
     # Save final result
     if processor:

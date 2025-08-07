@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime
 
 from .config import (
@@ -43,6 +43,8 @@ from .processors import (
     StrokeEnhancementProcessor,
 )
 from .processors.table_recovery_utils import get_major_vertical_boundaries
+from .memory_pipeline import MemoryEfficientPipeline
+from .parallel_pipeline import ParallelPipeline
 
 
 class OCRPipeline:
@@ -191,14 +193,23 @@ class TwoStageOCRPipeline:
         self.run_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.debug_run_dir_s1 = None
         self.debug_run_dir_s2 = None
+        self.debug_base_dir = None
+        
+        # Create a common base directory for this run if debug is enabled for either stage
+        if ((self.stage1_config.save_debug_images and self.stage1_config.debug_dir) or 
+            (self.stage2_config.save_debug_images and self.stage2_config.debug_dir)):
+            # Use the first available debug_dir as the base
+            base_debug_dir = self.stage1_config.debug_dir if self.stage1_config.debug_dir else self.stage2_config.debug_dir
+            self.debug_base_dir = base_debug_dir / f"{self.run_timestamp}_run"
+            self.debug_base_dir.mkdir(parents=True, exist_ok=True)
         
         # Create debug directories if debug mode is enabled
         if self.stage1_config.save_debug_images and self.stage1_config.debug_dir:
-            self.debug_run_dir_s1 = self.stage1_config.debug_dir / f"{self.run_timestamp}_run"
+            self.debug_run_dir_s1 = self.debug_base_dir / "stage1"
             self.debug_run_dir_s1.mkdir(parents=True, exist_ok=True)
             
         if self.stage2_config.save_debug_images and self.stage2_config.debug_dir:
-            self.debug_run_dir_s2 = self.stage2_config.debug_dir / f"{self.run_timestamp}_run"
+            self.debug_run_dir_s2 = self.debug_base_dir / "stage2"
             self.debug_run_dir_s2.mkdir(parents=True, exist_ok=True)
     
     def _save_run_info(self, stage: str, input_path: Path, num_images: int, status: str = "started"):
@@ -215,7 +226,7 @@ class TwoStageOCRPipeline:
             "status": status,
             "config": {
                 "save_debug_images": True,
-                "debug_dir": str(debug_dir.parent),
+                "debug_dir": str(self.debug_base_dir) if self.debug_base_dir else None,
                 "verbose": self.stage1_config.verbose if stage == "stage1" else self.stage2_config.verbose
             }
         }
@@ -283,7 +294,8 @@ class TwoStageOCRPipeline:
         # Process each image through Stage 1 steps
         for image_path in image_files:
             try:
-                if self.stage1_config.verbose:
+                # Show filename in verbose or debug mode
+                if self.stage1_config.verbose or self.stage1_config.save_debug_images:
                     print(f"\nProcessing: {image_path.name}")
 
                 # Load image
@@ -744,11 +756,17 @@ class TwoStageOCRPipeline:
         self._save_run_info("stage2", input_dir, len(image_files), "started")
 
         refined_tables = []
+        output_locations = {
+            "04_table_recovered": [],
+            "05_vertical_strips": [],
+            "06_binarized": []
+        }
 
         # Process each cropped table through Stage 2 refinement
         for image_path in image_files:
             try:
-                if self.stage2_config.verbose:
+                # Show image name when either verbose or debug mode is enabled
+                if self.stage2_config.verbose or self.stage2_config.save_debug_images:
                     print(f"\nRefining: {image_path.name}")
 
                 # Load cropped table
@@ -906,6 +924,12 @@ class TwoStageOCRPipeline:
                         show_grid=True,
                         label_cells=True
                     )
+                    if self.stage2_config.verbose:
+                        recovered_cells = recovered_result.get('cells', [])
+                        if self.stage2_config.save_debug_images:
+                            print(f"  [DEBUG] Table recovery: {len(recovered_cells)} cells recovered with merged cell detection")
+                        else:
+                            print(f"  Table recovery: {len(recovered_cells)} cells recovered")
                 else:
                     # If no table structure detected, create a simple result
                     recovered_result = {
@@ -934,6 +958,9 @@ class TwoStageOCRPipeline:
                     }, f, indent=2)
                 
                 refined_tables.append(recovery_path)
+                # Track this as potential final output
+                current_final_output = recovery_path
+                current_final_stage = "04_table_recovered"
 
                 if self.stage2_config.verbose:
                     n_cells = len(recovered_result['cells'])
@@ -961,24 +988,42 @@ class TwoStageOCRPipeline:
                     # This gives us more accurate boundaries considering merged cells
                     recovered_v_lines = get_major_vertical_boundaries(recovered_result)
                     
-                    if self.stage2_config.verbose:
-                        print(f"  Extracted {len(recovered_v_lines)} vertical lines from recovered table")
+                    # Check if we have enough vertical lines to create strips
+                    # We need at least 2 unique x-positions to define at least one strip
+                    unique_x_positions = set()
+                    for x1, y1, x2, y2 in recovered_v_lines:
+                        unique_x_positions.add(x1)
                     
-                    strips_result = cut_vertical_strips(
-                        image=refined_deskewed,
-                        structure_json_path=None,  # Don't use structure_json, let it be created from v_lines
-                        padding=strip_padding,
-                        min_width=strip_min_width,
-                        use_longest_lines_only=use_longest_lines_only,
-                        min_length_ratio=min_length_ratio,
-                        v_lines=recovered_v_lines,  # Use recovered lines
-                        output_dir=self.stage2_config.output_dir / "05_vertical_strips",
-                        base_name=base_name,
-                        verbose=self.stage2_config.verbose
-                    )
-                    
-                    if self.stage2_config.verbose:
-                        print(f"  Vertical strips: {strips_result['num_strips']} columns saved")
+                    if len(unique_x_positions) >= 2:
+                        if self.stage2_config.verbose:
+                            print(f"  Extracted {len(recovered_v_lines)} vertical lines ({len(unique_x_positions)} unique x-positions)")
+                        
+                        strips_result = cut_vertical_strips(
+                            image=refined_deskewed,
+                            structure_json_path=None,  # Don't use structure_json, let it be created from v_lines
+                            padding=strip_padding,
+                            min_width=strip_min_width,
+                            use_longest_lines_only=use_longest_lines_only,
+                            min_length_ratio=min_length_ratio,
+                            v_lines=recovered_v_lines,  # Use recovered lines
+                            output_dir=self.stage2_config.output_dir / "05_vertical_strips",
+                            base_name=base_name,
+                            verbose=self.stage2_config.verbose
+                        )
+                        
+                        if strips_result['num_strips'] > 0:
+                            # Update final output location if strips were created
+                            current_final_stage = "05_vertical_strips"
+                            # The actual files are in the strips result
+                            
+                        if self.stage2_config.verbose:
+                            if self.stage2_config.save_debug_images:
+                                print(f"  [DEBUG] Vertical strips: {strips_result['num_strips']} columns saved from {len(unique_x_positions)} boundaries")
+                            else:
+                                print(f"  Vertical strips: {strips_result['num_strips']} columns saved")
+                    else:
+                        if self.stage2_config.verbose:
+                            print(f"  Vertical strip cutting skipped (insufficient vertical boundaries: {len(unique_x_positions)} x-positions found, need at least 2)")
                 else:
                     if self.stage2_config.verbose:
                         print(f"  Vertical strip cutting skipped (disabled or no table structure)")
@@ -1040,6 +1085,10 @@ class TwoStageOCRPipeline:
                             binarized_strip_path = binarized_dir / strip_file.name
                             save_image(binarized_strip, binarized_strip_path)
                         
+                        if len(strip_files) > 0:
+                            # Update final output location if binarization was done
+                            current_final_stage = "06_binarized"
+                            
                         if self.stage2_config.verbose:
                             print(f"  Binarized {len(strip_files)} vertical strips using {self.stage2_config.binarization_method} method")
                             print(f"  Saved to: {binarized_dir.name}")
@@ -1049,30 +1098,45 @@ class TwoStageOCRPipeline:
                 else:
                     if self.stage2_config.verbose:
                         print(f"  Binarization skipped (disabled)")
+                
+                # Track where this image's final output ended up
+                output_locations[current_final_stage].append(base_name)
 
             except Exception as e:
-                print(f"Error refining {image_path}: {e}")
+                print(f"Error refining {image_path.name}: {e}")
+                if self.stage2_config.save_debug_images:
+                    import traceback
+                    print(f"  [DEBUG] Full error traceback:")
+                    traceback.print_exc()
 
         if self.stage2_config.verbose:
             print(
                 f"\n*** STAGE 2 COMPLETE: {len(refined_tables)} publication-ready tables ***"
             )
-            print(f"Final output: {self.stage2_config.output_dir / '04_table_recovered'}")
             
-            # Check if vertical strip cutting was enabled
-            vertical_strip_config = getattr(self.stage2_config, 'vertical_strip_cutting', {})
-            if isinstance(vertical_strip_config, dict) and vertical_strip_config.get('enable', True):
-                print(f"Vertical strips: {self.stage2_config.output_dir / '05_vertical_strips'}")
+            # Show where outputs ended up
+            print("\nFinal output locations:")
+            if output_locations["06_binarized"]:
+                print(f"  Binarized outputs: {self.stage2_config.output_dir / '06_binarized'} ({len(output_locations['06_binarized'])} images)")
+            if output_locations["05_vertical_strips"]:
+                print(f"  Vertical strips: {self.stage2_config.output_dir / '05_vertical_strips'} ({len(output_locations['05_vertical_strips'])} images)")
+            if output_locations["04_table_recovered"]:
+                print(f"  Table recovered: {self.stage2_config.output_dir / '04_table_recovered'} ({len(output_locations['04_table_recovered'])} images)")
             
-            # Check if binarization was enabled
-            if self.stage2_config.enable_binarization:
-                print(f"Binarized output: {self.stage2_config.output_dir / '06_binarized'}")
+            # Show the primary output directory (where most outputs are)
+            primary_stage = max(output_locations.keys(), 
+                              key=lambda k: len(output_locations[k]) if output_locations[k] else 0)
+            if output_locations[primary_stage]:
+                print(f"\nPrimary output: {self.stage2_config.output_dir / primary_stage}")
             
             if self.stage2_config.save_debug_images and self.debug_run_dir_s2:
-                print(f"Debug images saved to: {self.debug_run_dir_s2}")
+                print(f"\nDebug images saved to: {self.debug_run_dir_s2}")
 
         # Save run info at completion
         self._save_run_info("stage2", input_dir, len(image_files), "completed")
+        
+        # Store output locations for use by complete pipeline
+        self._stage2_output_locations = output_locations
 
         return refined_tables
 
@@ -1104,11 +1168,154 @@ class TwoStageOCRPipeline:
 
         print("\n*** COMPLETE PIPELINE FINISHED! ***")
         print(f"   {len(stage2_outputs)} publication-ready tables generated")
-        print(
-            f"   Check final results in: {self.stage2_config.output_dir / '04_table_recovered'}"
-        )
+        
+        # Show where final outputs are based on what was actually processed
+        if hasattr(self, '_stage2_output_locations'):
+            output_locs = self._stage2_output_locations
+            # Find directories with actual outputs
+            active_dirs = []
+            if output_locs.get("06_binarized"):
+                active_dirs.append(f"{self.stage2_config.output_dir / '06_binarized'}")
+            if output_locs.get("05_vertical_strips"):
+                active_dirs.append(f"{self.stage2_config.output_dir / '05_vertical_strips'}")
+            if output_locs.get("04_table_recovered"):
+                active_dirs.append(f"{self.stage2_config.output_dir / '04_table_recovered'}")
+            
+            if active_dirs:
+                print(f"   Check final results in:")
+                for dir_path in active_dirs:
+                    print(f"     - {dir_path}")
+        else:
+            # Fallback to default if output tracking not available
+            print(f"   Check final results in: {self.stage2_config.output_dir}")
 
         return stage2_outputs
+    
+    def run_batch_optimized(
+        self,
+        input_path: Path = None,
+        use_parallel: bool = None,
+        use_memory_mode: bool = None
+    ) -> List[Path]:
+        """
+        Run the pipeline with optimized batch processing.
+        
+        Args:
+            input_path: Input directory or single image file
+            use_parallel: Whether to use parallel processing (default: from config)
+            use_memory_mode: Whether to use memory mode (default: from config)
+            
+        Returns:
+            List of final output paths
+        """
+        # Use config values if not specified
+        if use_parallel is None:
+            use_parallel = self.stage1_config.parallel_processing
+        if use_memory_mode is None:
+            use_memory_mode = self.stage1_config.memory_mode
+        
+        input_path = input_path or self.stage1_config.input_dir
+        
+        # Determine if we have multiple images
+        if input_path.is_file():
+            image_files = [input_path]
+        else:
+            image_files = get_image_files(input_path)
+        
+        if not image_files:
+            print(f"No images found in {input_path}")
+            return []
+        
+        # Single image or disabled features: use regular pipeline
+        if len(image_files) == 1 or (not use_parallel and not use_memory_mode):
+            return self.run_complete_pipeline(input_path)
+        
+        # Use optimized pipeline
+        print(f"\n*** OPTIMIZED BATCH PROCESSING ***")
+        print(f"  Parallel: {use_parallel}")
+        print(f"  Memory mode: {use_memory_mode}")
+        print(f"  Images: {len(image_files)}")
+        print("=" * 60)
+        
+        if use_parallel:
+            # Use parallel pipeline
+            parallel_pipeline = ParallelPipeline(
+                stage1_config=self.stage1_config,
+                stage2_config=self.stage2_config,
+                max_workers=self.stage1_config.max_workers,
+                batch_size=self.stage1_config.batch_size,
+                memory_mode=use_memory_mode,
+                show_progress=True
+            )
+            
+            summary = parallel_pipeline.process_batch(
+                image_files,
+                parallel=True
+            )
+            
+            # Collect output paths from successful results
+            output_paths = []
+            for result in summary['successful']:
+                output_paths.extend(result['outputs'])
+            
+            return output_paths
+        
+        elif use_memory_mode:
+            # Use memory-efficient pipeline (sequential but optimized)
+            memory_pipeline = MemoryEfficientPipeline(
+                stage1_config=self.stage1_config,
+                stage2_config=self.stage2_config,
+                memory_mode=True
+            )
+            
+            output_paths = []
+            for i, image_path in enumerate(image_files, 1):
+                # The memory pipeline will print the filename if verbose or debug is enabled
+                try:
+                    paths = memory_pipeline.process_image_complete(image_path)
+                    output_paths.extend(paths)
+                except Exception as e:
+                    print(f"  Error processing {image_path.name}: {e}")
+            
+            # Clear cache after processing all images
+            memory_pipeline.clear_cache()
+            
+            print(f"\n*** BATCH COMPLETE: {len(output_paths)} tables processed ***")
+            return output_paths
+        
+        return []
+    
+    def run_parallel_batch(
+        self,
+        input_dir: Path = None,
+        pattern: str = "*.jpg"
+    ) -> Dict[str, Any]:
+        """
+        Convenience method to run parallel batch processing.
+        
+        Args:
+            input_dir: Input directory containing images
+            pattern: File pattern to match
+            
+        Returns:
+            Processing summary dictionary
+        """
+        input_dir = input_dir or self.stage1_config.input_dir
+        
+        parallel_pipeline = ParallelPipeline(
+            stage1_config=self.stage1_config,
+            stage2_config=self.stage2_config,
+            max_workers=self.stage1_config.max_workers,
+            batch_size=self.stage1_config.batch_size,
+            memory_mode=self.stage1_config.memory_mode,
+            show_progress=True
+        )
+        
+        return parallel_pipeline.process_directory(
+            input_dir=input_dir,
+            pattern=pattern,
+            parallel=self.stage1_config.parallel_processing
+        )
 
 
 def main() -> None:
