@@ -364,6 +364,7 @@ class Stage1Processor:
         """Process tag removal step."""
         processed = self.tag_removal_processor.process(
             image,
+            method=self.config.tag_removal_method,
             thresh_dark=self.config.tag_removal_thresh_dark,
             row_sum_thresh=self.config.tag_removal_row_sum_thresh,
             dark_ratio=self.config.tag_removal_dark_ratio,
@@ -371,6 +372,24 @@ class Stage1Processor:
             max_area=self.config.tag_removal_max_area,
             min_aspect=self.config.tag_removal_min_aspect,
             max_aspect=self.config.tag_removal_max_aspect,
+            band_top=self.config.tag_removal_band_top,
+            band_bottom=self.config.tag_removal_band_bottom,
+            rows_mode=self.config.tag_removal_rows_mode,
+            min_dark=self.config.tag_removal_min_dark,
+            min_score=self.config.tag_removal_min_score,
+            reject_red=self.config.tag_removal_reject_red,
+            nms_iou=self.config.tag_removal_nms_iou,
+            pad_px=self.config.tag_removal_pad_px,
+            min_width_ratio=self.config.tag_removal_min_width_ratio,
+            max_width_ratio=self.config.tag_removal_max_width_ratio,
+            min_height_ratio=self.config.tag_removal_min_height_ratio,
+            max_height_ratio=self.config.tag_removal_max_height_ratio,
+            min_aspect_ratio=self.config.tag_removal_min_aspect_ratio,
+            max_aspect_ratio=self.config.tag_removal_max_aspect_ratio,
+            glyph_kernel_size=self.config.tag_removal_glyph_kernel_size,
+            mask_close_kernel_size=self.config.tag_removal_mask_close_kernel_size,
+            mask_open_kernel_size=self.config.tag_removal_mask_open_kernel_size,
+            mask_dilate_kernel_size=self.config.tag_removal_mask_dilate_kernel_size,
         )
         
         # Save debug images if needed

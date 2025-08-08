@@ -304,7 +304,7 @@ def deskew_image(
     
     # Debug: Print the result only in debug mode
     if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
-        print(f"    [DEBUG] Histogram deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
+        print(f"    [DEBUG] Histogram deskew: Detected angle: {best_angle:.2f} degrees (coarse: {best_coarse_angle:.1f} degrees, searched +/-{coarse_range} degrees)")
     
     # Create angle histogram visualization
     if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
@@ -316,7 +316,7 @@ def deskew_image(
         
         # Coarse search plot
         ax1.plot(coarse_angles[:len(coarse_scores)], coarse_scores, 'b-', label='Coarse Search')
-        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.1f}°')
+        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.1f} degrees')
         ax1.set_xlabel('Angle (degrees)')
         ax1.set_ylabel('Variance Score')
         ax1.set_title('Coarse Angle Search')
@@ -325,7 +325,7 @@ def deskew_image(
         
         # Fine search plot
         ax2.plot(fine_angles, fine_scores, 'g-', label='Fine Search')
-        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f}°')
+        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f} degrees')
         ax2.set_xlabel('Angle (degrees)')
         ax2.set_ylabel('Variance Score')
         ax2.set_title('Fine Angle Search')
@@ -395,7 +395,7 @@ def deskew_image(
         
         # Add text labels
         cv2.putText(comparison, f"Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} degrees)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
         if processor.config and getattr(processor.config, 'save_debug_images', False):
             processor.save_debug_image('rotation_comparison', comparison)
@@ -528,7 +528,7 @@ def radon_method(
     
     # Debug: Print the result only in debug mode
     if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
-        print(f"    [DEBUG] Radon deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
+        print(f"    [DEBUG] Radon deskew: Detected angle: {best_angle:.2f} degrees (coarse: {best_coarse_angle:.1f} degrees, searched +/-{coarse_range} degrees)")
     
     # Create angle histogram visualization
     if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
@@ -540,7 +540,7 @@ def radon_method(
         
         # Coarse search plot
         ax1.plot(coarse_angles, coarse_scores, 'b-', label='Coarse Radon Search')
-        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.2f}°')
+        ax1.axvline(x=best_coarse_angle, color='r', linestyle='--', label=f'Best Coarse: {best_coarse_angle:.2f} degrees')
         ax1.set_xlabel('Angle (degrees)')
         ax1.set_ylabel('Variance Score')
         ax1.set_title('Coarse Radon Transform Search')
@@ -549,7 +549,7 @@ def radon_method(
         
         # Fine search plot
         ax2.plot(fine_angles, fine_scores, 'g-', label='Fine Radon Search')
-        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f}°')
+        ax2.axvline(x=best_angle, color='r', linestyle='--', label=f'Best Angle: {best_angle:.2f} degrees')
         ax2.set_xlabel('Angle (degrees)')
         ax2.set_ylabel('Variance Score')
         ax2.set_title('Fine Radon Transform Search')
@@ -626,7 +626,7 @@ def radon_method(
         
         # Add text labels
         cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({best_angle:.2f} degrees)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
         if processor.config and getattr(processor.config, 'save_debug_images', False):
             processor.save_debug_image('rotation_comparison', comparison)
@@ -773,7 +773,7 @@ def deskew_library_method(
         
         # Add text labels
         cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.putText(comparison, f"Deskewed ({detected_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(comparison, f"Deskewed ({detected_angle:.2f} degrees)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
         if processor.config and getattr(processor.config, 'save_debug_images', False):
             processor.save_debug_image('rotation_comparison', comparison)

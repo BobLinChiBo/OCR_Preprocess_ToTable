@@ -1,5 +1,5 @@
 {
-  "input_dir": "data/input",
+  "input_dir": "data/input/raw_images",
   "output_dir": "data/output/stage1",
   "debug_dir": "data/debug",
   "verbose": true,
@@ -18,13 +18,34 @@
   },
   "tag_removal": {
     "enable": true,
-    "thresh_dark": 140,
-    "row_sum_thresh": 150,
-    "dark_ratio": 0.5,
-    "min_area": 1500,
+    "method": "auto_whitefill_broadmask",
+    "thresh_dark": 160,
+    "row_sum_thresh": 100,
+    "dark_ratio": 0.15,
+    "min_area": 1000,
     "max_area": 80000,
     "min_aspect": 0.2,
-    "max_aspect": 2.5
+    "max_aspect": 2.5,
+    "morph_kernel_size": 7,
+    "morph_iterations": 3,
+    "band_top": 0.08,
+    "band_bottom": 0.42,
+    "rows_mode": "median",
+    "min_dark": 0.20,
+    "min_score": 0.40,
+    "reject_red": true,
+    "nms_iou": 0.30,
+    "pad_px": 8,
+    "min_width_ratio": 0.01,
+    "max_width_ratio": 0.15,
+    "min_height_ratio": 0.05,
+    "max_height_ratio": 0.25,
+    "min_aspect_ratio": 0.15,
+    "max_aspect_ratio": 3.0,
+    "glyph_kernel_size": 5,
+    "mask_close_kernel_size": 15,
+    "mask_open_kernel_size": 5,
+    "mask_dilate_kernel_size": 5
   },
   "margin_removal": {
     "enable": true,
@@ -53,11 +74,11 @@
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 50,
-    "horizontal_kernel_size": 40,
+    "threshold": 80,
+    "horizontal_kernel_size": 60,
     "vertical_kernel_size": 30,
     "alignment_threshold": 3,
-    "h_min_length_image_ratio": 0.15,
+    "h_min_length_image_ratio": 0.10,
     "h_min_length_relative_ratio": 0.3,
     "v_min_length_image_ratio": 0.15,
     "v_min_length_relative_ratio": 0.3,
@@ -66,10 +87,10 @@
     "max_v_length_ratio": 1.0,
     "close_line_distance": 45,
     "search_region_top": 30,
-    "search_region_bottom": 30,
+    "search_region_bottom": 0,
     "search_region_left": 0,
     "search_region_right": 0,
-    "skew_tolerance": 3,
+    "skew_tolerance": 2,
     "skew_angle_step": 0.2
   },
   "table_detection": {
@@ -80,7 +101,7 @@
   },
   "optimization": {
     "parallel_processing": true,
-    "max_workers": null,
+    "max_workers": 6,
     "batch_size": null,
     "memory_mode": false
   }

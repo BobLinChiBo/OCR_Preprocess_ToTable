@@ -90,8 +90,8 @@ class Config:
     
     # Parallel processing options
     parallel_processing: bool = True  # Enable/disable parallel processing
-    max_workers: Optional[int] = None  # Max worker processes (None = CPU count - 1)
-    batch_size: int = 4  # Number of images per batch for memory management
+    max_workers: Optional[int] = 6  # Max worker processes (default: 6 for better memory management)
+    batch_size: Optional[int] = None  # Number of images per batch (None = match max_workers)
     memory_mode: bool = True  # Use memory-efficient processing (avoid disk I/O)
 
     def __post_init__(self) -> None:
@@ -308,6 +308,7 @@ class Stage1Config(Config):
     mark_removal_table_v_kernel: int = 30
 
     # Stage 1 tag removal parameters - for genealogical documents
+    tag_removal_method: str = "classic"  # "classic" or "auto_whitefill_broadmask"
     tag_removal_thresh_dark: int = 110
     tag_removal_row_sum_thresh: int = 200
     tag_removal_dark_ratio: float = 0.7
@@ -315,6 +316,27 @@ class Stage1Config(Config):
     tag_removal_max_area: int = 60000
     tag_removal_min_aspect: float = 0.3
     tag_removal_max_aspect: float = 1.8
+    # Auto whitefill broadmask method specific parameters
+    tag_removal_band_top: float = 0.08
+    tag_removal_band_bottom: float = 0.42
+    tag_removal_rows_mode: str = "median"  # "median", "theilsen", or "none"
+    tag_removal_min_dark: float = 0.52  # Min ratio of dark pixels in candidate region
+    tag_removal_min_score: float = 0.55
+    tag_removal_reject_red: bool = True
+    tag_removal_nms_iou: float = 0.30
+    tag_removal_pad_px: int = 8
+    # Relative size parameters for shape detection
+    tag_removal_min_width_ratio: float = 0.015  # Min width as ratio of image width
+    tag_removal_max_width_ratio: float = 0.10   # Max width as ratio of image width
+    tag_removal_min_height_ratio: float = 0.015  # Min height as ratio of image height
+    tag_removal_max_height_ratio: float = 0.10   # Max height as ratio of image height
+    tag_removal_min_aspect_ratio: float = 0.3   # Min aspect ratio (width/height)
+    tag_removal_max_aspect_ratio: float = 2.5   # Max aspect ratio (width/height)
+    # Kernel size parameters for morphological operations
+    tag_removal_glyph_kernel_size: int = 3      # Kernel for detecting glyphs inside tags
+    tag_removal_mask_close_kernel_size: int = 11  # Kernel for closing to seal tag shape
+    tag_removal_mask_open_kernel_size: int = 3   # Kernel for opening to remove noise
+    tag_removal_mask_dilate_kernel_size: int = 3  # Kernel for final dilation
 
     # Stage 1 margin removal parameters
     margin_blur_ksize: int = 20
@@ -445,6 +467,7 @@ class Stage1Config(Config):
             config_dict.update(
                 {
                     "enable_tag_removal": tag.get("enable", False),
+                    "tag_removal_method": tag.get("method", "classic"),
                     "tag_removal_thresh_dark": tag.get("thresh_dark", 110),
                     "tag_removal_row_sum_thresh": tag.get("row_sum_thresh", 200),
                     "tag_removal_dark_ratio": tag.get("dark_ratio", 0.7),
@@ -452,6 +475,24 @@ class Stage1Config(Config):
                     "tag_removal_max_area": tag.get("max_area", 60000),
                     "tag_removal_min_aspect": tag.get("min_aspect", 0.3),
                     "tag_removal_max_aspect": tag.get("max_aspect", 1.8),
+                    "tag_removal_band_top": tag.get("band_top", 0.08),
+                    "tag_removal_band_bottom": tag.get("band_bottom", 0.42),
+                    "tag_removal_rows_mode": tag.get("rows_mode", "median"),
+                    "tag_removal_min_dark": tag.get("min_dark", 0.52),
+                    "tag_removal_min_score": tag.get("min_score", 0.55),
+                    "tag_removal_reject_red": tag.get("reject_red", True),
+                    "tag_removal_nms_iou": tag.get("nms_iou", 0.30),
+                    "tag_removal_pad_px": tag.get("pad_px", 8),
+                    "tag_removal_min_width_ratio": tag.get("min_width_ratio", 0.015),
+                    "tag_removal_max_width_ratio": tag.get("max_width_ratio", 0.10),
+                    "tag_removal_min_height_ratio": tag.get("min_height_ratio", 0.015),
+                    "tag_removal_max_height_ratio": tag.get("max_height_ratio", 0.10),
+                    "tag_removal_min_aspect_ratio": tag.get("min_aspect_ratio", 0.3),
+                    "tag_removal_max_aspect_ratio": tag.get("max_aspect_ratio", 2.5),
+                    "tag_removal_glyph_kernel_size": tag.get("glyph_kernel_size", 3),
+                    "tag_removal_mask_close_kernel_size": tag.get("mask_close_kernel_size", 11),
+                    "tag_removal_mask_open_kernel_size": tag.get("mask_open_kernel_size", 3),
+                    "tag_removal_mask_dilate_kernel_size": tag.get("mask_dilate_kernel_size", 3),
                 }
             )
             del config_dict["tag_removal"]
@@ -542,6 +583,7 @@ class Stage2Config(Config):
     # as they generate JSON files required by the pipeline
     enable_deskewing: bool = True
     enable_vertical_strip_cutting: bool = True
+    enable_final_deskew: bool = True  # Optional final deskew as final step
 
     # Stage 2 deskewing (fine-tuning)
     coarse_range: float = 5
@@ -604,6 +646,15 @@ class Stage2Config(Config):
     stroke_enhancement_kernel_size: int = 2  # Size of morphological kernel
     stroke_enhancement_iterations: int = 1   # Number of dilation iterations
     stroke_enhancement_kernel_shape: str = "ellipse"  # Shape of kernel: "ellipse", "rect", "cross"
+    
+    # Final deskew settings (optional final step)
+    final_deskew_method: str = "radon"  # "radon", "histogram_variance", or "deskew_library"
+    final_deskew_use_binarization: bool = True  # Use binarization for deskew
+    final_deskew_coarse_range: float = 5
+    final_deskew_coarse_step: float = 0.5
+    final_deskew_fine_range: float = 1.0
+    final_deskew_fine_step: float = 0.2
+    final_deskew_min_angle_correction: float = 0.1
 
     def __post_init__(self) -> None:
         """Initialize Stage 2 specific settings."""
@@ -621,6 +672,7 @@ class Stage2Config(Config):
             "04_table_recovered",
             "05_vertical_strips",
             "06_binarized",
+            "07_final_deskewed",
         ]
 
         for subdir in stage2_dirs:
@@ -748,6 +800,23 @@ class Stage2Config(Config):
             vsc = config_dict["vertical_strip_cutting"]
             config_dict["enable_vertical_strip_cutting"] = vsc.get("enable", True)
             # Keep the whole dict for other parameters
+        
+        # Handle final_deskew configuration
+        if "final_deskew" in config_dict:
+            final_deskew = config_dict["final_deskew"]
+            config_dict.update(
+                {
+                    "enable_final_deskew": final_deskew.get("enable", True),
+                    "final_deskew_method": final_deskew.get("method", "radon"),
+                    "final_deskew_use_binarization": final_deskew.get("use_binarization", True),
+                    "final_deskew_coarse_range": final_deskew.get("coarse_range", 5),
+                    "final_deskew_coarse_step": final_deskew.get("coarse_step", 0.5),
+                    "final_deskew_fine_range": final_deskew.get("fine_range", 1.0),
+                    "final_deskew_fine_step": final_deskew.get("fine_step", 0.2),
+                    "final_deskew_min_angle_correction": final_deskew.get("min_angle_correction", 0.1),
+                }
+            )
+            del config_dict["final_deskew"]
             
         # Remove any unrecognized sections
         if "table_fitting" in config_dict:

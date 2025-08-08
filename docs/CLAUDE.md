@@ -1,235 +1,169 @@
-# CLAUDE.md - AI Assistant Integration Guide
+# CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) and other AI assistants when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **📚 Documentation Navigation**: [← Documentation Index](README.md) | [API Reference](API_REFERENCE.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) →
+## Project Overview
 
-## Overview
+This is an OCR preprocessing and table extraction pipeline designed to process scanned document images, particularly those containing tables. The pipeline operates in two stages:
+- **Stage 1**: Image preprocessing (mark removal, margin removal, page splitting, deskewing, initial table detection)
+- **Stage 2**: Table refinement (fine deskewing, table line detection, structure recovery, vertical strip cutting)
 
-This is a professional two-stage OCR (Optical Character Recognition) table extraction pipeline designed to process scanned document images and extract tables with high accuracy. The system uses computer vision techniques for page splitting, deskewing, margin removal, and table line detection.
+## Key Commands
 
-## Project Architecture
+### Running the Pipeline
+```bash
+# Run complete pipeline with default configs
+python scripts/run_pipeline.py
 
-### Core Pipeline Structure
-- **Two-Stage Processing**: Initial processing (Stage 1) followed by refinement (Stage 2)
-- **src/ocr_pipeline/**: Main pipeline modules
-  - `pipeline.py`: Core pipeline classes (`OCRPipeline`, `TwoStageOCRPipeline`)
-  - `config.py`: Configuration classes (`Config`, `Stage1Config`, `Stage2Config`)
-  - `utils.py`: Core image processing utilities
-  - `utils_optimized.py`: Performance-optimized utilities
-  - `processor_wrappers.py`: V2 processor wrapper classes for visualization
-- **scripts/**: CLI entry points for pipeline execution
-- **tools/**: Comprehensive parameter tuning and visualization tools with V2 architecture
+# Run with specific input directory
+python scripts/run_pipeline.py data/input/raw_images
+
+# Run with custom output directory
+python scripts/run_pipeline.py -o custom_output
+
+# Run parallel processing
+python scripts/run_parallel.py
+
+# Run specific stages
+python scripts/run_stage1.py
+python scripts/run_stage2.py
+python scripts/run_complete.py
+```
+
+### Testing
+```bash
+# Run all tests
+python -m pytest tests/
+
+# Run with coverage
+python -m pytest --cov=src/ocr_pipeline tests/
+```
+
+### Code Quality
+```bash
+# Format code with black
+python -m black src/ scripts/ tests/
+
+# Lint with flake8
+python -m flake8 src/ scripts/ tests/
+
+# Type checking with mypy
+python -m mypy src/
+```
+
+## Architecture
+
+### Core Components
+
+1. **Pipeline Entry Points** (`scripts/`):
+   - `run_pipeline.py`: Main CLI entry point
+   - `run_parallel.py`: Parallel processing variant
+   - `run_stage1.py`: Stage 1 only
+   - `run_stage2.py`: Stage 2 only
+   - `run_complete.py`: Complete pipeline execution
+
+2. **Stage Processors** (`src/ocr_pipeline/`):
+   - `stage1_processor.py`: Handles all Stage 1 operations
+   - `stage2_processor.py`: Handles all Stage 2 operations
+   - `pipeline.py`: Main pipeline orchestration with memory/parallel modes
+
+3. **Image Processors** (`src/ocr_pipeline/processors/`):
+   - `base.py`: Base processor class
+   - `mark_removal.py`: Watermark, stamp, and artifact removal
+   - `margin_removal.py`: Paper margin detection and removal
+   - `page_split.py`: Two-page spread splitting
+   - `deskew.py`: Image deskewing using Radon transform
+   - `table_detection.py`: Table line and structure detection
+   - `table_recovery.py`: Table structure recovery
+   - `tag_removal.py`: Header/footer tag removal
+   - `vertical_strip_cutter.py`: Column extraction
+   - `binarize.py`: Image binarization
+
+4. **Configuration** (`configs/`):
+   - `stage1_default.json`: Default Stage 1 parameters
+   - `stage2_default.json`: Default Stage 2 parameters
+   - Configuration can be overridden via CLI arguments
+
+### Processing Modes
+
+The pipeline supports three execution modes:
+
+1. **Regular Mode**: Process images sequentially with disk I/O
+2. **Parallel Mode**: Process multiple images concurrently using multiprocessing
+3. **Memory Mode**: Keep intermediate results in memory (faster but uses more RAM)
 
 ### Data Flow
-1. **Raw Input**: Scanned document images → `data/input/`
-2. **Stage 1**: Page splitting, deskewing, margin removal, table cropping → `data/output/stage1_initial_processing/`
-3. **Stage 2**: Refinement processing on cropped tables → `data/output/stage2_refinement/`
-4. **Final Output**: Publication-ready table images → `data/output/stage2_refinement/04_fitted_tables/`
 
-### Configuration System
-- JSON-based configuration files in `configs/` directory
-- Simplified configuration classes with essential parameters
-- Runtime parameter validation and directory auto-creation
-- Streamlined parameter structure for easier configuration
-
-## Common Commands
-
-### Pipeline Execution
-```bash
-# Complete two-stage pipeline
-python scripts/run_complete.py data/input/ --verbose
-
-# Single image processing
-python scripts/run_complete.py image.jpg --verbose
-
-# Stage 1 only (initial processing)
-python scripts/run_stage1.py data/input/ --verbose
-
-# Stage 2 only (refinement)
-python scripts/run_stage2.py --verbose
-
-# With custom output directory
-python scripts/run_complete.py data/input/ -o custom_output/ --verbose --debug
+```
+Input Images → Stage 1 Processing → Cropped Tables → Stage 2 Processing → Final Output
 ```
 
-### Analysis and Debugging
-```bash
-# Setup utilities
-python tools/setup_tuning.py
+Stage 1 outputs:
+- `02_margin_removed/`: Images with margins removed
+- `03_deskewed/`: Deskewed images  
+- `04_split_pages/`: Split left/right pages
+- `04b_tags_removed/`: Page tags removed
+- `05_table_lines/`: Detected table lines
+- `06_table_structure/`: Table structure analysis
+- `07_border_cropped/`: Cropped table regions
 
-# Results management
-python tools/check_results.py list
-python tools/check_results.py cleanup
+Stage 2 outputs:
+- `01_refined_deskewed/`: Fine-tuned deskewing
+- `02_table_lines/`: Refined table line detection
+- `03_table_structure/`: Final table structure
+- `04_table_recovered/`: Recovered table data
+- `05_vertical_strips/`: Individual column strips
+
+## Important Configuration Parameters
+
+### Stage 1 Key Settings
+- `mark_removal.enable`: Enable/disable watermark and stamp removal
+- `mark_removal.dilate_iter`: Dilation iterations for text protection (default: 2)
+- `mark_removal.protect_table_lines`: Preserve table lines during mark removal
+- `margin_removal.enable`: Enable/disable margin removal
+- `page_splitting.enable`: Enable/disable two-page splitting
+- `deskewing.enable`: Enable/disable initial deskewing
+- `tag_removal.enable`: Enable/disable header/footer tag removal
+- `table_detection.enable_table_cropping`: Enable/disable table region cropping
+- `optimization.parallel_processing`: Enable parallel processing
+- `optimization.memory_mode`: Use memory-efficient mode
+
+### Stage 2 Key Settings  
+- `deskewing.enable`: Enable/disable fine deskewing
+- `vertical_strip_cutting.enable`: Enable/disable column extraction
+- `binarization.enable`: Enable/disable image binarization
+- `table_recovery.coverage_ratio`: Minimum coverage for table recovery
+
+## Debug Mode
+
+Enable debug output by setting in config files:
+```json
+{
+  "save_debug_images": true,
+  "debug_dir": "data/debug"
+}
 ```
 
-### Visualization and Analysis
-```bash
-# Complete pipeline analysis (V2 architecture)
-python tools/run_visualizations.py all --pipeline image.jpg --save-intermediates
+Debug images show intermediate processing steps for troubleshooting.
 
-# Individual step analysis (V2 tools)
-python tools/visualize_deskew_v2.py image.jpg
-python tools/visualize_page_split_v2.py image.jpg  
-python tools/visualize_margin_removal_v2.py image.jpg
-python tools/visualize_table_lines_v2.py image.jpg
+## Performance Optimization
 
-# Legacy V1 tools (still available)
-python tools/visualize_deskew.py image.jpg
-python tools/visualize_page_split.py image.jpg
+- Use `parallel_processing: true` for batch processing
+- Adjust `max_workers` based on CPU cores (default: CPU count - 1)
+- Enable `memory_mode: true` to avoid disk I/O overhead
+- Set appropriate `batch_size` for memory constraints
 
-# Debug and analysis tools
-python tools/debug_margin_analysis.py image.jpg
+## Dependencies
 
-# Results management
-python tools/check_results.py list
-python tools/check_results.py view latest
-```
+Core dependencies (see requirements.txt):
+- opencv-python >= 4.5.0
+- numpy >= 1.20.0
+- Pillow >= 8.0.0
+- deskew >= 1.5.0
+- scikit-image >= 0.19.0
 
-### Development and Testing
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-python -m pytest tests/ -v
-
-# Code quality and linting
-python -m black src/ scripts/ tools/
-python -m flake8 src/ scripts/ tools/
-python -m mypy src/
-
-# Build package
-python -m build
-```
-
-## Key Processing Stages
-
-### Stage 1: Initial Processing
-1. **Page Splitting**: Separate double-page scans using gutter detection
-2. **Deskewing**: Correct rotation with sub-degree precision
-3. **Margin Removal**: Remove document margins using inscribed rectangle method (paper mask detection + largest inscribed rectangle)
-4. **Line Detection**: Find table structure using connected components method
-5. **Table Cropping**: Extract table regions for Stage 2 processing
-
-### Stage 2: Refinement
-1. **Re-deskewing**: Fine-tune rotation on cropped tables
-2. **Refined Line Detection**: Optimized detection with refined parameters
-3. **Table Reconstruction**: Advanced table structure analysis
-4. **Table Fitting**: Final optimization for publication-ready output
-
-## Configuration Parameters
-
-### Key Parameters
-- **Page Splitting (V2)**: `search_ratio` (0.5), `line_len_frac` (0.3), `line_thick` (3), `peak_thr` (0.3)
-- **Deskewing**: `angle_range` (5°), `min_angle_correction` (0.1°)
-- **Margin Removal (Inscribed)**: `inscribed_blur_ksize` (5), `inscribed_close_ksize` (25), `inscribed_close_iter` (2)
-- **Margin Removal (Legacy)**: `black_threshold` (50), `content_threshold` (200)
-- **Line Detection**: `threshold` (40), `horizontal_kernel_size` (10), `vertical_kernel_size` (10)
-
-## Data Organization
-
-### Input Structure
-```
-data/input/
-├── raw_images/          # Full dataset of scanned images
-└── test_images/         # Subset for parameter tuning (6 representative images)
-```
-
-### Output Structure
-```
-data/output/
-├── stage1_initial_processing/
-│   ├── 01_split_pages/
-│   ├── 02_deskewed/
-│   ├── 02.5_edge_detection/
-│   ├── 03_line_detection/
-│   ├── 04_table_reconstruction/
-│   └── 05_cropped_tables/        # Input for Stage 2
-├── stage2_refinement/
-│   ├── 01_deskewed/
-│   ├── 02_line_detection/
-│   ├── 03_table_reconstruction/
-│   └── 04_fitted_tables/         # Final publication-ready output
-└── tuning/                       # Parameter optimization results
-```
-
-## Best Practices
-
-### Git Operations Safety
-**CRITICAL**: Before performing any git operations (stash, checkout, branch switching, etc.), always check for uncommitted changes and commit them first.
-
-Required Process:
-1. **Always run `git status` first** to check for uncommitted changes
-2. **If there are uncommitted changes, commit them** before proceeding with git operations  
-3. **Then perform the intended git operation** (stash, checkout, etc.)
-
-Example workflow:
-```bash
-# Check status first
-git status
-
-# If changes exist, commit them
-git add -A
-git commit -m "Work in progress: [describe changes]"
-
-# Then proceed with git operation
-git stash push -m "temporary backup"
-```
-
-This prevents accidental code loss and maintains system functionality during git operations.
-
-### Development Workflow
-1. **Testing**: Test on representative samples before processing large datasets
-2. **Stage Validation**: Visually inspect intermediate results at each stage
-3. **Configuration Management**: Use JSON config files for reproducible parameter sets
-4. **Visualization**: Use built-in visualization tools to understand pipeline behavior
-
-### Performance Optimization
-- Use test images for representative testing before processing large datasets
-- Process images in batches for better throughput
-- Enable debug mode only when needed (generates large intermediate files)
-- Consider image resolution - 300+ DPI recommended for best results
-
-### Error Handling
-- Pipeline includes comprehensive error handling with graceful degradation
-- Use `--verbose` flag for detailed processing information
-- Check intermediate outputs if final results are poor
-- Use visualization tools to debug processing issues
-
-## Troubleshooting
-
-### Common Issues
-- **Poor page splitting**: Adjust `gutter_search_start` and `gutter_search_end` based on document layout
-- **Excessive rotation**: Increase `min_angle_correction` to be more conservative
-- **Over-cropping**: Adjust `content_threshold` and `black_threshold` for margin removal
-- **Missing table lines**: Adjust `threshold` and kernel sizes for line detection
-
-### Performance Issues
-- Large images may require significant memory - consider resizing for testing
-- Use `--save-intermediates` selectively to manage disk space
-- Clean up output directories periodically using provided management tools
-
-## Tool Architecture
-
-### V2 Visualization Tools
-The project uses a V2 visualization architecture with processor wrappers:
-- All V2 tools (ending in `_v2.py`) use the new processor wrapper system
-- V2 tools provide enhanced debugging output and standardized visualization formats
-- Legacy V1 tools are maintained for compatibility but V2 tools are preferred
-- **New inscribed rectangle method**: Default margin removal method using paper mask detection and largest inscribed rectangle algorithm
-
-### Available Tools
-- **V2 Tools**: `visualize_*_v2.py` - Enhanced with processor wrappers
-- **Debug Tools**: `debug_margin_analysis.py` - Specialized debugging utilities
-- **Analysis Tools**: `run_visualizations.py` - Comprehensive pipeline analysis
-- **Management Tools**: `check_results.py`, `config_utils.py` - Result and config management
-
-The tools/ directory provides comprehensive visualization and analysis capabilities - refer to `tools/README.md` for detailed usage guidance.
-
----
-
-**Navigation**: [← Documentation Index](README.md) | [API Reference](API_REFERENCE.md) | [Implementation Summary](IMPLEMENTATION_SUMMARY.md) | [Tools Documentation](../tools/README.md) →
+Development tools:
+- pytest for testing
+- black for formatting (line length: 88)
+- flake8 for linting
+- mypy for type checking

@@ -108,7 +108,7 @@ def paper_mask(
     # Keep largest connected component (the page)
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
-        raise RuntimeError("No white component detected – tune parameters.")
+        raise RuntimeError("No white component detected - tune parameters.")
 
     # Visualize all contours before selection
     if processor:

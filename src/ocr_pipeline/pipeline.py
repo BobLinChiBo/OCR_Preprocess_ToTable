@@ -6,6 +6,7 @@ import time
 import traceback
 import sys
 import gc
+import cv2
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -48,7 +49,7 @@ def _process_stage1_with_disk_save(
     image_path: Path,
     stage1_config: Stage1Config,
     debug_dir: Optional[Path] = None
-) -> Tuple[Path, Optional[List[Path]], Optional[str], float]:
+) -> Tuple[Path, Optional[List[Path]], Optional[str], float, bool]:
     """Worker function for processing Stage 1 with disk saves.
     
     Args:
@@ -57,7 +58,7 @@ def _process_stage1_with_disk_save(
         debug_dir: Optional debug directory
         
     Returns:
-        Tuple of (image_path, cropped_paths, error_message, elapsed_time)
+        Tuple of (image_path, cropped_paths, error_message, elapsed_time, is_memory_error)
     """
     start_time = time.time()
     try:
@@ -74,13 +75,28 @@ def _process_stage1_with_disk_save(
         # Extract cropped paths
         cropped_paths = [result['cropped_path'] for result in results]
         
+        # Clean up memory
+        del results
+        gc.collect()
+        
         elapsed = time.time() - start_time
-        return (image_path, cropped_paths, None, elapsed)
+        return (image_path, cropped_paths, None, elapsed, False)
+        
+    except cv2.error as e:
+        elapsed = time.time() - start_time
+        error_msg = str(e)
+        # Check if it's a memory allocation error
+        is_memory_error = "Insufficient memory" in error_msg or "Failed to allocate" in error_msg
+        if is_memory_error:
+            error_msg = f"Memory error processing {image_path.name}: {error_msg}"
+        else:
+            error_msg = f"OpenCV error processing {image_path}: {error_msg}"
+        return (image_path, None, error_msg, elapsed, is_memory_error)
         
     except Exception as e:
         elapsed = time.time() - start_time
         error_msg = f"Error processing {image_path}: {str(e)}\n{traceback.format_exc()}"
-        return (image_path, None, error_msg, elapsed)
+        return (image_path, None, error_msg, elapsed, False)
 
 
 def _process_stage2_worker(
@@ -117,12 +133,17 @@ def _process_stage2_worker(
             debug_dir=debug_dir
         )
         
+        # Clean up memory
+        del table_image
+        gc.collect()
+        
         elapsed = time.time() - start_time
         return (image_path, results, None, elapsed)
         
     except Exception as e:
         elapsed = time.time() - start_time
         error_msg = f"Error processing {image_path}: {str(e)}\n{traceback.format_exc()}"
+        gc.collect()  # Clean up even on error
         return (image_path, None, error_msg, elapsed)
 
 
@@ -172,12 +193,17 @@ def _process_single_image_worker(
             )
             output_paths.extend(stage2_result.get('final_outputs', []))
         
+        # Clean up memory
+        del stage1_results
+        gc.collect()
+        
         elapsed = time.time() - start_time
         return (image_path, output_paths, None, elapsed)
         
     except Exception as e:
         elapsed = time.time() - start_time
         error_msg = f"Error processing {image_path}: {str(e)}\n{traceback.format_exc()}"
+        gc.collect()  # Clean up even on error
         return (image_path, None, error_msg, elapsed)
 
 
@@ -289,7 +315,10 @@ class OCRPipeline:
             except Exception as e:
                 print(f"Error processing {image_path}: {e}")
 
-        print(f"Processing complete. {len(all_outputs)} files created.")
+        print("\n" + "-"*50)
+        print(f"[PROCESSING COMPLETE] {len(all_outputs)} files created")
+        print(f"Output location: {self.config.output_dir}")
+        print("-"*50)
         return all_outputs
 
 
@@ -479,7 +508,8 @@ class TwoStageOCRPipeline:
             output_locations = {
                 "04_table_recovered": [],
                 "05_vertical_strips": [],
-                "06_binarized": []
+                "06_binarized": [],
+                "07_final_deskewed": []
             }
 
             # Process each cropped table using the unified Stage2Processor
@@ -519,11 +549,13 @@ class TwoStageOCRPipeline:
             if hasattr(self, '_stage2_output_locations') and self._stage2_output_locations:
                 output_locations = self._stage2_output_locations
                 print("\nFinal output locations:")
-                if output_locations["06_binarized"]:
+                if output_locations.get("07_final_deskewed"):
+                    print(f"  Final deskewed outputs: {self.stage2_config.output_dir / '07_final_deskewed'} ({len(output_locations['07_final_deskewed'])} images)")
+                elif output_locations.get("06_binarized"):
                     print(f"  Binarized outputs: {self.stage2_config.output_dir / '06_binarized'} ({len(output_locations['06_binarized'])} images)")
-                if output_locations["05_vertical_strips"]:
+                elif output_locations.get("05_vertical_strips"):
                     print(f"  Vertical strips: {self.stage2_config.output_dir / '05_vertical_strips'} ({len(output_locations['05_vertical_strips'])} images)")
-                if output_locations["04_table_recovered"]:
+                elif output_locations.get("04_table_recovered"):
                     print(f"  Table recovered: {self.stage2_config.output_dir / '04_table_recovered'} ({len(output_locations['04_table_recovered'])} images)")
                 
                 # Show the primary output directory
@@ -575,7 +607,8 @@ class TwoStageOCRPipeline:
         output_locations = {
             "04_table_recovered": [],
             "05_vertical_strips": [],
-            "06_binarized": []
+            "06_binarized": [],
+            "07_final_deskewed": []
         }
         successful = 0
         failed = 0
@@ -632,10 +665,14 @@ class TwoStageOCRPipeline:
         
         # Print summary
         if self.stage2_config.verbose:
-            print(f"\nStage 2 Parallel Processing Complete:")
-            print(f"  Successful: {successful}")
-            print(f"  Failed: {failed}")
-            print(f"  Total refined tables: {len(refined_tables)}")
+            print("\n" + "-"*50)
+            print("Stage 2 Parallel Processing Summary:")
+            print("-"*50)
+            print(f"  * Successful: {successful}")
+            if failed > 0:
+                print(f"  * Failed: {failed}")
+            print(f"  * Total refined tables: {len(refined_tables)}")
+            print("-"*50)
         
         return refined_tables
 
@@ -664,6 +701,9 @@ class TwoStageOCRPipeline:
         Returns:
             List of final output paths
         """
+        # Track timing
+        pipeline_start_time = time.time()
+        
         input_path = input_path or self.stage1_config.input_dir
         
         # Use config defaults if not specified
@@ -729,26 +769,39 @@ class TwoStageOCRPipeline:
             stage1_output_dir = self.stage1_config.output_dir / "07_border_cropped"
             stage2_outputs = self.run_stage2(input_dir=stage1_output_dir)
             
-            print("\n*** COMPLETE PIPELINE FINISHED! ***")
-            print(f"   {len(stage2_outputs)} publication-ready tables generated")
+            # Calculate total processing time
+            total_time = time.time() - pipeline_start_time
+            
+            print("\n" + "="*60)
+            print("PIPELINE COMPLETED SUCCESSFULLY")
+            print("="*60)
+            print("\nSummary:")
+            print(f"  * Total images processed: {len(image_files)}")
+            print(f"  * Tables extracted (Stage 1): {len(stage1_outputs)}")
+            print(f"  * Tables refined (Stage 2): {len(stage2_outputs)}")
+            print(f"  * Processing time: {total_time:.1f} seconds")
+            print(f"  * Average per image: {total_time/len(image_files):.1f} seconds")
             
             # Show where final outputs are
+            print("\nOutput Locations:")
             if hasattr(self, '_stage2_output_locations'):
                 output_locs = self._stage2_output_locations
                 active_dirs = []
                 if output_locs.get("06_binarized"):
-                    active_dirs.append(f"{self.stage2_config.output_dir / '06_binarized'}")
+                    active_dirs.append(("Binarized images", f"{self.stage2_config.output_dir / '06_binarized'}"))
                 if output_locs.get("05_vertical_strips"):
-                    active_dirs.append(f"{self.stage2_config.output_dir / '05_vertical_strips'}")
+                    active_dirs.append(("Column strips", f"{self.stage2_config.output_dir / '05_vertical_strips'}"))
                 if output_locs.get("04_table_recovered"):
-                    active_dirs.append(f"{self.stage2_config.output_dir / '04_table_recovered'}")
+                    active_dirs.append(("Recovered tables", f"{self.stage2_config.output_dir / '04_table_recovered'}"))
                 
                 if active_dirs:
-                    print(f"   Check final results in:")
-                    for dir_path in active_dirs:
-                        print(f"     - {dir_path}")
+                    for desc, dir_path in active_dirs:
+                        print(f"  * {desc}: {dir_path}")
             else:
-                print(f"   Check final results in: {self.stage2_config.output_dir}")
+                print(f"  * Final results: {self.stage2_config.output_dir}")
+            
+            print("\n[READY] Tables are prepared for OCR processing!")
+            print("="*60)
             
             return stage2_outputs
         
@@ -1048,17 +1101,24 @@ class TwoStageOCRPipeline:
             print(f"Processing {len(image_files)} images in parallel...")
         
         # Process batches
+        memory_failed_images = []
+        
         for batch in batches:
             with Pool(processes=min(max_workers, len(batch))) as pool:
                 results = pool.map(process_func, batch)
                 
-                for image_path, cropped_paths, error_msg, elapsed in results:
+                for image_path, cropped_paths, error_msg, elapsed, is_memory_error in results:
                     if error_msg:
-                        failed += 1
-                        if not pbar:
-                            print(f"  Failed: {image_path.name}")
-                        if self.stage1_config.verbose:
-                            print(f"    Error: {error_msg}")
+                        if is_memory_error:
+                            memory_failed_images.append(image_path)
+                            if not pbar:
+                                print(f"  Memory error: {image_path.name} (will retry sequentially)")
+                        else:
+                            failed += 1
+                            if not pbar:
+                                print(f"  Failed: {image_path.name}")
+                            if self.stage1_config.verbose:
+                                print(f"    Error: {error_msg}")
                     else:
                         successful += 1
                         if cropped_paths:
@@ -1066,11 +1126,42 @@ class TwoStageOCRPipeline:
                     
                     if pbar:
                         pbar.update(1)
-                    elif not show_progress and (successful + failed) % 5 == 0:
-                        print(f"  Processed {successful + failed}/{len(image_files)} images...")
+                    elif not show_progress and (successful + failed + len(memory_failed_images)) % 5 == 0:
+                        print(f"  Processed {successful + failed + len(memory_failed_images)}/{len(image_files)} images...")
         
         if pbar:
             pbar.close()
+        
+        # Retry memory-failed images sequentially
+        if memory_failed_images:
+            print(f"\n*** RETRYING {len(memory_failed_images)} IMAGES SEQUENTIALLY ***")
+            print("  Processing large images one at a time to avoid memory errors...")
+            
+            for image_path in memory_failed_images:
+                print(f"  Retrying: {image_path.name}")
+                try:
+                    # Force garbage collection before processing large image
+                    gc.collect()
+                    
+                    # Process single image
+                    result = process_func(image_path)
+                    image_path, cropped_paths, error_msg, elapsed, is_memory_error = result
+                    
+                    if error_msg:
+                        failed += 1
+                        print(f"    Failed again: {error_msg}")
+                    else:
+                        successful += 1
+                        if cropped_paths:
+                            all_cropped_paths.extend(cropped_paths)
+                        print(f"    Success! Processed in {elapsed:.1f}s")
+                    
+                    # Clean up memory after each large image
+                    gc.collect()
+                    
+                except Exception as e:
+                    failed += 1
+                    print(f"    Failed with exception: {str(e)}")
         
         print(f"\n*** STAGE 1 PARALLEL COMPLETE ***")
         print(f"  Successful: {successful}")
@@ -1197,8 +1288,13 @@ def main() -> None:
     if args.stage1_only:
         # Run only Stage 1
         outputs = pipeline.run_stage1(input_path)
-        print(f"\nStage 1 complete: {len(outputs)} cropped tables saved")
-        print(f"Output: {stage1_config.output_dir / '07_border_cropped'}")
+        print("\n" + "-"*50)
+        print("[STAGE 1 COMPLETE]")
+        print("-"*50)
+        print(f"Results:")
+        print(f"  * Cropped tables extracted: {len(outputs)}")
+        print(f"  * Output location: {stage1_config.output_dir / '07_border_cropped'}")
+        print("\nNext: Run Stage 2 for table refinement or use the cropped tables directly.")
     elif args.stage2_only:
         # Run only Stage 2 (uses Stage 1 output as input)
         stage2_input = stage2_config.input_dir or (stage1_config.output_dir / "07_border_cropped")
@@ -1207,7 +1303,13 @@ def main() -> None:
             print("Run Stage 1 first or use complete pipeline")
             sys.exit(1)
         outputs = pipeline.run_stage2(stage2_input)
-        print(f"\nStage 2 complete: {len(outputs)} refined tables saved")
+        print("\n" + "-"*50)
+        print("[STAGE 2 COMPLETE]")
+        print("-"*50)
+        print(f"Results:")
+        print(f"  * Refined tables: {len(outputs)}")
+        print(f"  * Output location: {stage2_config.output_dir}")
+        print("\n[READY] Tables are refined and ready for OCR processing!")
     else:
         # Run complete pipeline with unified method - None values will use config defaults
         outputs = pipeline.run(
@@ -1218,7 +1320,13 @@ def main() -> None:
             batch_size=args.batch_size,
             save_intermediate=args.save_intermediate
         )
-        print(f"\nProcessed {len(outputs)} tables total")
+        if outputs:
+            print("\n" + "="*60)
+            print("[PIPELINE COMPLETE]")
+            print(f"Successfully processed {len(outputs)} tables")
+            print("="*60)
+        else:
+            print("\n[WARNING] No tables were processed. Check your input directory and configuration.")
 
 
 if __name__ == "__main__":

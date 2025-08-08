@@ -37,13 +37,10 @@ setup(
     entry_points={
         "console_scripts": [
             "ocr-pipeline=ocr_pipeline.pipeline:main",
-            "ocr-stage1=scripts.run_stage1:main",
-            "ocr-stage2=scripts.run_stage2:main", 
-            "ocr-complete=scripts.run_complete:main",
         ],
     },
     include_package_data=True,
     package_data={
-        "": ["configs/*.json", "configs/*.md"],
+        "": ["configs/*.json"],
     },
 )

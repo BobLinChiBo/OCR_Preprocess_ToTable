@@ -495,7 +495,7 @@ def paper_mask_optimized(
     cnts, _ = cv2.findContours(mask_small, cv2.RETR_EXTERNAL,
                                cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
-        raise RuntimeError("No white component detected – tune parameters.")
+        raise RuntimeError("No white component detected - tune parameters.")
 
     biggest = max(cnts, key=cv2.contourArea)
     clean_small = np.zeros_like(mask_small)

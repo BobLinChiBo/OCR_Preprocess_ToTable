@@ -98,12 +98,21 @@ class Stage2Processor:
             strips_result, base_name, memory_mode, debug_dir
         )
         
+        # Step 7: Final deskew (optional final step)
+        final_deskewed_paths = self._process_final_deskew(
+            binarized_paths, strips_result, recovered_result,
+            base_name, memory_mode, debug_dir
+        )
+        
         # Print total timing
         total_elapsed = time.time() - image_start_time
         print(f"    [TIMING] Total processing time: {total_elapsed:.3f} seconds")
         
         # Determine final output stage
-        if binarized_paths:
+        if final_deskewed_paths:
+            final_stage = "07_final_deskewed"
+            final_outputs = final_deskewed_paths
+        elif binarized_paths:
             final_stage = "06_binarized"
             final_outputs = binarized_paths
         elif strips_result and strips_result.get('strip_paths'):
@@ -122,6 +131,7 @@ class Stage2Processor:
             'recovered_result': recovered_result,
             'strips_result': strips_result,
             'binarized_paths': binarized_paths,
+            'final_deskewed_paths': final_deskewed_paths,
             'final_stage': final_stage,
             'final_outputs': final_outputs
         }
@@ -362,12 +372,21 @@ class Stage2Processor:
         # Check configuration
         vertical_strip_config = getattr(self.config, 'vertical_strip_cutting', {})
         if isinstance(vertical_strip_config, dict):
-            strip_padding = vertical_strip_config.get('padding', 20)
+            # Support both old 'padding' and new 'padding_left'/'padding_right' format
+            if 'padding' in vertical_strip_config:
+                # Backward compatibility
+                strip_padding_left = vertical_strip_config.get('padding', 20)
+                strip_padding_right = vertical_strip_config.get('padding', 20)
+            else:
+                # New format with separate left/right padding
+                strip_padding_left = vertical_strip_config.get('padding_left', 20)
+                strip_padding_right = vertical_strip_config.get('padding_right', 20)
             strip_min_width = vertical_strip_config.get('min_width', 1)
             use_longest_lines_only = vertical_strip_config.get('use_longest_lines_only', False)
             min_length_ratio = vertical_strip_config.get('min_length_ratio', 0.9)
         else:
-            strip_padding = 20
+            strip_padding_left = 20
+            strip_padding_right = 20
             strip_min_width = 1
             use_longest_lines_only = False
             min_length_ratio = 0.9
@@ -400,7 +419,8 @@ class Stage2Processor:
         strips_result = cut_vertical_strips(
             image=image,
             structure_json_path=None,
-            padding=strip_padding,
+            padding_left=strip_padding_left,
+            padding_right=strip_padding_right,
             min_width=strip_min_width,
             use_longest_lines_only=use_longest_lines_only,
             min_length_ratio=min_length_ratio,
@@ -419,6 +439,13 @@ class Stage2Processor:
                     print(f"  [DEBUG] Vertical strips: {strips_result['num_strips']} columns saved from {len(unique_x_positions)} boundaries")
                 else:
                     print(f"  Vertical strips: {strips_result['num_strips']} columns saved")
+            
+            # Extract strip paths from the result for consistency
+            strip_paths = []
+            for strip_info in strips_result.get('strips', []):
+                if 'path' in strip_info:
+                    strip_paths.append(strip_info['path'])
+            strips_result['strip_paths'] = strip_paths
         
         return strips_result
     
@@ -484,3 +511,109 @@ class Stage2Processor:
             print(f"  Saved to: {binarized_dir.name}")
         
         return binarized_paths
+    
+    def _process_final_deskew(
+        self,
+        binarized_paths: List[Path],
+        strips_result: Optional[Dict],
+        recovered_result: Dict,
+        base_name: str,
+        memory_mode: bool,
+        debug_dir: Optional[Path]
+    ) -> List[Path]:
+        """Process final deskew as last optional step.
+        
+        Args:
+            binarized_paths: Paths to binarized images if available
+            strips_result: Vertical strips result if available
+            recovered_result: Table recovery result
+            base_name: Base name for output files
+            memory_mode: Whether to use memory mode
+            debug_dir: Optional debug directory
+            
+        Returns:
+            List of paths to final deskewed images, or empty list if skipped
+        """
+        if not self.config.enable_final_deskew:
+            if self.config.verbose:
+                print(f"  Final deskew skipped (disabled)")
+            return []
+        
+        final_deskew_start = time.time()
+        
+        # Determine which images to process
+        images_to_process = []
+        
+        # Priority: binarized > vertical strips > recovered table
+        if binarized_paths:
+            images_to_process = [(path, load_image(path)) for path in binarized_paths]
+            source_stage = "binarized"
+        elif strips_result and strips_result.get('strip_paths'):
+            strip_paths = strips_result['strip_paths']
+            images_to_process = [(path, load_image(path)) for path in strip_paths]
+            source_stage = "vertical strips"
+        else:
+            # Process the recovered table image
+            recovered_path = self.config.output_dir / "04_table_recovered" / f"{base_name}_table_recovered.jpg"
+            if recovered_path.exists():
+                images_to_process = [(recovered_path, load_image(recovered_path))]
+                source_stage = "recovered table"
+            else:
+                # If no recovered table file, use the visualization from memory
+                if recovered_result and 'visualization' in recovered_result:
+                    images_to_process = [(None, recovered_result['visualization'])]
+                    source_stage = "recovered table (memory)"
+                else:
+                    if self.config.verbose:
+                        print(f"  Final deskew skipped (no images to process)")
+                    return []
+        
+        if self.config.verbose:
+            print(f"  Processing final deskew on {len(images_to_process)} {source_stage} image(s)")
+        
+        # Create output directory
+        final_deskewed_dir = self.config.output_dir / "07_final_deskewed"
+        final_deskewed_dir.mkdir(parents=True, exist_ok=True)
+        final_deskewed_paths = []
+        
+        # Process each image
+        for i, (source_path, image) in enumerate(images_to_process):
+            # Apply final deskew
+            deskewed_image, angle = self.deskew_processor.process(
+                image,
+                method=self.config.final_deskew_method,
+                use_binarization=self.config.final_deskew_use_binarization,
+                coarse_range=self.config.final_deskew_coarse_range,
+                coarse_step=self.config.final_deskew_coarse_step,
+                fine_range=self.config.final_deskew_fine_range,
+                fine_step=self.config.final_deskew_fine_step,
+                min_angle_correction=self.config.final_deskew_min_angle_correction,
+            )
+            
+            # Save debug images for first image only
+            if self.config.save_debug_images and debug_dir and i == 0:
+                debug_subdir = debug_dir / "07_final_deskew" / base_name
+                self.deskew_processor.save_debug_images_to_dir(debug_subdir)
+            
+            # Determine output filename
+            if source_path:
+                output_name = source_path.name.replace('.jpg', '_final_deskewed.jpg').replace('.png', '_final_deskewed.png')
+            else:
+                output_name = f"{base_name}_final_deskewed.jpg"
+            
+            # Save processed image
+            output_path = final_deskewed_dir / output_name
+            save_image(deskewed_image, output_path)
+            final_deskewed_paths.append(output_path)
+            
+            if self.config.verbose and i == 0:
+                print(f"    Final deskew angle: {angle:.2f} degrees")
+        
+        final_deskew_elapsed = time.time() - final_deskew_start
+        print(f"    [TIMING] Final deskew: {final_deskew_elapsed:.3f} seconds")
+        
+        if self.config.verbose:
+            print(f"  Final deskew complete: {len(final_deskewed_paths)} images processed")
+            print(f"  Saved to: {final_deskewed_dir.name}")
+        
+        return final_deskewed_paths

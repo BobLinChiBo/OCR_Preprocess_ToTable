@@ -25,9 +25,9 @@ def _cluster_lines(
     lines: List[List[int]], coord_idx: int, tol: int = TOL
 ) -> Dict[int, List[Tuple[int, int]]]:
     """
-    coord_idx = 0 → verticals (use X), 1 → horizontals (use Y)
+    coord_idx = 0 -> verticals (use X), 1 -> horizontals (use Y)
 
-    returns {line_coord : [(span_start, span_end), …]}
+    returns {line_coord : [(span_start, span_end), ...]}
     """
     clusters: Dict[int, List[Tuple[int, int]]] = {}
     for x1, y1, x2, y2 in lines:
@@ -36,7 +36,7 @@ def _cluster_lines(
         start, end = (y1, y2) if coord_idx == 0 else (x1, x2)
         if start > end:
             start, end = end, start
-        # snap to an existing cluster within ±tol
+        # snap to an existing cluster within +/-tol
         anchor = next((g for g in clusters if abs(g - key) <= tol), key)
         clusters.setdefault(anchor, []).append((start, end))
     return clusters
@@ -128,7 +128,7 @@ def recover_table_impl(
 
     dsu = DSU(len(raw_cells))
 
-    # ---- missing vertical boundaries  → horizontal merges
+    # ---- missing vertical boundaries -> horizontal merges
     for r in range(n_rows):
         y1, y2 = ys[r], ys[r + 1]
         for c in range(n_cols - 1):
@@ -138,7 +138,7 @@ def recover_table_impl(
                 if not _boundary_present(x, y1, y2, v, coverage_ratio):
                     dsu.union(left, right)
 
-    # ---- missing horizontal boundaries → vertical merges
+    # ---- missing horizontal boundaries -> vertical merges
     for r in range(n_rows - 1):
         y = ys[r + 1]
         for c in range(n_cols):

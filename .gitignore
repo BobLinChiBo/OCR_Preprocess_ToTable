@@ -1,7 +1,5 @@
 # Data directories - these contain large image files and processing output
-data/input/
-data/output/
-data/debug/
+data/
 
 # Python bytecode and cache
 __pycache__/

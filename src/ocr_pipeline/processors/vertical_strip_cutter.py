@@ -37,7 +37,9 @@ class VerticalStripCutterProcessor(BaseProcessor):
         image: np.ndarray,
         structure_data: Dict[str, Any] = None,
         structure_json_path: str = None,
-        padding: int = 20,
+        padding: int = None,
+        padding_left: int = None,
+        padding_right: int = None,
         min_width: int = 1,
         output_dir: Path = None,
         base_name: str = None,
@@ -50,7 +52,9 @@ class VerticalStripCutterProcessor(BaseProcessor):
             image: Input image (numpy array, BGR format)
             structure_data: Dictionary with 'xs' array defining column boundaries
             structure_json_path: Path to JSON file containing structure data
-            padding: Horizontal padding in pixels to add to each strip
+            padding: Horizontal padding in pixels to add to each strip (deprecated, use padding_left/padding_right)
+            padding_left: Left padding in pixels to add to each strip
+            padding_right: Right padding in pixels to add to each strip
             min_width: Minimum column width to keep (skip very thin strips)
             output_dir: Directory to save strip images
             base_name: Base name for output files
@@ -61,6 +65,16 @@ class VerticalStripCutterProcessor(BaseProcessor):
                 - num_strips: Number of strips created
                 - xs: The (possibly rescaled) x coordinates used
         """
+        # Handle padding parameters - support both old and new format
+        if padding is not None:
+            # Backward compatibility: use single padding value for both sides
+            left_padding = padding
+            right_padding = padding
+        else:
+            # Use separate padding values, default to 20 if not specified
+            left_padding = padding_left if padding_left is not None else 20
+            right_padding = padding_right if padding_right is not None else 20
+        
         # Get structure data
         if structure_json_path:
             with open(structure_json_path, 'r', encoding='utf-8') as f:
@@ -97,8 +111,8 @@ class VerticalStripCutterProcessor(BaseProcessor):
         
         # Cut strips between consecutive x coordinates
         for i in range(len(xs) - 1):
-            left = max(xs[i] - padding, 0)
-            right = min(xs[i + 1] + padding, w)
+            left = max(xs[i] - left_padding, 0)
+            right = min(xs[i + 1] + right_padding, w)
             
             # Skip very thin strips
             if right - left < min_width:
@@ -123,7 +137,8 @@ class VerticalStripCutterProcessor(BaseProcessor):
                     "right": right,
                     "original_left": xs[i],
                     "original_right": xs[i + 1],
-                    "padding": padding
+                    "padding_left": left_padding,
+                    "padding_right": right_padding
                 }
             }
             
@@ -154,7 +169,9 @@ def cut_vertical_strips(
     image: np.ndarray,
     structure_data: Dict[str, Any] = None,
     structure_json_path: str = None,
-    padding: int = 20,
+    padding: int = None,
+    padding_left: int = None,
+    padding_right: int = None,
     min_width: int = 1,
     use_longest_lines_only: bool = False,
     min_length_ratio: float = 0.9,
@@ -171,7 +188,9 @@ def cut_vertical_strips(
         image: Input image (numpy array, BGR format)
         structure_data: Dictionary with 'xs' array defining column boundaries
         structure_json_path: Path to JSON file containing structure data
-        padding: Horizontal padding in pixels to add to each strip
+        padding: Horizontal padding in pixels to add to each strip (deprecated, use padding_left/padding_right)
+        padding_left: Left padding in pixels to add to each strip
+        padding_right: Right padding in pixels to add to each strip
         min_width: Minimum column width to keep (skip very thin strips)
         use_longest_lines_only: If True, use only the longest vertical lines
         min_length_ratio: Minimum length ratio relative to longest line (0.0-1.0)
@@ -283,6 +302,8 @@ def cut_vertical_strips(
         structure_data=structure_data,
         structure_json_path=structure_json_path,
         padding=padding,
+        padding_left=padding_left,
+        padding_right=padding_right,
         min_width=min_width,
         output_dir=output_dir,
         base_name=base_name,

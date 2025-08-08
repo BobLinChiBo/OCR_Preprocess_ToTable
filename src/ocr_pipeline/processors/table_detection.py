@@ -559,7 +559,7 @@ def merge_close_parallel_lines(
 
 def cluster_line_positions(pos_list: List[int], eps: int = 10) -> List[int]:
     """
-    Merge nearly identical x or y coordinates (≤ eps apart).
+    Merge nearly identical x or y coordinates (<= eps apart).
 
     Args:
         pos_list: List of positions to cluster

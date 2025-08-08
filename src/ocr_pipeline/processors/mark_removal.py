@@ -55,7 +55,7 @@ def build_protect_mask(
     Returns:
         Binary mask where text/line pixels are white (255)
     """
-    # Otsu → dark foreground becomes white (255)
+    # Otsu -> dark foreground becomes white (255)
     _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     # Parameter
     # _, mask = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)
@@ -80,7 +80,7 @@ def remove_marks(
     """Remove watermarks, stamps, and artifacts while preserving text and table lines.
 
     This function removes everything except text/table lines by:
-    1. Otsu threshold → binary foreground (text + lines).
+    1. Otsu threshold -> binary foreground (text + lines).
     2. Mild dilation to make sure every stroke is covered.
     3. Copy original pixels where the mask is white; paint the rest white.
 
