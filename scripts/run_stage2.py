@@ -158,10 +158,11 @@ Examples:
         stage2_config.output_dir = Path(args.output)
     stage2_config.verbose = args.verbose
     stage2_config.save_debug_images = args.debug
-    stage2_config.angle_range = args.angle_range
-    stage2_config.angle_step = args.angle_step
-    stage2_config.min_line_length = args.min_line_length
-    stage2_config.max_line_gap = args.max_line_gap
+    # Map command-line arguments to correct Stage 2 deskewing parameters
+    stage2_config.coarse_range = args.angle_range
+    stage2_config.coarse_step = args.angle_step
+    # Note: min_line_length and max_line_gap don't apply to Stage 2
+    # Stage 2 uses ratio-based line detection parameters from config file
     
     # Auto-disable optimization if debug mode is enabled
     if stage2_config.save_debug_images:
@@ -175,10 +176,10 @@ Examples:
             print(f"Output: {stage2_config.output_dir}")
             print(f"Found: {len(image_files)} cropped table images")
             print("Parameters:")
-            print(f"   - Angle range: ±{stage2_config.angle_range}°")
-            print(f"   - Angle step: {stage2_config.angle_step}°")
-            print(f"   - Min line length: {stage2_config.min_line_length}px")
-            print(f"   - Max line gap: {stage2_config.max_line_gap}px")
+            print(f"   - Coarse angle range: ±{stage2_config.coarse_range}°")
+            print(f"   - Coarse angle step: {stage2_config.coarse_step}°")
+            print(f"   - Fine angle range: ±{stage2_config.fine_range}°")
+            print(f"   - Fine angle step: {stage2_config.fine_step}°")
             print(
                 f"   - Debug images: {'enabled' if stage2_config.save_debug_images else 'disabled'}"
             )

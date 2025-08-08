@@ -4,9 +4,8 @@
   "debug_dir": "data/debug",
   "verbose": true,
   "save_debug_images": false,
-  "save_intermediate_outputs": true,
   "mark_removal": {
-    "enable": true,
+    "enable": false,
     "dilate_iter": 2,
     "kernel_size": 1,
     "protect_table_lines": false,
@@ -19,13 +18,13 @@
   },
   "tag_removal": {
     "enable": true,
-    "thresh_dark": 110,
-    "row_sum_thresh": 200,
-    "dark_ratio": 0.7,
-    "min_area": 2000,
-    "max_area": 60000,
-    "min_aspect": 0.3,
-    "max_aspect": 1.8
+    "thresh_dark": 140,
+    "row_sum_thresh": 150,
+    "dark_ratio": 0.5,
+    "min_area": 1500,
+    "max_area": 80000,
+    "min_aspect": 0.2,
+    "max_aspect": 2.5
   },
   "margin_removal": {
     "enable": true,
@@ -46,24 +45,25 @@
   "deskewing": {
     "enable": true,
     "method": "radon",
+    "use_binarization": true,
     "coarse_range": 5,
     "coarse_step": 0.5,
-    "fine_range": 2.0,
-    "fine_step": 0.1,
+    "fine_range": 1.0,
+    "fine_step": 0.2,
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 120,
-    "horizontal_kernel_size": 70,
-    "vertical_kernel_size": 70,
+    "threshold": 50,
+    "horizontal_kernel_size": 40,
+    "vertical_kernel_size": 30,
     "alignment_threshold": 3,
-    "h_min_length_image_ratio": 0.2,
-    "h_min_length_relative_ratio": 0.7,
-    "v_min_length_image_ratio": 0.2,
+    "h_min_length_image_ratio": 0.15,
+    "h_min_length_relative_ratio": 0.3,
+    "v_min_length_image_ratio": 0.15,
     "v_min_length_relative_ratio": 0.3,
     "min_aspect_ratio": 2,
     "max_h_length_ratio": 1.0,
-    "max_v_length_ratio": 0.95,
+    "max_v_length_ratio": 1.0,
     "close_line_distance": 45,
     "search_region_top": 30,
     "search_region_bottom": 30,
@@ -75,13 +75,13 @@
   "table_detection": {
     "table_detection_eps": 10,
     "table_detection_kernel_ratio": 0.05,
-    "table_crop_padding": 5,
+    "table_crop_padding": 25,
     "enable_table_cropping": true
   },
   "optimization": {
     "parallel_processing": true,
     "max_workers": null,
-    "batch_size": 8,
-    "memory_mode": true
+    "batch_size": null,
+    "memory_mode": false
   }
 }

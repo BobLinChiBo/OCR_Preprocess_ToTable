@@ -79,7 +79,7 @@ def split_two_page_image(
     h, w = image.shape[:2]
     
     # Save original input image
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         processor.save_debug_image('input_image', image)
     
     # 1) extract long vertical lines
@@ -91,7 +91,7 @@ def split_two_page_image(
     lines  = cv2.morphologyEx(vert, cv2.MORPH_OPEN, kernel)
     
     # Save debug images
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         processor.save_debug_image('binary_threshold', bw)
         processor.save_debug_image('inverted_binary', vert)
         processor.save_debug_image('vertical_lines', lines)
@@ -103,7 +103,7 @@ def split_two_page_image(
     window  = col_sum[margin:w - margin]
     
     # Create column response visualization
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(col_sum, 'b-', linewidth=1)
@@ -136,7 +136,7 @@ def split_two_page_image(
             print(f"    [DEBUG] Page split: Center fallback at x={split_x} (no vertical lines detected)")
         
         # Save split visualization even for fallback
-        if processor:
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
             vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
             cv2.line(vis, (split_x, 0), (split_x, h), (0, 0, 255), 3)
             cv2.putText(vis, 'FALLBACK: Center Split', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -192,7 +192,7 @@ def split_two_page_image(
             right_page = image[:, split_x:]
             
             # Save split visualization for single segment
-            if processor:
+            if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
                 vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
                 # Draw the detected segment
                 cv2.rectangle(vis, (seg_start, 0), (seg_end, h), (0, 255, 0), 2)
@@ -235,7 +235,7 @@ def split_two_page_image(
             right_page = image[:, split_x:]
             
             # Save split visualization for no segments case
-            if processor:
+            if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
                 vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
                 cv2.line(vis, (split_x, 0), (split_x, h), (0, 0, 255), 3)
                 cv2.putText(vis, 'FALLBACK: No Segments Found', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -279,7 +279,7 @@ def split_two_page_image(
         print(f"    [DEBUG] Page split: Gutter at x={split_x} (width: {gutter_width}px, {len(segments)} vertical lines detected)")
     
     # Save final split visualization
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         vis = image.copy() if len(image.shape) == 3 else cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         
         # Draw search window

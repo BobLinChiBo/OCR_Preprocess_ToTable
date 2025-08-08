@@ -86,7 +86,6 @@ class Config:
 
     # Debug options
     save_debug_images: bool = False
-    save_intermediate_outputs: bool = True  # Save outputs of each processing step
     verbose: bool = False
     
     # Parallel processing options
@@ -545,8 +544,6 @@ class Stage2Config(Config):
     enable_vertical_strip_cutting: bool = True
 
     # Stage 2 deskewing (fine-tuning)
-    angle_range: Optional[int] = None  # Legacy parameter
-    angle_step: Optional[float] = None  # Legacy parameter
     coarse_range: float = 5
     coarse_step: float = 0.5
     fine_range: float = 1.0
@@ -618,7 +615,7 @@ class Stage2Config(Config):
 
         # Create Stage 2 subdirectories
         stage2_dirs = [
-            "01_deskewed",
+            "01_refined_deskewed",
             "02_table_lines",
             "03_table_structure",
             "04_table_recovered",
@@ -639,8 +636,6 @@ class Stage2Config(Config):
                 {
                     "enable_deskewing": deskew.get("enable", True),
                     "deskew_method": deskew.get("method", "histogram_variance"),
-                    "angle_range": deskew.get("angle_range"),
-                    "angle_step": deskew.get("angle_step"),
                     "coarse_range": deskew.get("coarse_range"),
                     "coarse_step": deskew.get("coarse_step"),
                     "fine_range": deskew.get("fine_range"),

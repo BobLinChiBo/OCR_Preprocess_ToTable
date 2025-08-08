@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-Complete Two-Stage OCR Pipeline CLI
+[DEPRECATED] Complete Two-Stage OCR Pipeline CLI
 
+*** THIS SCRIPT IS DEPRECATED ***
+Please use scripts/run_pipeline.py instead, which:
+- Respects config file defaults properly
+- Uses the new unified run() API
+- Has a cleaner, simpler interface
+
+To migrate:
+    Old: python scripts/run_complete.py input/ --verbose
+    New: python scripts/run_pipeline.py input/ -v
+
+The new script supports all the same features including --stage1-only and --stage2-only.
+
+Original description:
 Runs the complete two-stage OCR pipeline, processing raw scanned images
 through both initial processing (Stage 1) and refinement (Stage 2) stages.
-
-Usage:
-    python run_complete.py [input_dir] [options]
-
-Example:
-    python run_complete.py input/ --verbose
-    python run_complete.py image.jpg --verbose
-    python run_complete.py input/ -o output/ --debug
 """
 
 import argparse
@@ -29,6 +34,15 @@ from src.ocr_pipeline.pipeline import TwoStageOCRPipeline  # noqa: E402
 
 def main():
     """Main entry point for complete two-stage OCR processing."""
+    
+    # Show deprecation warning
+    print("="*70)
+    print("WARNING: This script is DEPRECATED!")
+    print("Please use scripts/run_pipeline.py instead.")
+    print("The new script has a cleaner interface and properly respects config defaults.")
+    print("="*70)
+    print()
+    
     parser = argparse.ArgumentParser(
         description="Complete Two-Stage OCR Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -210,10 +224,11 @@ Examples:
             stage2_config.output_dir = base_output / "stage2"
         stage2_config.verbose = args.verbose
         stage2_config.save_debug_images = args.debug
-        stage2_config.angle_range = args.s2_angle_range
-        stage2_config.angle_step = args.s2_angle_step
-        stage2_config.min_line_length = args.s2_min_line_length
-        stage2_config.max_line_gap = args.s2_max_line_gap
+        # Map command-line arguments to correct Stage 2 deskewing parameters
+        stage2_config.coarse_range = args.s2_angle_range
+        stage2_config.coarse_step = args.s2_angle_step
+        # Note: min_line_length and max_line_gap don't apply to Stage 2
+        # Stage 2 uses ratio-based line detection parameters instead
         
         # Auto-disable optimization if debug mode is enabled
         if stage2_config.save_debug_images:
@@ -267,16 +282,22 @@ Examples:
                 print(f"Final Results: {stage2_config.output_dir / '04_fitted_tables'}")
 
         else:
-            # Check if optimization is enabled in config
+            # Check if optimization is enabled in either stage's config
             use_optimized = (
-                hasattr(stage1_config, 'parallel_processing') and stage1_config.parallel_processing
-            ) or (
-                hasattr(stage1_config, 'memory_mode') and stage1_config.memory_mode
+                (hasattr(stage1_config, 'parallel_processing') and stage1_config.parallel_processing) or
+                (hasattr(stage2_config, 'parallel_processing') and stage2_config.parallel_processing) or
+                (hasattr(stage1_config, 'memory_mode') and stage1_config.memory_mode) or
+                (hasattr(stage2_config, 'memory_mode') and stage2_config.memory_mode)
             )
             
             if use_optimized:
-                # Use optimized batch processing
-                results = pipeline.run_batch_optimized(input_path)
+                # Use optimized batch processing with independent stage settings
+                results = pipeline.run_batch_optimized(
+                    input_path,
+                    use_parallel=(stage1_config.parallel_processing or stage2_config.parallel_processing),
+                    stage1_memory_mode=stage1_config.memory_mode,
+                    stage2_memory_mode=stage2_config.memory_mode
+                )
             else:
                 # Run standard two-stage pipeline
                 results = pipeline.run_complete_pipeline(input_path)

@@ -134,6 +134,8 @@ class DeskewProcessor(BaseProcessor):
                     return_analysis_data=return_analysis_data,
                     **kwargs
                 )
+            # Extract use_binarization and remove from kwargs to avoid duplicate
+            use_binarization = kwargs.pop('use_binarization', False)
             return radon_method(
                 image,
                 coarse_range=coarse_range,
@@ -142,6 +144,7 @@ class DeskewProcessor(BaseProcessor):
                 fine_step=fine_step if fine_step is not None else 0.2,  # Default 0.2 for radon
                 min_angle_correction=min_angle_correction,
                 return_analysis_data=return_analysis_data,
+                use_binarization=use_binarization,
                 **kwargs
             )
         elif method == "deskew_library":
@@ -159,10 +162,13 @@ class DeskewProcessor(BaseProcessor):
                     return_analysis_data=return_analysis_data,
                     **kwargs
                 )
+            # Extract use_binarization and remove from kwargs to avoid duplicate
+            use_binarization = kwargs.pop('use_binarization', True)  # Default True for deskew_library
             return deskew_library_method(
                 image,
                 min_angle_correction=min_angle_correction,
                 return_analysis_data=return_analysis_data,
+                use_binarization=use_binarization,
                 **kwargs
             )
         elif method == "histogram_variance":
@@ -221,7 +227,7 @@ def deskew_image(
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     
     # Save debug images
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         processor.save_debug_image('gray_input', gray)
         processor.save_debug_image('binary_threshold', binary)
 
@@ -301,7 +307,7 @@ def deskew_image(
         print(f"    [DEBUG] Histogram deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
     
     # Create angle histogram visualization
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         import matplotlib.pyplot as plt
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
@@ -391,7 +397,8 @@ def deskew_image(
         cv2.putText(comparison, f"Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        processor.save_debug_image('rotation_comparison', comparison)
+        if processor.config and getattr(processor.config, 'save_debug_images', False):
+            processor.save_debug_image('rotation_comparison', comparison)
 
     if return_analysis_data:
         # Create comprehensive analysis data for visualization
@@ -434,11 +441,12 @@ def radon_method(
     fine_step: float = 0.2,
     min_angle_correction: float = 0.5,
     return_analysis_data: bool = False,
+    use_binarization: bool = False,
     **kwargs
 ) -> tuple:
-    """Deskew image using Radon transform on edge-detected image with coarse-to-fine search.
+    """Deskew image using Radon transform on edge-detected or binarized image with coarse-to-fine search.
     
-    This method uses Canny edge detection followed by Radon transform
+    This method uses either Canny edge detection or binarization followed by Radon transform
     to find the optimal rotation angle for text alignment.
     
     Args:
@@ -449,6 +457,7 @@ def radon_method(
         fine_step: Step size for fine search in degrees
         min_angle_correction: Minimum angle threshold to apply correction
         return_analysis_data: If True, return additional analysis data
+        use_binarization: If True, use binarization instead of edge detection for angle computation
         
     Returns:
         tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
@@ -463,41 +472,55 @@ def radon_method(
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     
     # Save debug images
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         processor.save_debug_image('gray_input', gray)
     
-    # 1. Edge detection (Canny gives clean lines for Radon)
-    edges = canny(img_as_float(gray), sigma=1.0)
+    # 1. Prepare image for Radon transform
+    if use_binarization:
+        # Use binarization (similar to histogram_variance method)
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # Convert binary to float for Radon transform
+        edges = binary.astype(np.float64) / 255.0
+        
+        # Save binarization debug image
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+            edges_vis = binary
+            processor.save_debug_image('binary_threshold', edges_vis)
+    else:
+        # Use edge detection (Canny gives clean lines for Radon)
+        edges = canny(img_as_float(gray), sigma=1.0)
+        # Convert boolean array to float for cv2.resize compatibility
+        edges = edges.astype(np.float64)
+        
+        # Save edge detection debug image
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+            edges_vis = (edges * 255).astype(np.uint8)
+            processor.save_debug_image('canny_edges', edges_vis)
     
-    # Save edge detection debug image
-    if processor:
-        edges_vis = (edges * 255).astype(np.uint8)
-        processor.save_debug_image('canny_edges', edges_vis)
+    # 2. Coarse Radon scan on downsampled image for speed
+    # Downsample by 4x for ~16x speedup
+    h, w = edges.shape
+    small_edges = cv2.resize(edges, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
     
-    # 2. Coarse Radon scan
     coarse_angles = np.arange(-coarse_range, coarse_range + coarse_step, coarse_step)
-    coarse_scores = []
     
-    # Will print debug result after finding best angle
-    
-    for a in coarse_angles:
-        sinogram = radon(edges, [a], circle=False)
-        # Higher variance == more energy in fewer bins -> better alignment
-        coarse_scores.append(np.var(sinogram))
+    # Compute all angles at once for better performance
+    sinogram_coarse = radon(small_edges, coarse_angles, circle=False)
+    # Calculate variance for each angle (column)
+    coarse_scores = [np.var(sinogram_coarse[:, i]) for i in range(len(coarse_angles))]
     
     # Find best coarse angle
     best_coarse_idx = int(np.argmax(coarse_scores))
     best_coarse_angle = coarse_angles[best_coarse_idx]
     
-    # 3. Fine Radon scan around best coarse angle
+    # 3. Fine Radon scan around best coarse angle (on full resolution for accuracy)
     fine_start = max(-coarse_range, best_coarse_angle - fine_range)
     fine_end = min(coarse_range, best_coarse_angle + fine_range)
     fine_angles = np.arange(fine_start, fine_end + fine_step, fine_step)
-    fine_scores = []
     
-    for a in fine_angles:
-        sinogram = radon(edges, [a], circle=False)
-        fine_scores.append(np.var(sinogram))
+    # Compute all fine angles at once
+    sinogram_fine = radon(edges, fine_angles, circle=False)
+    fine_scores = [np.var(sinogram_fine[:, i]) for i in range(len(fine_angles))]
     
     # Find best fine angle
     best_fine_idx = int(np.argmax(fine_scores))
@@ -508,7 +531,7 @@ def radon_method(
         print(f"    [DEBUG] Radon deskew: Detected angle: {best_angle:.2f}° (coarse: {best_coarse_angle:.1f}°, searched ±{coarse_range}°)")
     
     # Create angle histogram visualization
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         import matplotlib.pyplot as plt
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
@@ -541,7 +564,8 @@ def radon_method(
         plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (4,))
         # Convert RGBA to BGR
         plot_img = cv2.cvtColor(plot_img, cv2.COLOR_RGBA2BGR)
-        processor.save_debug_image('radon_angle_histogram', plot_img)
+        if processor.config and getattr(processor.config, 'save_debug_images', False):
+            processor.save_debug_image('radon_angle_histogram', plot_img)
         plt.close(fig)
     
     # Apply rotation only if significant
@@ -604,7 +628,8 @@ def radon_method(
         cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(comparison, f"Deskewed ({best_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        processor.save_debug_image('rotation_comparison', comparison)
+        if processor.config and getattr(processor.config, 'save_debug_images', False):
+            processor.save_debug_image('rotation_comparison', comparison)
     
     if return_analysis_data:
         # Calculate confidence based on score distribution
@@ -641,6 +666,7 @@ def deskew_library_method(
     image: np.ndarray,
     min_angle_correction: float = 0.5,
     return_analysis_data: bool = False,
+    use_binarization: bool = True,
     **kwargs
 ) -> tuple:
     """Legacy deskew method using the deskew library (moments + Radon hybrid).
@@ -651,6 +677,7 @@ def deskew_library_method(
         image: Input image to deskew
         min_angle_correction: Minimum angle threshold to apply correction
         return_analysis_data: If True, return additional analysis data
+        use_binarization: If True, use binarized image for angle detection (default: True)
         
     Returns:
         tuple: (deskewed_image, detected_angle) or (deskewed_image, detected_angle, analysis_data)
@@ -665,11 +692,24 @@ def deskew_library_method(
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     
     # Save debug images
-    if processor:
+    if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
         processor.save_debug_image('gray_input', gray)
     
-    # Detect skew angle using deskew library
-    detected_angle = determine_skew(gray)
+    # Prepare image for angle detection
+    binary = None  # Initialize binary to None
+    if use_binarization:
+        # Apply binarization for better angle detection
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        
+        # Save binarization debug image
+        if processor and processor.config and getattr(processor.config, 'save_debug_images', False):
+            processor.save_debug_image('binary_threshold', binary)
+        
+        # Detect skew angle using binarized image
+        detected_angle = determine_skew(binary)
+    else:
+        # Detect skew angle using grayscale image
+        detected_angle = determine_skew(gray)
     
     # Handle case where no angle is detected (returns None)
     if detected_angle is None:
@@ -688,7 +728,7 @@ def deskew_library_method(
                 "will_rotate": False,
                 "method": "deskew_library",
                 "gray": gray,
-                "binary": None,
+                "binary": binary,
                 "line_count": 1,
                 "angle_std": 0.0,
             }
@@ -735,7 +775,8 @@ def deskew_library_method(
         cv2.putText(comparison, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.putText(comparison, f"Deskewed ({detected_angle:.2f} deg)", (w+30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        processor.save_debug_image('rotation_comparison', comparison)
+        if processor.config and getattr(processor.config, 'save_debug_images', False):
+            processor.save_debug_image('rotation_comparison', comparison)
     
     if return_analysis_data:
         analysis_data = {
@@ -748,7 +789,7 @@ def deskew_library_method(
             "will_rotate": True,
             "method": "deskew_library",
             "gray": gray,
-            "binary": None,
+            "binary": binary if use_binarization else None,
             "line_count": 1,
             "angle_std": 0.0,
         }
