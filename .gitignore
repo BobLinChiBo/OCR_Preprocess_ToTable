@@ -1,5 +1,11 @@
-# Data directories - these contain large image files and processing output
-data/
+# Data files - exclude all images and output but keep directory structure
+data/input/raw_images/*
+data/input/test_images/*
+data/output/*
+data/debug/*
+
+# Keep directory structure with .gitkeep files  
+!data/**/.gitkeep
 
 # Python bytecode and cache
 __pycache__/

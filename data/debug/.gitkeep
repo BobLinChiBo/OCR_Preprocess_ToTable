@@ -1,0 +1,2 @@
+# This file preserves the debug directory structure in git
+# Debug images will be generated here during pipeline execution
