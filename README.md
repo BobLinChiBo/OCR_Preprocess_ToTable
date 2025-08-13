@@ -4,11 +4,11 @@ A professional two-stage OCR preprocessing and table extraction pipeline for sca
 
 ## Features
 
-- **Two-Stage Processing**: Comprehensive preprocessing followed by refined table extraction
-- **Mark Removal**: Automatic removal of watermarks, stamps, and artifacts
-- **Intelligent Page Processing**: Automatic detection and splitting of two-page spreads
-- **Advanced Deskewing**: Multi-method rotation correction using Radon transform
-- **Table Detection & Recovery**: Robust table line detection and structure recovery
+- **Two-Stage Processing**: Table cropping followed by structure recovery and column extraction
+- **Advanced Preprocessing**: Mark removal, margin detection, and intelligent deskewing
+- **Robust Table Detection**: Multi-angle line detection with preprocessing and stroke enhancement
+- **Intelligent Structure Recovery**: Reconstructs complete table grid from detected lines
+- **Vertical Strip Cutting**: Extracts individual columns ready for OCR processing
 - **Parallel Processing**: Efficient batch processing with multiprocessing support
 - **Memory Optimization**: Flexible memory modes for different system configurations
 - **Debug Visualization**: Comprehensive debug images for each processing step
@@ -59,10 +59,10 @@ python scripts/run_pipeline.py -o custom_output
 # Run with parallel processing (faster for multiple images)
 python scripts/run_parallel.py
 
-# Run Stage 1 only (preprocessing)
+# Run Stage 1 only (table cropping)
 python scripts/run_stage1.py
 
-# Run Stage 2 only (table refinement)
+# Run Stage 2 only (structure recovery and column cutting)
 python scripts/run_stage2.py
 
 # Enable debug mode with visualization
@@ -71,45 +71,78 @@ python scripts/run_pipeline.py --debug --verbose
 
 ## Pipeline Overview
 
-### Stage 1: Preprocessing
-1. **Mark Removal** (Optional): Removes watermarks, stamps, and artifacts
-2. **Margin Removal**: Detects and removes paper edges and black backgrounds
-3. **Page Splitting**: Identifies and splits two-page spreads
-4. **Tag Removal**: Removes headers, footers, and page numbers
-5. **Initial Deskewing**: Corrects image rotation
-6. **Table Detection**: Identifies table regions
-7. **Table Cropping**: Extracts individual table regions
+### Stage 1: Table Cropping and Isolation
+**Purpose**: Crop out all irrelevant content and focus on the main table region
 
-### Stage 2: Table Refinement
-1. **Fine Deskewing**: Precise rotation correction for cropped tables
-2. **Table Line Detection**: Enhanced detection of table lines
-3. **Structure Recovery**: Reconstructs table grid structure
-4. **Vertical Strip Cutting**: Extracts individual columns for OCR
+1. **Mark Removal** (Optional): Removes watermarks, stamps, and artifacts
+2. **Margin Removal** (Optional): Detects and removes paper edges and black backgrounds  
+3. **Page Splitting** (Optional): Identifies and splits two-page spreads
+4. **Tag Removal** (Optional): Removes headers, footers, and page numbers
+5. **Initial Deskewing**: Corrects image rotation using Radon transform
+6. **Table Line Detection**: Detects table lines with preprocessing and stroke enhancement
+7. **Table Structure Detection**: Identifies grid structure from detected lines
+8. **Table Cropping**: Extracts individual table regions, removing all non-table content
+
+### Stage 2: Structure Recovery and Column Extraction  
+**Purpose**: Recover the actual table structure and cut by vertical lines for OCR
+
+1. **Fine Deskewing**: Precise rotation correction for cropped table images
+2. **Refined Table Line Detection**: Enhanced detection with preprocessing optimized for cropped tables
+3. **Table Structure Recovery**: Reconstructs complete table grid, filling missing lines
+4. **Vertical Strip Cutting**: Cuts table into individual columns based on vertical grid lines
+5. **Final Binarization** (Optional): Prepares strips for OCR processing
+6. **Final Deskewing** (Optional): Last-stage rotation correction
 
 ## Configuration
 
-The pipeline uses JSON configuration files located in the `configs/` directory:
+The pipeline uses a single JSON configuration file for each stage:
 
-- `stage1_default.json`: Stage 1 preprocessing parameters
-- `stage2_default.json`: Stage 2 refinement parameters
+- `configs/stage1_default.json`: Stage 1 table cropping parameters
+- `configs/stage2_default.json`: Stage 2 structure recovery parameters
 
-### Key Configuration Options
+### Key Configuration Sections
 
+#### Table Line Detection with Preprocessing
 ```json
 {
-  "mark_removal": {
-    "enable": true,
-    "dilate_iter": 2,
-    "protect_table_lines": true
+  "table_line_detection": {
+    "line_detection_use_preprocessing": true,
+    "line_detection_binarization_method": "adaptive",
+    "line_detection_stroke_enhancement": true,
+    "line_detection_binarization_denoise": true,
+    "threshold": 20,
+    "horizontal_kernel_size": 80,
+    "vertical_kernel_size": 40,
+    "skew_tolerance": 2
+  }
+}
+```
+
+#### Processing Options
+```json
+{
+  "margin_removal": {
+    "enable": false,
+    "use_gradient_detection": true
   },
   "optimization": {
     "parallel_processing": true,
-    "memory_mode": true,
-    "max_workers": null
+    "memory_mode": false,
+    "max_workers": 6
   },
   "save_debug_images": false
 }
 ```
+
+### Preprocessing Features
+
+Both stages support advanced preprocessing for better table line detection:
+
+- **Adaptive Binarization**: Smart thresholding for varying image quality
+- **Stroke Enhancement**: Morphological operations to enhance thin/faded lines
+- **Denoising**: Removes image artifacts that interfere with line detection
+- **Multi-angle Detection**: Handles skewed tables up to configurable tolerance
+- **Search Regions**: Focus detection on specific image areas
 
 ### Override Configuration via CLI
 
@@ -137,7 +170,7 @@ OCR_Preprocess_ToTable/
 │   └── debug/              # Debug visualizations
 ├── docs/                    # Documentation
 │   ├── CLAUDE.md           # Development guide
-│   └── PARAMETER_TUNING_GUIDE.md  # Parameter tuning guide
+│   └── parameter_tuning_guide.md  # Parameter tuning guide
 ├── scripts/                 # Entry point scripts
 │   ├── run_pipeline.py     # Main pipeline
 │   ├── run_parallel.py     # Parallel processing
@@ -161,19 +194,22 @@ OCR_Preprocess_ToTable/
 
 ```
 output/
-├── stage1/
-│   ├── 02_margin_removed/     # Margins removed
-│   ├── 03_deskewed/           # Rotation corrected
-│   ├── 04_split_pages/        # Split pages
-│   ├── 05_table_lines/        # Detected lines
-│   ├── 06_table_structure/    # Table structure
-│   └── 07_border_cropped/     # Cropped tables
-└── stage2/
-    ├── 01_refined_deskewed/   # Fine-tuned rotation
-    ├── 02_table_lines/        # Refined lines
-    ├── 03_table_structure/    # Final structure
-    ├── 04_table_recovered/    # Recovery data
-    └── 05_vertical_strips/    # Column strips
+├── stage1/                    # Table Cropping Stage
+│   ├── 01_mark_removed/         # Watermarks/stamps removed
+│   ├── 02_margin_removed/       # Margins removed
+│   ├── 03_deskewed/             # Rotation corrected
+│   ├── 04_split_pages/          # Split pages (if applicable)
+│   ├── 05_table_lines/          # Detected table lines
+│   ├── 06_table_structure/      # Table grid structure
+│   └── 07_border_cropped/       # Cropped table regions
+└── stage2/                    # Structure Recovery Stage
+    ├── 01_refined_deskewed/     # Fine-tuned rotation
+    ├── 02_table_lines/          # Refined line detection
+    ├── 03_table_structure/      # Final structure
+    ├── 04_table_recovered/      # Structure recovery data
+    ├── 05_vertical_strips/      # Individual columns
+    ├── 06_binarized/           # OCR-ready images
+    └── 07_final_deskewed/      # Final rotation correction
 ```
 
 ## Performance Optimization
@@ -185,12 +221,12 @@ python scripts/run_parallel.py --max-workers 8
 ```
 
 ### Memory Modes
-- **Memory Mode** (default): Keeps intermediate results in RAM
-- **Disk Mode**: Saves intermediate results to disk (slower but uses less RAM)
+- **Memory Mode**: Keeps intermediate results in RAM (faster)
+- **Disk Mode** (default): Saves intermediate results to disk (uses less RAM)
 
 ```bash
-# Use disk mode for large datasets
-python scripts/run_pipeline.py --no-memory-mode
+# Use memory mode for faster processing
+python scripts/run_pipeline.py --memory-mode
 ```
 
 ## Debug Mode
@@ -206,15 +242,15 @@ python scripts/run_pipeline.py --verbose
 ```
 
 Debug images show:
-- Input/output at each step
-- Detected features (lines, contours, masks)
-- Processing decisions and thresholds
-- Before/after comparisons
+- Preprocessing steps (binarization, stroke enhancement, denoising)
+- Line detection at each stage (morphological operations, connected components)
+- Table structure reconstruction
+- Before/after comparisons for each processing step
 
 ## Documentation
 
 - [Development Guide](docs/CLAUDE.md) - Architecture and development guidelines
-- [Parameter Tuning Guide](docs/PARAMETER_TUNING_GUIDE.md) - Detailed parameter documentation
+- [Parameter Tuning Guide](docs/parameter_tuning_guide.md) - Detailed parameter documentation
 
 ## Testing
 
@@ -258,4 +294,4 @@ For issues and questions, please use the [GitHub Issues](https://github.com/BobL
 
 ## Acknowledgments
 
-This pipeline incorporates techniques from various OCR preprocessing research and is optimized for historical document processing.
+This pipeline incorporates advanced OCR preprocessing techniques and is optimized for historical document processing with robust table structure recovery.
