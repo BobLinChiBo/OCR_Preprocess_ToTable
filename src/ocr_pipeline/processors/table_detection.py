@@ -59,6 +59,18 @@ def detect_table_lines(
     # Skew tolerance parameters
     skew_tolerance: float = 0,  # Maximum angle in degrees to tolerate for skewed lines
     skew_angle_step: float = 0.2,  # Step size for angle search
+    # Line detection preprocessing parameters
+    line_detection_use_preprocessing: bool = False,  # Enable preprocessing for better detection
+    line_detection_binarization_method: str = "adaptive",  # Binarization method
+    line_detection_binarization_threshold: int = 127,  # For fixed method
+    line_detection_adaptive_block_size: int = 17,  # For adaptive method
+    line_detection_adaptive_c: int = 5,  # For adaptive method
+    line_detection_binarization_invert: bool = False,  # Invert black/white
+    line_detection_binarization_denoise: bool = True,  # Apply denoising
+    line_detection_stroke_enhancement: bool = False,  # Enable stroke enhancement
+    line_detection_stroke_kernel_size: int = 1,  # Stroke kernel size
+    line_detection_stroke_iterations: int = 3,  # Stroke iterations
+    line_detection_stroke_kernel_shape: str = "cross",  # Stroke kernel shape
     return_analysis: bool = False,
     # Keep old parameters for backwards compatibility
     hough_threshold: int = None,
@@ -102,6 +114,39 @@ def detect_table_lines(
     # Convert to grayscale if needed
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
     img_h, img_w = gray.shape
+    
+    # Store original image for later use
+    original_gray = gray.copy()
+    
+    # Apply preprocessing if enabled (for better line detection)
+    if line_detection_use_preprocessing:
+        # Import binarization processor
+        from .binarize import BinarizeProcessor
+        
+        # Create temporary binarize processor for preprocessing
+        binarizer = BinarizeProcessor()
+        
+        # Apply binarization and stroke enhancement for better line detection
+        preprocessed = binarizer.process(
+            gray,
+            method=line_detection_binarization_method,
+            threshold=line_detection_binarization_threshold,
+            adaptive_block_size=line_detection_adaptive_block_size,
+            adaptive_c=line_detection_adaptive_c,
+            invert=line_detection_binarization_invert,
+            denoise=line_detection_binarization_denoise,
+            enhance_strokes=line_detection_stroke_enhancement,
+            stroke_kernel_size=line_detection_stroke_kernel_size,
+            stroke_iterations=line_detection_stroke_iterations,
+            stroke_kernel_shape=line_detection_stroke_kernel_shape,
+        )
+        
+        # Use preprocessed image for line detection
+        gray = preprocessed
+        
+        # Save debug image if processor available
+        if processor:
+            processor.save_debug_image("preprocessed_for_lines", gray)
 
     # Apply search region by cropping if specified
     if (

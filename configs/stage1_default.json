@@ -17,7 +17,7 @@
     }
   },
   "tag_removal": {
-    "enable": true,
+    "enable": false,
     "method": "auto_whitefill_broadmask",
     "thresh_dark": 160,
     "row_sum_thresh": 100,
@@ -48,8 +48,8 @@
     "mask_dilate_kernel_size": 5
   },
   "margin_removal": {
-    "enable": true,
-    "use_gradient_detection": false,
+    "enable": false,
+    "use_gradient_detection": true,
     "gradient_threshold": 50,
     "blur_ksize": 9,
     "close_ksize": 20,
@@ -57,7 +57,7 @@
     "erode_after_close": 0
   },
   "page_splitting": {
-    "enable": true,
+    "enable": false,
     "search_ratio": 0.3,
     "line_len_frac": 0.3,
     "line_thick": 3,
@@ -74,24 +74,35 @@
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 80,
-    "horizontal_kernel_size": 60,
-    "vertical_kernel_size": 30,
+    "threshold": 20,
+    "horizontal_kernel_size": 80,
+    "vertical_kernel_size": 40,
     "alignment_threshold": 3,
     "h_min_length_image_ratio": 0.10,
     "h_min_length_relative_ratio": 0.3,
-    "v_min_length_image_ratio": 0.15,
+    "v_min_length_image_ratio": 0.2,
     "v_min_length_relative_ratio": 0.3,
     "min_aspect_ratio": 2,
     "max_h_length_ratio": 1.0,
     "max_v_length_ratio": 1.0,
     "close_line_distance": 45,
     "search_region_top": 30,
-    "search_region_bottom": 0,
-    "search_region_left": 0,
-    "search_region_right": 0,
+    "search_region_bottom": 30,
+    "search_region_left": 5,
+    "search_region_right": 5,
     "skew_tolerance": 2,
-    "skew_angle_step": 0.2
+    "skew_angle_step": 0.2,
+    "line_detection_use_preprocessing": true,
+    "line_detection_binarization_method": "adaptive",
+    "line_detection_binarization_threshold": 127,
+    "line_detection_adaptive_block_size": 21,
+    "line_detection_adaptive_c": 7,
+    "line_detection_binarization_invert": false,
+    "line_detection_binarization_denoise": true,
+    "line_detection_stroke_enhancement": true,
+    "line_detection_stroke_kernel_size": 2,
+    "line_detection_stroke_iterations": 2,
+    "line_detection_stroke_kernel_shape": "cross"
   },
   "table_detection": {
     "table_detection_eps": 10,

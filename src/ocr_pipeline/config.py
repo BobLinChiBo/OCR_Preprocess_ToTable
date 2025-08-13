@@ -297,6 +297,21 @@ class Stage1Config(Config):
     # Skew tolerance parameters
     skew_tolerance: float = 0
     skew_angle_step: float = 0.2
+    
+    # Table line detection preprocessing (internal use for better detection)
+    line_detection_use_preprocessing: bool = False  # Enable preprocessing for line detection
+    line_detection_binarization_method: str = "adaptive"  # "otsu", "adaptive", or "fixed"
+    line_detection_binarization_threshold: int = 127  # For fixed method
+    line_detection_adaptive_block_size: int = 17  # For adaptive method
+    line_detection_adaptive_c: int = 5  # For adaptive method
+    line_detection_binarization_invert: bool = False  # Invert black/white if needed
+    line_detection_binarization_denoise: bool = True  # Apply morphological denoising
+    
+    # Line detection stroke enhancement parameters
+    line_detection_stroke_enhancement: bool = False  # Enable stroke enhancement for line detection
+    line_detection_stroke_kernel_size: int = 1  # Size of morphological kernel
+    line_detection_stroke_iterations: int = 3   # Number of dilation iterations
+    line_detection_stroke_kernel_shape: str = "cross"  # Shape of kernel: "ellipse", "rect", "cross"
 
     # Stage 1 mark removal - remove watermarks/stamps/artifacts
     mark_removal_dilate_iter: int = 2
@@ -434,6 +449,19 @@ class Stage1Config(Config):
                     # Skew tolerance parameters
                     "skew_tolerance": line_det.get("skew_tolerance", 0),
                     "skew_angle_step": line_det.get("skew_angle_step", 0.2),
+                    
+                    # Line detection preprocessing parameters
+                    "line_detection_use_preprocessing": line_det.get("use_preprocessing", False),
+                    "line_detection_binarization_method": line_det.get("binarization_method", "adaptive"),
+                    "line_detection_binarization_threshold": line_det.get("binarization_threshold", 127),
+                    "line_detection_adaptive_block_size": line_det.get("adaptive_block_size", 17),
+                    "line_detection_adaptive_c": line_det.get("adaptive_c", 5),
+                    "line_detection_binarization_invert": line_det.get("binarization_invert", False),
+                    "line_detection_binarization_denoise": line_det.get("binarization_denoise", True),
+                    "line_detection_stroke_enhancement": line_det.get("stroke_enhancement", False),
+                    "line_detection_stroke_kernel_size": line_det.get("stroke_kernel_size", 1),
+                    "line_detection_stroke_iterations": line_det.get("stroke_iterations", 3),
+                    "line_detection_stroke_kernel_shape": line_det.get("stroke_kernel_shape", "cross"),
                 }
             )
             del config_dict["table_line_detection"]
@@ -611,6 +639,27 @@ class Stage2Config(Config):
     # Skew tolerance parameters for Stage 2
     skew_tolerance: float = 0
     skew_angle_step: float = 0.2
+    
+    # Search region parameters - pixels to ignore from edges
+    search_region_top: int = 0
+    search_region_bottom: int = 0
+    search_region_left: int = 0
+    search_region_right: int = 0
+    
+    # Table line detection preprocessing (internal use for better detection)
+    line_detection_use_preprocessing: bool = False  # Enable preprocessing for line detection
+    line_detection_binarization_method: str = "adaptive"  # "otsu", "adaptive", or "fixed"
+    line_detection_binarization_threshold: int = 127  # For fixed method
+    line_detection_adaptive_block_size: int = 17  # For adaptive method
+    line_detection_adaptive_c: int = 5  # For adaptive method
+    line_detection_binarization_invert: bool = False  # Invert black/white if needed
+    line_detection_binarization_denoise: bool = True  # Apply morphological denoising
+    
+    # Line detection stroke enhancement parameters
+    line_detection_stroke_enhancement: bool = False  # Enable stroke enhancement for line detection
+    line_detection_stroke_kernel_size: int = 1  # Size of morphological kernel
+    line_detection_stroke_iterations: int = 3   # Number of dilation iterations
+    line_detection_stroke_kernel_shape: str = "cross"  # Shape of kernel: "ellipse", "rect", "cross"
 
     # Stage 2 margin removal - more conservative (minimal additional cropping)
     enable_margin_removal: bool = (
@@ -719,9 +768,28 @@ class Stage2Config(Config):
                     "max_v_length_ratio": line_det.get("max_v_length_ratio"),
                     "close_line_distance": line_det.get("close_line_distance"),
                     
+                    # Search region parameters
+                    "search_region_top": line_det.get("search_region_top", 0),
+                    "search_region_bottom": line_det.get("search_region_bottom", 0),
+                    "search_region_left": line_det.get("search_region_left", 0),
+                    "search_region_right": line_det.get("search_region_right", 0),
+                    
                     # Skew tolerance parameters
                     "skew_tolerance": line_det.get("skew_tolerance", 0),
                     "skew_angle_step": line_det.get("skew_angle_step", 0.2),
+                    
+                    # Line detection preprocessing parameters
+                    "line_detection_use_preprocessing": line_det.get("use_preprocessing", False),
+                    "line_detection_binarization_method": line_det.get("binarization_method", "adaptive"),
+                    "line_detection_binarization_threshold": line_det.get("binarization_threshold", 127),
+                    "line_detection_adaptive_block_size": line_det.get("adaptive_block_size", 17),
+                    "line_detection_adaptive_c": line_det.get("adaptive_c", 5),
+                    "line_detection_binarization_invert": line_det.get("binarization_invert", False),
+                    "line_detection_binarization_denoise": line_det.get("binarization_denoise", True),
+                    "line_detection_stroke_enhancement": line_det.get("stroke_enhancement", False),
+                    "line_detection_stroke_kernel_size": line_det.get("stroke_kernel_size", 1),
+                    "line_detection_stroke_iterations": line_det.get("stroke_iterations", 3),
+                    "line_detection_stroke_kernel_shape": line_det.get("stroke_kernel_shape", "cross"),
                 }
             )
             del config_dict["table_line_detection"]

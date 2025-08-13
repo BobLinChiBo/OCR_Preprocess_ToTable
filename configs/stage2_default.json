@@ -14,18 +14,33 @@
     "min_angle_correction": 0.1
   },
   "table_line_detection": {
-    "threshold": 80,
-    "horizontal_kernel_size": 60,
-    "vertical_kernel_size": 50,
+    "line_detection_use_preprocessing": true,
+    "line_detection_binarization_method": "adaptive",
+    "line_detection_binarization_threshold": 180,
+    "line_detection_adaptive_block_size": 11,
+    "line_detection_adaptive_c": 5,
+    "line_detection_binarization_invert": false,
+    "line_detection_binarization_denoise": true,
+    "line_detection_stroke_enhancement": true,
+    "line_detection_stroke_kernel_size": 1,
+    "line_detection_stroke_iterations": 3,
+    "line_detection_stroke_kernel_shape": "cross",
+    "threshold": 30,
+    "horizontal_kernel_size": 50,
+    "vertical_kernel_size": 40,
     "alignment_threshold": 3,
-    "h_min_length_image_ratio": 0.2,
-    "h_min_length_relative_ratio": 0.6,
-    "v_min_length_image_ratio": 0.4,
+    "h_min_length_image_ratio": 0.10,
+    "h_min_length_relative_ratio": 0.5,
+    "v_min_length_image_ratio": 0.15,
     "v_min_length_relative_ratio": 0.5,
-    "min_aspect_ratio": 4,
+    "min_aspect_ratio": 1,
     "max_h_length_ratio": 1.0,
     "max_v_length_ratio": 1.0,
-    "close_line_distance": 65,
+    "close_line_distance": 20,
+    "search_region_top": 0,
+    "search_region_bottom": 0,
+    "search_region_left": 0,
+    "search_region_right": 0,
     "skew_tolerance": 2,
     "skew_angle_step": 0.2
   },
@@ -40,14 +55,14 @@
     "enable_table_cropping": false
   },
   "table_recovery": {
-    "coverage_ratio": 0.2
+    "coverage_ratio": 0.5
   },
   "vertical_strip_cutting": {
     "enable": true,
-    "padding_left": 40,
-    "padding_right": 50,
+    "padding_left": 5,
+    "padding_right": 5,
     "min_width": 1,
-    "use_longest_lines_only": false,
+    "use_longest_lines_only": true,
     "min_length_ratio": 0.9
   },
   "binarization": {
@@ -79,6 +94,6 @@
     "parallel_processing": true,
     "max_workers": 6,
     "batch_size": null,
-    "memory_mode": true
+    "memory_mode": false
   }
 }

@@ -439,6 +439,18 @@ class Stage1Processor:
             search_region_right=self.config.search_region_right,
             skew_tolerance=getattr(self.config, 'skew_tolerance', 0),
             skew_angle_step=getattr(self.config, 'skew_angle_step', 0.2),
+            # Line detection preprocessing parameters
+            line_detection_use_preprocessing=self.config.line_detection_use_preprocessing,
+            line_detection_binarization_method=self.config.line_detection_binarization_method,
+            line_detection_binarization_threshold=self.config.line_detection_binarization_threshold,
+            line_detection_adaptive_block_size=self.config.line_detection_adaptive_block_size,
+            line_detection_adaptive_c=self.config.line_detection_adaptive_c,
+            line_detection_binarization_invert=self.config.line_detection_binarization_invert,
+            line_detection_binarization_denoise=self.config.line_detection_binarization_denoise,
+            line_detection_stroke_enhancement=self.config.line_detection_stroke_enhancement,
+            line_detection_stroke_kernel_size=self.config.line_detection_stroke_kernel_size,
+            line_detection_stroke_iterations=self.config.line_detection_stroke_iterations,
+            line_detection_stroke_kernel_shape=self.config.line_detection_stroke_kernel_shape,
         )
         
         # Save debug images if needed
